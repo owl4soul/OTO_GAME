@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+<!-- =================================================
+ НАЗВАНИЕ: O.T.O. QUEST: παραβουλία (*парабулия)
+ ЖАНР: AI-TEXT ROLE PLAY QUEST
+ ВЕРСИЯ: Final Beta version (ESM)
+ ДАТА: 2025-2026
+ АВТОР: Anonymous Adept
+=================================================
+-->
+
+<head>
+  <!-- === КОДИРОВКА И АДАПТАЦИЯ === -->
+  <meta charset="UTF-8">
+  <!-- Viewport: запрет зума, адаптация под ширину, корректная работа на мобильных -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- Цвет темы браузера (черный, чтобы скрыть системные бары) -->
+  <meta name="theme-color" content="#000000">
+  <title>⊗ 𝐎.𝐓.𝐎. 𝐐𝐔𝐄𝐒𝐓 ⊗</title>
+  
+  <!-- === FONT AWESOME === -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- === СТИЛИ === -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- === PWA === -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+</head>
+
+<body>
+  <!-- =========================================== -->
+  <!-- ЭКРАН 1: ИНТРО (ЗАСТАВКА) -->
+  <!-- =========================================== -->
+  <div id="intro-screen">
+    <canvas id="intro-canvas" style="position:absolute; top:0; left:0; width:100%; height:100%; z-index:1;"></canvas>
+    <div class="intro-overlay"></div>
+    <div class="intro-film-grain"></div>
+    <div class="intro-animated-bg"></div>
+    <div class="intro-vignette"></div>
+    
+    <div class="intro-text-top">
+      <div class="intro-quote-line">𝙳𝚘 𝚠𝚑𝚊𝚝 𝚝𝚑𝚘𝚞 𝚠𝚒𝚕𝚝</div>
+      <div class="intro-quote-line">𝚜𝚑𝚊𝚕𝚕 𝚋𝚎 𝚝𝚑𝚎 𝚠𝚑𝚘𝚕𝚎 𝚘𝚏 𝚝𝚑𝚎 𝙻𝚊𝚠.</div>
+      <div class="intro-quote-line">𝙻𝚘𝚟𝚎 𝚒𝚜 𝚝𝚑𝚎 𝚕𝚊𝚠, 𝚕𝚘𝚟𝚎 𝚞𝚗𝚍𝚎𝚛 𝚠𝚒𝚕𝚕.</div>
+    </div>
+    
+    <div class="intro-text-center">
+      <div class="intro-center-line1" id="intro-title">⊗ 𝐎.𝐓.𝐎. 𝐐𝐔𝐄𝐒𝐓 ⊗</div>
+      <div class="intro-center-line2" id="intro-subtitle">παραβουλία</div>
+    </div>
+    
+    <button class="intro-btn-open" id="intro-open-btn">
+      <span class="btn-text-open">ОТКРЫТЬ</span>
+      <span class="btn-glow"></span>
+    </button>
+  </div>
+  
+  <!-- =========================================== -->
+  <!-- ПОДЛОЖКА (МЫСЛИ ГЕРОЯ) -->
+  <!-- =========================================== -->
+  <div id="thoughtsOfHeroLayout" class="thoughts-of-hero-layout">
+    <div id="thoughtsOfHeroText" class="thoughts-of-hero-text"></div>
+  </div>
+  
+  <!-- =========================================== -->
+  <!-- HUD (КНОПКИ ПОВЕРХ ИНТЕРФЕЙСА) -->
+  <!-- =========================================== -->
+  <div id="hud-top">
+    <!-- Кнопка полноэкранного режима -->
+    <button class="fullscreen-btn" id="btnFullscreen" title="Полноэкранный режим">
+      <i class="fas fa-expand"></i>
+    </button>
+    
+    <!-- Управление масштабом -->
+    <div class="scale-controls">
+      <button class="scale-btn" id="btnScaleUp" title="Увеличить">
+        <i class="fas fa-plus"></i>
+      </button>
+      <div class="current-scale" id="currentScale">100%</div>
+      <button class="scale-btn" id="btnScaleDown" title="Уменьшить">
+        <i class="fas fa-minus"></i>
+      </button>
+    </div>
+    
+    <!-- Кнопка настроек -->
+    <button class="settings-btn" id="btnSettings">
+      <i class="fas fa-cog"></i>
+    </button>
+  </div>
+  
+  <!-- =========================================== -->
+  <!-- ГЛАВНЫЙ ЛЕЙАУТ (3 СЕКЦИИ) -->
+  <!-- =========================================== -->
+  <main class="main-container" id="mainContainer">
+    
+    <!-- === ВЕРХНЯЯ СЕКЦИЯ: СЦЕНА + СТАТЫ === -->
+    <section class="layout-section section-top" id="secTop">
+      
+      <!-- Контент: Текст сцены -->
+      <div class="section-content scrollable" id="sceneArea">
+        <div class="scene-text" id="sceneText"></div>
+        <div class="scene-reflection" id="sceneReflection" style="display:none"></div>
+        <div class="scene-updates" id="sceneUpdates" style="display:none"></div>
+      </div>
+      
+      <!-- Строка: Характеристики -->
+      <div class="section-row row-stats">
+        <div class="stats-grid">
+          <div class="stat-item"><span class="lbl">Воля:</span><span class="val" id="valWill">50</span></div>
+          <div class="stat-item"><span class="lbl">Скрыт:</span><span class="val" id="valStealth">50</span></div>
+          <div class="stat-item"><span class="lbl">Влияние:</span><span class="val" id="valInf">50</span></div>
+          <div class="stat-item"><span class="lbl">Разум:</span><span class="val" id="valSanity">50</span></div>
+        </div>
+      </div>
+    </section>
+    
+    <!-- РЕСАЙЗЕР 1 (ВЕРХ / СЕРЕДИНА) -->
+    <div class="resizer-horizontal" id="resizerTop" data-target="top">
+      <div class="resizer-handle"></div>
+    </div>
+    
+    <!-- === СРЕДНЯЯ СЕКЦИЯ: ДЕЙСТВИЯ / ВВОД === -->
+    <section class="layout-section section-mid" id="secMid">
+      
+      <!-- Контент: Кнопки или Поле ввода -->
+      <div class="section-content scrollable" id="middleArea">
+        <!-- Варианты выбора -->
+        <div class="choices-container" id="choicesList"></div>
+        
+        <!-- Свободный ввод (скрыт по умолчанию) -->
+        <div class="free-input-container" id="freeInputWrapper" style="display:none;">
+          <textarea id="freeInputText" placeholder="Опишите ваше действие..." spellcheck="false"></textarea>
+        </div>
+      </div>
+      
+      <!-- Строка: Управление вводом -->
+      <div class="section-row row-controls">
+        <button class="btn btn-clear" id="btnClear" style="flex: 1;">
+          <i class="fas fa-eraser"></i> Очистить
+        </button>
+        
+        <label class="switch" title="Переключить режим ввода">
+          <input type="checkbox" id="freeModeToggle">
+          <span class="slider round"></span>
+        </label>
+        
+        <button class="btn btn-submit" id="btnSubmit" disabled style="flex: 1;">
+          <i class="fas fa-paper-plane"></i> ОТПРАВИТЬ
+        </button>
+      </div>
+    </section>
+    
+    <!-- РЕСАЙЗЕР 2 (СЕРЕДИНА / НИЗ) -->
+    <div class="resizer-horizontal" id="resizerBot" data-target="mid">
+      <div class="resizer-handle"></div>
+    </div>
+    
+    <!-- === НИЖНЯЯ СЕКЦИЯ: ИНФО / ИСТОРИЯ === -->
+    <section class="layout-section section-bot" id="secBot">
+      
+      <!-- Строка: Режим ответа, Ходы и Сворачивание-разворачивание -->
+      <div class="section-row row-header" id="botHeader">
+        <div class="header-left">
+          <i class=none id="modeIcon"></i>
+          <span id="modeText">Варианты</span>
+          <small id="choicesCounter" style="opacity:0.6; margin-left:5px">0/3</small>
+        </div>
+        <div class="header-right">
+          <span id="turnCounter">Ход: 0</span>
+          <span class="collapse-icon" id="collapseIcon"><i class="fas fa-chevron-down"></i></span>
+        </div>
+      </div>
+      
+      <!-- Контент: Сетка информации -->
+      <div class="section-content bottom-grid" id="bottomArea">
+        <!-- Левая колонка: Прогресс -->
+        <div class="pane-left stats-pane">
+          <div class="stats-inner">
+            <div class="tube-container">
+              <div class="tube-bar" id="progressTube" style="height: 0%"></div>
+            </div>
+            <div class="info-container">
+              <div class="persona-text" id="personalityDisplay">...</div>
+              <div class="degrees-text" id="degreeListUI"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Вертикальный ресайзер -->
+        <div class="resizer-vertical" id="resizerBotVert">
+          <div class="resizer-handle"></div>
+        </div>
+        
+        <!-- Правая колонка: История -->
+        <div class="pane-right history-pane" id="historyList"></div>
+      </div>
+    </section>
+    
+  </main>
+  
+  <!-- =========================================== -->
+  <!-- МОДАЛЬНЫЕ ОКНА -->
+  <!-- =========================================== -->
+  
+  <!-- НАСТРОЙКИ -->
+  <div class="modal" id="settingsModal">
+    <div class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 style="color: var(--c-gold);"><i class="fas fa-cog"></i> Настройки</h2>
+          <button class="close-modal" id="closeModalBtn"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <!-- API -->
+          <div class="modal-section">
+            <h3><i class="fas fa-plug"></i> API Provider</h3>
+            <select id="providerInput" class="form-input">
+              <option value="openrouter">OpenRouter</option>
+              <option value="vsegpt">VseGpt</option>
+            </select>
+          </div>
+          <div class="modal-section api-key-section">
+            <h3><i class="fas fa-key"></i> Ключи API</h3>
+            <div id="openrouterKeyField" class="api-key-field">
+              <span class="api-key-label">OpenRouter Key</span>
+              <input type="password" id="apiKeyOpenrouterInput" class="form-input" placeholder="sk-or-v1-...">
+            </div>
+            <div id="vsegptKeyField" class="api-key-field">
+              <span class="api-key-label">VseGpt Key</span>
+              <input type="password" id="apiKeyVsegptInput" class="form-input" placeholder="sk-...">
+            </div>
+            <button class="btn btn-submit" id="testCurrentProviderBtn" style="width:100%; margin-top:0.5rem;">
+              <i class="fas fa-vial"></i> Тест
+            </button>
+          </div>
+          <!-- МОДЕЛЬ -->
+          <div class="modal-section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+              <h3 style="margin: 0;"><i class="fas fa-brain"></i> Модель</h3>
+              <div class="model-stats">
+                <span id="modelTotal">0</span>/<span id="modelSuccess">0</span>
+              </div>
+            </div>
+            <select id="modelInput" class="form-input"></select>
+            <div id="modelDetails" style="margin-top:0.5rem; padding:0.5rem; background:#1a0000; font-size:0.8rem;"></div>
+            <button class="btn btn-submit" id="testSelectedModelBtn" style="width:100%; margin-top:0.5rem;">
+              <i class="fas fa-vial"></i> Тест модели
+            </button>
+          </div>
+          <!-- ДАННЫЕ -->
+          <div class="modal-section wide">
+            <h3><i class="fas fa-database"></i> Данные</h3>
+            <div class="settings-row">
+              <button class="btn btn-clear" id="loadGameBtn">Загрузить</button>
+              <button class="btn btn-clear" id="saveGameBtn">Сохранить</button>
+            </div>
+            <div class="settings-row">
+              <button class="btn btn-clear" id="exportAllDataBtn">Экспорт Все</button>
+              <button class="btn btn-clear" id="importAllDataBtn">Импорт Все</button>
+            </div>
+            <div class="settings-row">
+              <button class="btn btn-clear" id="exportHistoryBtn">История</button>
+              <button class="btn btn-clear" id="quickSaveBtn">Быстрое</button>
+            </div>
+            <div class="settings-row">
+              <button class="btn btn-clear" id="btnFullReset">Полный сброс</button>
+              <button class="btn btn-clear" id="btnResetGameProgress">Сброс игры</button>
+            </div>
+            <input type="file" id="importAllDataFile" accept=".json" style="display: none;">
+          </div>
+          <!-- ЛОГ -->
+          <div class="modal-section">
+            <div class="log-header">
+              <h3><i class="fas fa-list"></i> Лог</h3>
+              <span class="log-count" id="logCount">0</span>
+            </div>
+            <div id="auditList" style="max-height:100px; overflow:auto; background:#000; font-size:0.7rem;"></div>
+            <div class="settings-row" style="margin-top:0.5rem;">
+              <button class="btn btn-clear" id="clearAuditBtn">Очистить</button>
+              <button class="btn btn-clear" id="exportAuditBtn">Копировать</button>
+              <button class="btn btn-clear" id="downloadAuditBtn">Скачать</button>
+            </div>
+          </div>
+          <!-- СЮЖЕТ -->
+          <div class="modal-section wide" style="margin-top: 1rem; border-top: 1px solid #333; padding-top: 1rem;">
+            <h3><i class="fas fa-book-dead"></i> Сюжет</h3>
+            <textarea id="plotInput" class="form-input" rows="5" placeholder="JSON или промпт..." style="font-family:monospace;font-size:0.8rem;"></textarea>
+            <button class="btn btn-submit" id="btnGenPlot" style="width:100%; margin-top:0.5rem;">ЗАПРОСИТЬ</button>
+            <div class="settings-row" style="margin-top:0.5rem;">
+              <button class="btn btn-clear" id="btnClearPlot">Очистить</button>
+              <button class="btn btn-submit" id="btnAcceptPlot" disabled>ПРИНЯТЬ</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- УВЕДОМЛЕНИЯ -->
+  <div class="modal" id="alertModal">
+    <div class="modal-overlay">
+      <div class="alert-modal-content" id="alertModalContent">
+        <div class="modal-header alert-modal-header" id="alertModalHeader">
+          <h2 id="alertModalTitle">Уведомление</h2>
+          <button class="close-modal" id="closeAlertModalBtn"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+          <div id="alertMessage"></div>
+          <textarea id="alertDetails" class="alert-textarea" readonly placeholder="Детали..."></textarea>
+          <div style="margin-top:0.5rem; text-align:right;">
+            <button class="alert-copy-btn" id="copyErrorBtn"><i class="fas fa-copy"></i> Копировать</button>
+          </div>
+          <div id="alertStack" class="alert-stack" style="display:none;"></div>
+          <div class="alert-details" id="alertTimestamp"></div>
+        </div>
+        <div style="padding:1rem; text-align:center;">
+          <button class="btn btn-submit" id="alertModalOkBtn">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- КОНЕЦ ИГРЫ -->
+  <!-- ЭКРАН ОКОНЧАНИЯ -->
+  <div class="overlay-screen" id="endGameOverlay">
+    <canvas id="matrixCanvas"></canvas>
+    <div class="end-text-container">
+      <div class="overlay-title" id="endTitle">КОНЕЦ</div>
+      <div class="overlay-msg" id="endMsg">...</div>
+      <div class="overlay-buttons">
+        <!-- УБРАНЫ onclick, добавлены ID -->
+        <button class="btn btn-clear" id="btnRestartGame" style="border:1px solid #fff;color:#fff;">ЗАНОВО</button>
+        <button class="btn btn-continue" id="btnContinueGame" style="display:none;background:var(--accent-gold);color:#000;">ПРОДОЛЖИТЬ</button>
+      </div>
+    </div>
+  </div>
+  
+  <script type="module" src="js/APP.js"></script>
+</body>
+
+</html>
