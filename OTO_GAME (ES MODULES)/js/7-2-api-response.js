@@ -9,18 +9,18 @@ const Prompts = CONFIG.prompts;
 // Список стандартных полей JSON, которые наш код игры ОЖИДАЕТ получить от LLM.
 // Все остальные поля в корне JSON будут интерпретироваться как "Динамическая память ИИ" (aiMemory).
 const KNOWN_FIELDS = [
-    "scene",                    // [string] Основной текст новой сцены
-    "choices",                  // [Array<string>] Массив вариантов выбора для игрока
-    "reflection",               // [string, optional] Размышления или краткий итог сцены
-    "stat_changes",             // [Object] Изменения характеристик игрока (например, {"will": -5})
-    "progress_change",          // [number] Изменение прогресса посвящения
-    "personality_change",       // [string, optional] Обновленное описание личности героя
-    "start_ritual",             // [string, optional] Флаг/указание на начало инициатического ритуала (например, "I°")
-    "end_ritual",               // [boolean, optional] Флаг окончания ритуала
-    "ritual_completed",         // [boolean, optional] Альтернативный флаг окончания ритуала
-    "inventory",                // [Array<string>, optional] Инвентарь (может быть и в aiMemory, но здесь для явности)
-    "thoughtsOfHeroResponse",   // [Array<string>, optional] Массив коротких фраз - "мыслей героя"
-    "short_summary"             // [string] ОДНО предложение - краткое описание этой сцены (для глобальной сводки)
+    "scene", // [string] Основной текст новой сцены
+    "choices", // [Array<string>] Массив вариантов выбора для игрока
+    "reflection", // [string, optional] Размышления или краткий итог сцены
+    "stat_changes", // [Object] Изменения характеристик игрока (например, {"will": -5})
+    "progress_change", // [number] Изменение прогресса посвящения
+    "personality_change", // [string, optional] Обновленное описание личности героя
+    "start_ritual", // [string, optional] Флаг/указание на начало инициатического ритуала (например, "I°")
+    "end_ritual", // [boolean, optional] Флаг окончания ритуала
+    "ritual_completed", // [boolean, optional] Альтернативный флаг окончания ритуала
+    "inventory", // [Array<string>, optional] Инвентарь (может быть и в aiMemory, но здесь для явности)
+    "thoughtsOfHeroResponse", // [Array<string>, optional] Массив коротких фраз - "мыслей героя"
+    "short_summary" // [string] ОДНО предложение - краткое описание этой сцены (для глобальной сводки)
 ];
 
 /**
@@ -35,10 +35,10 @@ function processAIResponse(rawText) {
     // 1. Очистка Markdown и лишних символов из RAW-текста LLM.
     // LLM иногда оборачивают JSON в ```json ```, это нужно убрать перед парсингом.
     let cleanText = rawText.trim()
-        .replace(/^```json\s*/i, '')  // Убираем маркер начала JSON-блока
-        .replace(/\s*```$/i, '')      // Убираем маркер конца JSON-блока
-        .replace(/^```\s*/i, '');     // На всякий случай, если просто ``` без `json`
-
+        .replace(/^```json\s*/i, '') // Убираем маркер начала JSON-блока
+        .replace(/\s*```$/i, '') // Убираем маркер конца JSON-блока
+        .replace(/^```\s*/i, ''); // На всякий случай, если просто ``` без `json`
+    
     // 2. Попытка парсинга JSON.
     let parsedData;
     try {
@@ -49,7 +49,7 @@ function processAIResponse(rawText) {
         console.warn("JSON.parse() failed with standard parser. Attempting robust parsing.", standardParseError);
         parsedData = Utils.robustJsonParse(cleanText);
     }
-
+    
     // 3. Гарантия наличия ОБЯЗАТЕЛЬНЫХ полей (Fail-safe mechanism).
     // Если LLM по какой-то причине пропустил обязательное поле, мы предоставляем значение по умолчанию,
     // чтобы избежать ошибок в работе UI и обеспечить непрерывность игры.
@@ -61,7 +61,7 @@ function processAIResponse(rawText) {
         // Если нет вариантов выбора или они пусты, предлагаем стандартное действие.
         parsedData.choices = ["Попытаться осмыслить произошедшее..."];
     }
-
+    
     // 4. ДЕТЕКТОР ДИНАМИЧЕСКИХ ПОЛЕЙ (Unknown Fields Extractor).
     // Это сердце механизма "Динамической памяти ИИ" (aiMemory).
     // Любое поле в корневом объекте JSON, которого нет в `KNOWN_FIELDS`,
@@ -80,13 +80,13 @@ function processAIResponse(rawText) {
             dynamicMemoryUpdates[key] = value;
         }
     }
-
+    
     // Возвращаем две части: 
     // `cleanData` - стандартные игровые данные для `Game.js`
     // `memoryUpdate` - объект с динамическими полями для обновления `aiMemory` в `State.js`
     return {
         cleanData: parsedData,
-        memoryUpdate: dynamicMemoryUpdates 
+        memoryUpdate: dynamicMemoryUpdates
     };
 }
 
@@ -114,7 +114,7 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
             // Если контента нет, считаем это ошибкой.
             throw new Error("Received empty content string from AI provider in response.choices[0].message.content.");
         }
-
+        
         // Шаг 3: Пытаемся обработать полученный контент как JSON.
         try {
             return processAIResponse(contentFromAI);
@@ -123,24 +123,24 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
             // мы ловим эту ошибку здесь и инициируем процесс ремонта.
             throw new Error(`Invalid JSON format detected. Raw text: "${contentFromAI.substring(0, 200)}..." \nDetails: ${jsonProcessingError.message}`);
         }
-
+        
     } catch (primaryError) {
         // ============================================
         // ЛОГИКА АВТО-РЕМОНТА (Auto-Repair Logic)
         // ============================================
-
+        
         // A. Обработка КРИТИЧЕСКИХ ошибок (не подлежат ремонту LLM):
         // - Сетевые ошибки (fetch, HTTP 4xx/5xx).
         // - Отмена запроса (AbortError).
         // В этих случаях LLM ничего не исправит, поэтому просто пробрасываем ошибку выше.
-        const isCriticalError = primaryError.message.startsWith('HTTP Error') || 
-                                primaryError.name === 'AbortError' || 
-                                primaryError.message.includes('fetch');
-                               
+        const isCriticalError = primaryError.message.startsWith('HTTP Error') ||
+            primaryError.name === 'AbortError' ||
+            primaryError.message.includes('fetch');
+        
         if (isCriticalError) {
             throw primaryError; // Пробрасываем ошибку для обработки в Facade/Game
         }
-
+        
         // B. Обработка ошибок ПАРСИНГА JSON (подлежат ремонту LLM):
         // Если LLM вернул некорректный JSON и у нас ЕЩЕ ЕСТЬ ПОПЫТКИ РЕМОНТА:
         if (attemptsLeft > 0) {
@@ -149,7 +149,7 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
             
             // Создаем глубокую копию оригинального payload (тела запроса),
             // чтобы не мутировать его для текущей попытки ремонта.
-            const newPayloadForRepair = JSON.parse(JSON.stringify(payload)); 
+            const newPayloadForRepair = JSON.parse(JSON.stringify(payload));
             
             // Добавляем специальное сообщение в массив messages.
             // Это "убеждает" LLM пересмотреть свой предыдущий ответ и выдать корректный JSON.
@@ -157,19 +157,19 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
                 role: "user",
                 content: Prompts.technical.jsonRepair // Берем инструкцию по ремонту из конфига
             });
-
+            
             // Выполняем РЕКУРСИВНЫЙ вызов этой же функции, уменьшая количество попыток.
             // Это создает цикл "попробуй -> если ошибка -> попроси исправить -> попробуй снова".
             return robustFetchWithRepair(
-                url, 
-                headers, 
-                newPayloadForRepair, 
-                attemptsLeft - 1,   // Уменьшаем счетчик попыток
-                apiRequestModule, 
+                url,
+                headers,
+                newPayloadForRepair,
+                attemptsLeft - 1, // Уменьшаем счетчик попыток
+                apiRequestModule,
                 abortCtrl
             );
         }
-
+        
         // C. Если все попытки ремонта ИСЧЕРПАНЫ — сдаемся.
         // Пробрасываем последнюю ошибку парсинга, чтобы UI показал ее игроку.
         throw new Error(`CRITICAL: AI failed to produce valid JSON after ${CONFIG.autoRepairAttempts} repair attempts. Last error: ${primaryError.message}`);
@@ -180,4 +180,4 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
 export const API_Response = {
     processAIResponse,
     robustFetchWithRepair
-};
+};

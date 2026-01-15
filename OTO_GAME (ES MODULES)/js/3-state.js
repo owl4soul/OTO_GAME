@@ -14,7 +14,7 @@ let state = {
     
     // Флаги состояний
     isRitualActive: false,
-
+    
     // Текущая сцена
     currentScene: { ...initialScene },
     
@@ -23,9 +23,9 @@ let state = {
     selectedChoices: [],
     // Краткая выжимка из последних сюжетгых ходов, обновляется каждый ход
     summary: "",
-
+    
     // Динамическая память ИИ (Неструктурированные данные), также отправляется и сохраняется
-    aiMemory: {}, 
+    aiMemory: {},
     
     // Режимы ввода
     freeMode: false,
@@ -46,17 +46,17 @@ let state = {
         scale: CONFIG.scaleSteps[CONFIG.defaultScaleIndex],
         scaleIndex: CONFIG.defaultScaleIndex
     },
-
+    
     // === UI PREFERENCES: Настройки интерфейса ===
     // Хранит размеры секций и состояние свернутости для восстановления между сессиями
     ui: JSON.parse(localStorage.getItem('oto_ui_pref')) || {
-        hTop: 50,           // Высота верхней секции (%)
-        hMid: 30,           // Высота средней секции (%)
-        hBot: 20,           // Высота нижней секции (%)
-        wBotLeft: 50,       // Ширина левой колонки в нижней секции (%)
-        isCollapsed: false,  // Свернута ли нижняя секция
+        hTop: 50, // Высота верхней секции (%)
+        hMid: 30, // Высота средней секции (%)
+        hBot: 20, // Высота нижней секции (%)
+        wBotLeft: 50, // Ширина левой колонки в нижней секции (%)
+        isCollapsed: false, // Свернута ли нижняя секция
         hBotBeforeCollapse: 20, // Хранит высоту нижней секции перед сворачиванием (% или дефолтные 20)
-        isAutoCollapsed: false  // !ВАЖНО: Флаг для отслеживания клавиатуры
+        isAutoCollapsed: false // !ВАЖНО: Флаг для отслеживания клавиатуры
     },
     
     // Аудит-логи
@@ -92,47 +92,47 @@ function syncDegree() {
  * @returns {Object} Новое состояние
  */
 function resetGameProgress() {
-	if (confirm("[SOFT RESET] Сбросить прогресс текущей игры? Игра начнётся заново.")) {
-    state.stats = { ...CONFIG.startStats };
-    state.progress = 0;
-    state.degreeIndex = 0;
-    state.personality = 'Молодой Минервал, ещё не присягнувший в верности Ордену, полный идеалов, но ещё не испытанный тьмой.';
-    state.isRitualActive = false;
-    state.currentScene = { ...initialScene };
-    state.history = [];
-    state.selectedChoices = [];
-    state.freeMode = false;
-    state.freeModeText = '';
-    state.turnCount = 0; // Сброс счетчика ходов
-    state.thoughtsOfHero = [];
-    state.summary = ""; // Сброс сводки
-    state.aiMemory = {}; // Сброс памяти ИИ
-    state.gameId = Utils.generateUniqueId();
-    state.lastSaveTime = new Date().toISOString();
-
-    syncDegree();
-
-    // Сохраняем в localStorage
-    localStorage.setItem('oto_v3_state', JSON.stringify(state));
-    localStorage.setItem('oto_game_id', state.gameId);
-    localStorage.setItem('oto_last_save_time', state.lastSaveTime);
-    localStorage.setItem('oto_turn_count', '0');
-    localStorage.removeItem('oto_thoughts_of_hero');
-
-    location.reload();
+    if (confirm("[SOFT RESET] Сбросить прогресс текущей игры? Игра начнётся заново.")) {
+        state.stats = { ...CONFIG.startStats };
+        state.progress = 0;
+        state.degreeIndex = 0;
+        state.personality = 'Молодой Минервал, ещё не присягнувший в верности Ордену, полный идеалов, но ещё не испытанный тьмой.';
+        state.isRitualActive = false;
+        state.currentScene = { ...initialScene };
+        state.history = [];
+        state.selectedChoices = [];
+        state.freeMode = false;
+        state.freeModeText = '';
+        state.turnCount = 0; // Сброс счетчика ходов
+        state.thoughtsOfHero = [];
+        state.summary = ""; // Сброс сводки
+        state.aiMemory = {}; // Сброс памяти ИИ
+        state.gameId = Utils.generateUniqueId();
+        state.lastSaveTime = new Date().toISOString();
+        
+        syncDegree();
+        
+        // Сохраняем в localStorage
+        localStorage.setItem('oto_v3_state', JSON.stringify(state));
+        localStorage.setItem('oto_game_id', state.gameId);
+        localStorage.setItem('oto_last_save_time', state.lastSaveTime);
+        localStorage.setItem('oto_turn_count', '0');
+        localStorage.removeItem('oto_thoughts_of_hero');
+        
+        location.reload();
     }
 }
-    
-    /**
-     * Полный сброс игры (включая настройки)
-     */
-    function resetFullGame() {
-        if (confirm("[HARD RESET] Сбросить ВСЮ игру, включая настройки? ВСЕ данные будут удалены.")) {
+
+/**
+ * Полный сброс игры (включая настройки)
+ */
+function resetFullGame() {
+    if (confirm("[HARD RESET] Сбросить ВСЮ игру, включая настройки? ВСЕ данные будут удалены.")) {
         localStorage.clear();
         location.reload();
-        }
     }
-    
+}
+
 
 
 /**
@@ -177,7 +177,7 @@ function exportFullState() {
             highestDegree: CONFIG.degrees[state.degreeIndex].name
         }
     };
-
+    
     return exportData;
 }
 
@@ -190,17 +190,17 @@ function importFullState(importData) {
     if (!importData || typeof importData !== 'object') {
         throw new Error('Некорректные данные импорта');
     }
-
+    
     // Поддержка версий (для плавного обновления сохранений)
     if (importData.version !== CONFIG.stateVersion && importData.version !== '1.1' && importData.version !== '1.2') {
-            // Предупреждение, но пробуем загрузить, если версии близки. В идеале тут миграционная логика.
-            console.warn(`Миграция версии состояния: Импорт ${importData.version} в Текущую ${CONFIG.stateVersion}`);
+        // Предупреждение, но пробуем загрузить, если версии близки. В идеале тут миграционная логика.
+        console.warn(`Миграция версии состояния: Импорт ${importData.version} в Текущую ${CONFIG.stateVersion}`);
     }
-
+    
     // Сохраняем оригинальный gameId или создаем новый
     state.gameId = importData.gameId || Utils.generateUniqueId();
     state.lastSaveTime = importData.exportTime || new Date().toISOString();
-
+    
     // Импортируем состояние игры
     if (importData.gameState) {
         state.stats = importData.gameState.stats || state.stats;
@@ -218,31 +218,31 @@ function importFullState(importData) {
         state.turnCount = importData.gameState.turnCount || state.turnCount;
         state.thoughtsOfHero = importData.gameState.thoughtsOfHero || state.thoughtsOfHero;
     }
-
+    
     // Импортируем настройки
     if (importData.settings) {
         // Не импортируем API ключи из файла (они локальны)
         const currentApiKeyOpenrouter = state.settings.apiKeyOpenrouter;
         const currentApiKeyVsegpt = state.settings.apiKeyVsegpt;
-
+        
         state.settings = importData.settings;
         state.settings.apiKeyOpenrouter = currentApiKeyOpenrouter;
         state.settings.apiKeyVsegpt = currentApiKeyVsegpt;
     }
-
+    
     // Импортируем аудит-логи
     if (importData.auditLog) {
         state.auditLog = importData.auditLog;
     }
-
+    
     // Импортируем модели
     if (importData.models) {
         state.models = importData.models;
     }
-
+    
     // Синхронизируем степень
     syncDegree();
-
+    
     return true;
 }
 
@@ -253,11 +253,11 @@ function importFullState(importData) {
 function calculateTotalPlayTime() {
     const startTime = localStorage.getItem('oto_first_play_time');
     if (!startTime) return 0;
-
+    
     const start = new Date(startTime);
     const now = new Date();
     const diffMs = now - start;
-
+    
     return Math.floor(diffMs / 1000); // Возвращаем в секундах
 }
 
@@ -287,14 +287,14 @@ function addAuditLogEntry(entry) {
  */
 function updateScale(newScaleIndex) {
     newScaleIndex = Math.max(0, Math.min(CONFIG.scaleSteps.length - 1, newScaleIndex));
-
+    
     state.settings.scaleIndex = newScaleIndex;
     state.settings.scale = CONFIG.scaleSteps[newScaleIndex];
-
+    
     // Применяем масштаб к корневому элементу HTML и базовому размеру шрифта
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
     document.documentElement.style.fontSize = `${state.settings.scale * 16}px`; // Пересчет для базового 16px
-
+    
     localStorage.setItem('oto_scale', state.settings.scale.toString());
     localStorage.setItem('oto_scale_index', newScaleIndex.toString());
     return state.settings.scale;
@@ -309,7 +309,7 @@ function getModelStats() {
     const success = state.models.filter(m => m.status === 'success').length;
     const error = state.models.filter(m => m.status === 'error').length;
     const untested = state.models.filter(m => m.status === 'untested').length;
-
+    
     return { total, success, error, untested };
 }
 
@@ -337,7 +337,7 @@ function exportAllAppData() {
             }
         }
     };
-
+    
     return exportData;
 }
 
@@ -350,45 +350,45 @@ function importAllAppData(importData) {
     if (!importData || typeof importData !== 'object') {
         throw new Error('Некорректные данные импорта');
     }
-
+    
     if (importData.version !== CONFIG.stateVersion && importData.version !== '1.1' && importData.version !== '1.2') {
         console.warn(`Миграция версии данных: ${importData.version} в Текущую ${CONFIG.stateVersion}`);
     }
-
+    
     if (!importData.appData) {
         throw new Error('Отсутствуют данные приложения');
     }
-
+    
     // Импортируем настройки (кроме API ключей - они чувствительны и остаются локальными)
     if (importData.appData.settings) {
         const currentApiKeyOpenrouter = state.settings.apiKeyOpenrouter;
         const currentApiKeyVsegpt = state.settings.apiKeyVsegpt;
-
+        
         state.settings.apiProvider = importData.appData.settings.apiProvider || state.settings.apiProvider;
         state.settings.model = importData.appData.settings.model || state.settings.model;
         state.settings.scale = importData.appData.settings.scale || state.settings.scale;
         state.settings.scaleIndex = importData.appData.settings.scaleIndex || state.settings.scaleIndex;
-
+        
         state.settings.apiKeyOpenrouter = currentApiKeyOpenrouter;
         state.settings.apiKeyVsegpt = currentApiKeyVsegpt;
     }
-
+    
     // Импортируем модели
     if (importData.appData.models) {
         state.models = importData.appData.models;
     }
-
+    
     // Импортируем аудит-логи
     if (importData.appData.auditLog) {
         state.auditLog = importData.appData.auditLog;
     }
-
+    
     // Импортируем метаданные
     if (importData.appData.metadata) {
         state.gameId = importData.appData.metadata.gameId || state.gameId;
         state.lastSaveTime = importData.appData.metadata.lastSaveTime || state.lastSaveTime;
     }
-
+    
     return true;
 }
 
@@ -461,19 +461,19 @@ function needsHeroPhrases() {
 export const State = {
     // Получение и установка состояния
     getState: () => state,
-    setState: (newState) => { 
-        state = { ...state, ...newState }; 
+    setState: (newState) => {
+        state = { ...state, ...newState };
         // Если обновили UI, сохраняем настройки интерфейса отдельно
         if (newState.ui) saveUiState();
     },
     
-        // === Управление UI (Getters/Setters для UI) ===
+    // === Управление UI (Getters/Setters для UI) ===
     getHBotBeforeCollapse: () => state.ui.hBotBeforeCollapse,
     
     setHBotBeforeCollapse: (value) => {
         state.ui.hBotBeforeCollapse = value;
         // Можно сразу сохранить, чтобы не потерять при перезагрузке
-        saveUiState(); 
+        saveUiState();
     },
     
     // Основные функции

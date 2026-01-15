@@ -7,32 +7,103 @@ import { Utils } from './2-utils.js';
 import { Saveload } from './9-saveload.js';
 
 /**
- * Очистка лога аудита
+ * Создает новую запись лога, сохраняет в State и выводит в консоль.
+ * @param {string} requestType - Заголовок (напр. "Игровой ход")
+ * @param {Object} requestPayload - Тело запроса (JSON)
+ * @param {string} model - Имя модели
+ * @param {string} provider - Провайдер
+ * @returns {Object} Созданный объект записи (ссылка)
+ */
+function createEntry(requestType, requestPayload, model, provider) {
+    // 1. Дублируем в консоль (полностью) для отладки разработчиком
+    console.log(`🚀 [API REQUEST] ${requestType}:`, JSON.stringify(requestPayload, null, 2));
+    
+    // 2. Создаем объект записи
+    const entry = {
+        id: Date.now(),
+        request: requestType,
+        timestamp: Utils.formatMoscowTime(new Date()),
+        status: 'pending',
+        model: model,
+        provider: provider,
+        d10: null, // Будет заполнено позже, если это игровой ход
+        fullResponse: null,
+        rawError: null,
+        requestDebug: {
+            body: JSON.stringify(requestPayload, null, 2)
+        }
+    };
+    
+    // 3. Сохраняем в глобальный State и обновляем UI списка
+    State.addAuditLogEntry(entry);
+    Render.renderAuditList();
+    
+    return entry;
+}
+
+/**
+ * Обновляет запись при успешном ответе от сервера.
+ * @param {Object} entry - Объект записи (возвращенный из createEntry)
+ * @param {Object|string} rawResponse - Ответ от ИИ (объект или строка)
+ */
+function updateEntrySuccess(entry, rawResponse) {
+    if (!entry) return;
+    
+    const responseStr = typeof rawResponse === 'string' ? rawResponse : JSON.stringify(rawResponse, null, 2);
+    
+    // 1. Дублируем в консоль для отладки
+    console.log(`✅ [API RESPONSE] ${entry.request}:`, responseStr);
+    
+    // 2. Обновляем объект (он уже находится в State по ссылке)
+    entry.status = 'success';
+    entry.fullResponse = responseStr;
+    
+    // 3. Обновляем UI (показываем галочку и ответ)
+    Render.renderAuditList();
+}
+
+/**
+ * Обновляет запись при ошибке запроса.
+ * @param {Object} entry - Объект записи
+ * @param {Error|string} error - Ошибка
+ */
+function updateEntryError(entry, error) {
+    if (!entry) return;
+    
+    const errorDetails = Utils.formatErrorDetails(error);
+    
+    // 1. Дублируем в консоль
+    console.error(`🔥 [API ERROR] ${entry.request}:`, error);
+    
+    // 2. Обновляем объект
+    entry.status = 'error';
+    entry.rawError = errorDetails;
+    
+    // 3. Обновляем UI (показываем красный крестик и детали)
+    Render.renderAuditList();
+}
+
+/**
+ * Очистка лога аудита (Вызывается из UI по кнопке)
  */
 function clearAudit() {
     if (confirm('Очистить лог запросов?')) {
         const state = State.getState();
         state.auditLog = [];
         State.setState({ auditLog: state.auditLog });
+        
+        // Логируем сам факт очистки как системное событие
+        // Используем нашу же функцию createEntry для единообразия
+        const entry = createEntry('SYSTEM', { action: 'clear_logs' }, 'system', 'local');
+        updateEntrySuccess(entry, 'Лог аудита был очищен пользователем');
+        
         Render.renderAuditList();
         Saveload.saveState();
-
-        // Логируем действие в аудит
-        const auditEntry = {
-            id: Date.now(),
-            request: 'Очистка лога аудита',
-            timestamp: Utils.formatMoscowTime(new Date()),
-            status: 'success',
-            fullResponse: 'Лог аудита очищен'
-        };
-
-        State.addAuditLogEntry(auditEntry);
-        Render.renderAuditList();
     }
 }
 
 /**
- * Экспорт лога аудита в текстовом формате
+ * Экспорт лога аудита в текстовый файл (Вызывается из UI)
  */
 function exportAuditLog() {
     const state = State.getState();
@@ -44,44 +115,38 @@ function exportAuditLog() {
         );
         return;
     }
-
+    
     let txtLog = `=== OTO Audit Log ===\n`;
     txtLog += `Игра: ${state.gameId}\n`;
     txtLog += `Экспорт: ${Utils.formatMoscowTime(new Date())}\n`;
     txtLog += `Всего записей: ${state.auditLog.length}\n`;
     txtLog += '='.repeat(50) + '\n\n';
-
+    
     state.auditLog.forEach((entry, idx) => {
         txtLog += `=== Запись ${idx + 1} ===\n`;
         txtLog += `Время: ${entry.timestamp}\n`;
         txtLog += `Статус: ${entry.status.toUpperCase()}\n`;
         txtLog += `Провайдер: ${entry.provider || 'не указан'}\n`;
         txtLog += `Модель: ${entry.model || 'не указана'}\n`;
-        txtLog += `d10: ${entry.d10 || 'нет'}\n`;
-        txtLog += `\nЗапрос:\n${entry.request || 'Нет запроса'}\n\n`;
-
-        if (entry.rawError) {
-            txtLog += `\n=== ОШИБКА ===\n`;
-            txtLog += `${Utils.formatErrorDetails(entry.rawError)}\n\n`;
+        if (entry.d10) txtLog += `d10: ${entry.d10}\n`; // Если был бросок кубика
+        
+        txtLog += `\n[REQUEST HEADER]: ${entry.request}\n`;
+        
+        if (entry.requestDebug && entry.requestDebug.body) {
+            txtLog += `\n[REQUEST BODY]:\n${entry.requestDebug.body}\n`;
         }
-
+        
         if (entry.fullResponse) {
-            txtLog += `\n=== ОТВЕТ (${entry.fullResponse.length} символов) ===\n`;
-            txtLog += `${entry.fullResponse}\n\n`;
+            txtLog += `\n[RESPONSE]:\n${entry.fullResponse}\n`;
         }
-
-        if (entry.requestDebug) {
-            txtLog += `\n=== ДЕБАГ ЗАПРОСА ===\n`;
-            txtLog += `URL: ${entry.requestDebug.url || 'нет'}\n`;
-            if (entry.requestDebug.body) {
-                txtLog += `Тело запроса:\n${entry.requestDebug.body.substring(0, 2000)}...\n`;
-            }
-            txtLog += '\n';
+        
+        if (entry.rawError) {
+            txtLog += `\n[ERROR]:\n${entry.rawError}\n`;
         }
-
-        txtLog += '='.repeat(50) + '\n\n';
+        
+        txtLog += '\n' + '='.repeat(50) + '\n\n';
     });
-
+    
     if (navigator.clipboard) {
         navigator.clipboard.writeText(txtLog).then(() => {
             Render.showSuccessAlert(
@@ -95,12 +160,11 @@ function exportAuditLog() {
     } else {
         fallbackDownload(txtLog);
     }
-
-    function fallbackDownload(txtLog) {
-        const state = State.getState();
+    
+    function fallbackDownload(data) {
         const fileName = `oto-audit-log-${state.gameId}-${new Date().toISOString().split('T')[0]}.txt`;
-        Utils.exportToFile(txtLog, fileName, 'text/plain;charset=utf-8');
-
+        Utils.exportToFile(data, fileName, 'text/plain;charset=utf-8');
+        
         setTimeout(() => {
             Render.showSuccessAlert(
                 "Экспорт успешен",
@@ -112,7 +176,11 @@ function exportAuditLog() {
 }
 
 // Публичный интерфейс модуля
+// Экспортируем методы для создания логов (для Facade) и управления (для UI)
 export const Audit = {
+    createEntry,
+    updateEntrySuccess,
+    updateEntryError,
     clearAudit,
     exportAuditLog
-};
+};

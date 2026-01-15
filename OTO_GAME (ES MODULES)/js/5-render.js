@@ -5,7 +5,7 @@ import { CONFIG } from './1-config.js';
 import { State } from './3-state.js';
 import { DOM } from './4-dom.js';
 import { Utils } from './2-utils.js';
-import { Game } from './6-game.js'; // Импорт Game для toggleChoice
+import { Game } from './6-game.js';
 
 const dom = DOM.getDOM();
 
@@ -125,7 +125,7 @@ function updateLogCount() {
 }
 
 /**
- * Отрисовка списка аудита
+ * Отрисовка списка аудита (ИСПРАВЛЕНО: ПОЛНЫЙ ВЫВОД + ЦВЕТА)
  */
 function renderAuditList() {
     const state = State.getState();
@@ -133,33 +133,69 @@ function renderAuditList() {
     
     if (!list) return;
     
-    // Ограничиваем количество отображаемых записей
-    const displayLog = state.auditLog.slice(0, 5);
+    // Показываем последние 20 записей (чтобы не тормозил DOM, но было видно историю)
+    const displayLog = state.auditLog.slice(0, 20);
     
     list.innerHTML = displayLog.map(entry => {
-        let displayText = `${entry.timestamp || '--:--:--'}: ${(entry.status || 'unknown').toUpperCase()} - ${entry.request ? entry.request.substring(0, 30) : 'Тест'}...`;
+        // Определение цветов
+        let statusColor = '#888'; // Default grey/yellow
+        let borderColor = '#444';
         
-        if (entry.d10) {
-            displayText += ` (d10=${entry.d10})`;
+        if (entry.status === 'success') {
+            statusColor = '#4cd137'; // Зеленый
+            borderColor = '#2d8b57';
+        } else if (entry.status === 'error') {
+            statusColor = '#e84118'; // Красный
+            borderColor = '#c23616';
+        } else if (entry.status === 'pending') {
+            statusColor = '#fbc531'; // Желтый
+            borderColor = '#e1b12c';
         }
-        
-        // Детали запроса
-        if (entry.requestDebug) {
-            displayText += `<br><details><summary>Request</summary><pre style="font-size:0.6rem;">${entry.requestDebug.body ? entry.requestDebug.body.substring(0, 200) : 'Нет данных'}...</pre></details>`;
+
+        // Заголовок записи
+        let headerText = `<span style="color:${statusColor}; font-weight:bold;">${entry.timestamp}</span>: [${entry.status.toUpperCase()}] - ${entry.request}`;
+        if (entry.d10) headerText += ` (d10=${entry.d10})`;
+
+        // Сборка тела (Request)
+        let requestHtml = '';
+        if (entry.requestDebug && entry.requestDebug.body) {
+            // ВАЖНО: white-space: pre-wrap для переноса строк JSON на мобильном
+            requestHtml = `
+            <details>
+                <summary style="cursor:pointer; color:#aaa;">▼ Request Payload</summary>
+                <pre style="font-size:0.65rem; color:#ccc; background:#111; padding:5px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #333;">${entry.requestDebug.body}</pre>
+            </details>`;
         }
-        
-        // Детали ответа
+
+        // Сборка тела (Response)
+        let responseHtml = '';
         if (entry.fullResponse) {
-            const truncated = entry.fullResponse.length > 500 ? entry.fullResponse.substring(0, 500) + '...' : entry.fullResponse;
-            displayText += `<br><details><summary>Response (${entry.fullResponse.length} chars)</summary><pre style="font-size:0.6rem;">${truncated}</pre></details>`;
+            // ВАЖНО: Выводим ПОЛНЫЙ текст без substring
+            responseHtml = `
+            <details>
+                <summary style="cursor:pointer; color:${statusColor};">▼ Full Response</summary>
+                <pre style="font-size:0.65rem; color:${statusColor}; background:#1a1a1a; padding:5px; overflow-x:auto; white-space: pre-wrap; border: 1px solid ${borderColor};">${entry.fullResponse}</pre>
+            </details>`;
         }
-        
-        // Ошибки
+
+        // Сборка ошибки
+        let errorHtml = '';
         if (entry.rawError) {
-            displayText += `<br><details><summary>Error</summary><pre style="font-size:0.6rem; color: #ff6b6b;">${Utils.formatErrorDetails(entry.rawError).substring(0, 300)}...</pre></details>`;
+            errorHtml = `
+            <details open>
+                <summary style="cursor:pointer; color:#e84118;">▼ ERROR DETAILS</summary>
+                <pre style="font-size:0.65rem; color:#e84118; background:#2d0000; padding:5px; overflow-x:auto; white-space: pre-wrap;">${entry.rawError}</pre>
+            </details>`;
         }
-        
-        return `<div style="padding:0.3rem; border-bottom:1px solid #333;">${displayText}</div>`;
+
+        // Обертка записи с цветной рамкой слева
+        return `
+        <div style="padding:0.5rem; border-bottom:1px solid #333; border-left: 4px solid ${borderColor}; margin-bottom: 5px; background: rgba(0,0,0,0.2);">
+            <div style="font-size: 0.8rem; margin-bottom: 5px;">${headerText}</div>
+            ${requestHtml}
+            ${responseHtml}
+            ${errorHtml}
+        </div>`;
     }).join('');
     
     updateLogCount();
@@ -285,7 +321,7 @@ function renderStats() {
 }
 
 /**
- * Отрисовка инвентаря (НОВАЯ ФУНКЦИЯ)
+ * Отрисовка инвентаря
  */
 function renderInventory() {
     const state = State.getState();
@@ -333,7 +369,7 @@ function renderInventory() {
 }
 
 /**
- * Применение визуальных эффектов состояния (НОВАЯ ФУНКЦИЯ)
+ * Применение визуальных эффектов состояния
  */
 function applyStateEffects() {
     const state = State.getState();
@@ -405,15 +441,13 @@ function renderAll() {
     updateUIMode();
     renderStats();
     renderChoices();
-    renderInventory(); // <--- Добавлено
+    renderInventory(); 
     renderHistory();
-    applyStateEffects(); // <--- Добавлено
+    applyStateEffects(); 
     
     // Обновляем счетчик ходов
     if (dom.turnCounter) {
         // Разделяем стили через HTML
-        // Само слово наследует цвет родителя (Золотой из CSS #turnCounter)
-        // А цифру оборачиваем в span с серым цветом (#888)
         dom.turnCounter.innerHTML = `ХОДЫ: <span style="color: #888; font-family: monospace;">${State.getTurnCount()}</span>`;
     }
 }
@@ -447,25 +481,7 @@ function updateThoughtsOfHeroText(text) {
 }
 
 /**
- * Показать уведомление (ошибка или успех)
- * @param {string} title - Заголовок уведомления
- * @param {string} message - Текст сообщения
- * @param {any} details - Детали ошибки
- * @param {boolean} isError - Флаг ошибки (true - ошибка, false - успех)
- */
-/**
  * Показать уведомление (ошибка, успех или предупреждение)
- * @param {string} title - Заголовок уведомления
- * @param {string} message - Текст сообщения
- * @param {any} details - Детали ошибки
- * @param {string} type - Тип: 'error', 'success', 'warning'
- */
-/**
- * Показать уведомление (ошибка, успех или предупреждение)
- * @param {string} title - Заголовок уведомления
- * @param {string} message - Текст сообщения
- * @param {any} details - Детали ошибки
- * @param {string} type - Тип: 'error', 'success', 'warning'
  */
 function showAlert(title, message, details = null, type = 'error') {
     const alertModal = document.getElementById('alertModal');
@@ -515,7 +531,6 @@ function showAlert(title, message, details = null, type = 'error') {
                 return; // Fallback: не копируем, но не ломаем
             }
             navigator.clipboard.writeText(formattedDetails).then(() => {
-                console.log('Детали скопированы в буфер обмена'); // Для отладки
                 copyErrorBtn.innerHTML = '<i class="fas fa-check"></i> Скопировано!';
                 setTimeout(() => {
                     copyErrorBtn.innerHTML = '<i class="fas fa-copy"></i> Скопировать данные';
@@ -555,9 +570,6 @@ function showAlert(title, message, details = null, type = 'error') {
 
 /**
  * Показать уведомление о предупреждении
- * @param {string} title - Заголовок
- * @param {string} message - Сообщение
- * @param {any} details - Детали предупреждения
  */
 function showWarningAlert(title, message, details = null) {
     showAlert(title, message, details, 'warning');
@@ -565,9 +577,6 @@ function showWarningAlert(title, message, details = null) {
 
 /**
  * Показать уведомление об ошибке
- * @param {string} title - Заголовок
- * @param {string} message - Сообщение
- * @param {any} details - Детали ошибки
  */
 function showErrorAlert(title, message, details = null) {
     showAlert(title, message, details, 'error');
@@ -575,9 +584,6 @@ function showErrorAlert(title, message, details = null) {
 
 /**
  * Показать уведомление об успехе
- * @param {string} title - Заголовок
- * @param {string} message - Сообщение
- * @param {any} details - Детали
  */
 function showSuccessAlert(title, message, details = null) {
     showAlert(title, message, details, 'success');

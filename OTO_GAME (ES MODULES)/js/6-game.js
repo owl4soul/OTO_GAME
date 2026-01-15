@@ -127,23 +127,6 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     // Запускаем показ фраз на подложке
     startThoughtsOfHeroDisplay();
 
-    // Создаем запись аудита ДО отправки запроса
-    const auditEntry = {
-        id: Date.now(),
-        request: requestText,
-        timestamp: Utils.formatMoscowTime(new Date()),
-        status: 'pending',
-        model: state.settings.model,
-        provider: state.settings.apiProvider,
-        d10: d10,
-        rawError: null,
-        fullResponse: null,
-        requestDebug: {}, responseDebug: {}
-    };
-
-    State.addAuditLogEntry(auditEntry);
-    Render.renderAuditList();
-
     // Создаем AbortController для таймаута
     activeAbortController = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -158,7 +141,10 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }, CONFIG.requestTimeout);
 
     try {
-        const data = await API.sendAIRequest(requestText, d10, auditEntry, activeAbortController);
+        // === ВЫЗОВ API (ИЗМЕНЕНО) ===
+        // Мы больше не передаем auditEntry. Facade создаст его сам внутри.
+        // Мы передаем только данные для запроса и контроллер отмены.
+        const data = await API.sendAIRequest(requestText, d10, activeAbortController);
 
         clearTimeout(timeoutId);
         activeAbortController = null;
@@ -175,9 +161,6 @@ async function submitTurn(retries = CONFIG.maxRetries) {
                 throw new Error("ИИ не смог сгенерировать варианты действий после нескольких попыток.");
             }
         }
-
-        auditEntry.status = 'success';
-        auditEntry.fullResponse = JSON.stringify(data, null, 2);
 
         // Проверяем, есть ли в ответе фразы героя
         if (data.thoughtsOfHeroResponse && Array.isArray(data.thoughtsOfHeroResponse)) {
@@ -205,8 +188,9 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         }
 
         console.error('💥 Ошибка в submitTurn:', e);
-        auditEntry.status = 'error';
-        auditEntry.rawError = Utils.formatErrorDetails(e);
+        
+        // Логирование уже произошло внутри API Facade -> Audit.
+        // Здесь мы только восстанавливаем UI и показываем алерт.
 
         if (state.freeMode) {
             dom.freeInputText.disabled = false;
@@ -231,11 +215,13 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         dom.btnSubmit.disabled = false;
         dom.btnClear.disabled = false;
     } finally {
-    	dom.freeInputText.disabled = false;
+        if(state.freeMode) {
+            dom.freeInputText.disabled = false;
             dom.freeInputText.style.opacity = '1';
             // Возвращаем фокус, чтобы можно было сразу править
             dom.freeInputText.focus();
-        Render.renderAuditList();
+        }
+        // ВАЖНО: Render.renderAuditList() здесь не нужен, так как Facade/Audit уже обновили UI.
         Saveload.saveState();
     }
 }
@@ -277,10 +263,9 @@ function processTurn(data, playerChoice, d10) {
         State.setState({ personality: state.personality });
     }
 
-    // --- ЛОГИКА РИТУАЛА (НОВОЕ) ---
+    // --- ЛОГИКА РИТУАЛА ---
     
     // 1. Проверка на начало ритуала от ИИ
-    // Если ИИ прислал флаг "start_ritual" ИЛИ мы пересекли порог степени
     const nextDegree = CONFIG.degrees.find(d => d.threshold > state.progress);
     const thresholdReached = nextDegree && state.progress >= nextDegree.threshold;
     
@@ -292,10 +277,7 @@ function processTurn(data, playerChoice, d10) {
     }
     
     // 2. Проверка на окончание ритуала
-    // Если ИИ явно сказал, что ритуал окончен (нужно добавить это в промпт)
-    // ИЛИ если мы в ритуале, но прогресс уже значительно выше порога (страховка)
     if (state.isRitualActive) {
-        // Если ИИ прислал флаг окончания (можно добавить в known fields)
         if (data.end_ritual || data.ritual_completed) {
             state.isRitualActive = false;
             updates.push("✨ РИТУАЛ ЗАВЕРШЕН");
@@ -353,7 +335,6 @@ function processTurn(data, playerChoice, d10) {
     Render.renderAll();
     
     // ВАЖНО: Синхронизируем состояние UI (выход из режима ввода)
-    // Используем правильное имя функции из UI.js
     UI.setFreeModeUI(false);
     dom.freeModeToggle.checked = false;
 
@@ -386,7 +367,7 @@ function checkEndGame() {
     }
     
     // Победа: достигнут максимальный прогресс
-    if (state.progress >= 110) {
+    if (state.progress >= 1200) { // Используем новый порог из конфига
         showEndScreen("ПОБЕДА", "Свобода — это отсутствие необходимости выбирать.", "#d4af37", true);
         return;
     }
@@ -401,7 +382,7 @@ function checkEndGame() {
 }
 
 /**
- * Показать экран окончания игры
+ * Показать экран окончания игры (МАТРИЦА)
  * @param {string} title - Заголовок
  * @param {string} msg - Сообщение
  * @param {string} color - Цвет
@@ -573,10 +554,6 @@ function handleClear() {
  * Обработчик переключения режима ввода
  * @param {Event} e - Событие
  */
-/**
- * Обработчик переключения режима ввода
- * @param {Event} e - Событие
- */
 function handleFreeModeToggle(e) {
     const state = State.getState();
     const isFreeMode = e.target.checked;
@@ -585,20 +562,16 @@ function handleFreeModeToggle(e) {
     // Сначала обновляем состояние данных
     if (state.freeMode) {
         // Если перешли в Свободный режим — подтягиваем текст из поля (вдруг там что-то было)
-        // Но надежнее брать из state, если поле еще не обновилось, или из DOM
         state.freeModeText = dom.freeInputText.value;
     } 
-    // Если перешли в Варианты — ничего не стираем (selectedChoices храним),
-    // чтобы при возврате выбор остался.
 
-    // === ЛОГИКА ДИСЕЙБЛИНГА КНОПКИ (ИСПРАВЛЕНИЕ) ===
+    // === ЛОГИКА ДИСЕЙБЛИНГА КНОПКИ ===
     if (state.freeMode) {
         // Правила Свободного режима: активно, если есть текст
         const hasText = state.freeModeText && state.freeModeText.trim().length > 0;
         dom.btnSubmit.disabled = !hasText;
     } else {
         // Правила Режима Вариантов: активно, если выбран хотя бы 1 вариант
-        // Добавляем защиту || [], если массив вдруг undefined
         const hasChoices = (state.selectedChoices || []).length > 0;
         dom.btnSubmit.disabled = !hasChoices;
     }
@@ -611,13 +584,11 @@ function handleFreeModeToggle(e) {
     });
 
     // Обновляем UI (показываем/скрываем нужные блоки)
-    // Важно: в UI.setFreeModeUI не должно быть логики дисейблинга, только визуал блоков
     UI.setFreeModeUI(isFreeMode);
     
     // Сохраняем на диск
     Saveload.saveState();
 }
-
 
 // Публичный интерфейс модуля
 export const Game = {

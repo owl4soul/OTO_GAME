@@ -1,50 +1,57 @@
-
 /* ==========================================================================
    1. ПЕРЕМЕННЫЕ И БАЗОВЫЕ НАСТРОЙКИ (ROOT)
    ========================================================================== */
 :root {
   /* --- Цветовая палитра --- */
   /* Основной черный фон. Используется везде для предотвращения белых артефактов */
-  --c-black: #000000;           
+  --c-black: #000000;
   /* Фон секций (чуть светлее абсолютного черного для визуального разделения) */
-  --c-almost-black: #080808;       
+  --c-almost-black: #080808;
   /* Фон панелей управления и строк статуса (темно-серый) */
-  --c-graphite-black: #111111;       
+  --c-graphite-black: #111111;
   /* Цвет разделительных линий (границ) */
-  --c-border-gray: #333333;       
-
+  --c-border-gray: #333333;
   /* Затемненный текст для второстепенной информации */
-  --c-light-gray:    #888888;
+  --c-light-gray: #888888;
   /* Основной текст (светло-серый, не чисто белый, для комфорта глаз) */
-  --c-almost-white:   #e0e0e0;      
-    /* Тёмно-красный для подсветки теней */
-  --c-dark-blood:  #580000; 
+  --c-almost-white: #e0e0e0;
+  /* Тёмно-красный для подсветки теней */
+  --c-dark-blood: #580000;
   /* Акцентный красный (цвет крови, ошибок, активных элементов) */
-  --c-red-blood: #8b0000;       
+  --c-red-blood: #8b0000;
   /* Золотой (для заголовков, важных значений, символики OTO) */
-  --c-gold:   #deac0f;       
-
+  --c-gold: #deac0f;
+  
   /* --- Размеры --- */
   /* Базовая высота строк управления (кнопки, заголовки).*/
-  --h-row: calc(44px * var(--scale-factor));     
+  --h-row: calc(40px * var(--scale-factor));
   /* Толщина области захвата горизонтального ресайзера (достаточная для пальца) */
-  --w-resizer: 15px;         
-
+  --w-resizer: 8px;
+  
   /* --- Динамические переменные лейаута (управляются строго через JS/ui.js) --- */
   /* Процент высоты верхней секции (Top) */
-  --h-top: 50;               
+  --h-top: 50;
   /* Процент высоты средней секции (Mid) */
-  --h-mid: 30;               
+  --h-mid: 30;
   /* Процент высоты нижней секции (Bot) */
-  --h-bot: 20;               
+  --h-bot: 20;
   /* Высота вьюпорта. Обновляется JS через VisualViewport API для учета клавиатуры */
-  --vh: 100vh;               
+  --vh: 100vh;
   /* Масштаб интерфейса (1.0 = 100%) */
-  --scale-factor: 1;         
+  --scale-factor: 1;
   
   /* Переменные safe area (для iPhone с челкой) */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  
+  /* Атмосферный шрифт для Логотипа и Важных заголовков */
+  --font-header: 'UnifrakturMaguntia', cursive;
+  /* Шрифт для основного текста (книжный, мистический) */
+  --font-garamond: 'Cormorant Garamond', serif;
+  /* Технический шрифт для UI, статов и кнопок */
+  --font-ui: 'Roboto Mono', monospace;
+  /* Calibri основной, с fallback на похожие шрифты */
+  --font-sans: 'Calibri', 'Helvetica Neue', Arial, sans-serif;
 }
 
 /* ==========================================================================
@@ -52,39 +59,40 @@
    ========================================================================== */
 * {
   /* Учет отступов и границ в общей ширине/высоте элементов */
-  box-sizing: border-box;    
+  box-sizing: border-box;
   /* Убираем рамку фокуса по умолчанию (будем делать свою кастомную) */
-  outline: none;             
+  outline: none;
   /* Убираем цветную подсветку при тапе на мобильных устройствах */
-  -webkit-tap-highlight-color: transparent; 
+  -webkit-tap-highlight-color: transparent;
   /* Сброс марджинов и паддингов для всех элементов по умолчанию */
   margin: 0;
   padding: 0;
 }
 
-html, body {
+html,
+body {
   /* Убираем внешние отступы браузера */
-  margin: 0;                 
+  margin: 0;
   /* Убираем внутренние отступы */
-  padding: 0;                
+  padding: 0;
   /* Занимаем полную ширину окна */
-  width: 100%;               
+  width: 100%;
   /* Занимаем полную высоту окна */
-  height: 100%;              
+  height: 100%;
   /* Черный фон во избежание белых полос при ресайзе/повороте экрана */
-  background-color: var(--c-black); 
+  background-color: var(--c-black);
   /* Базовый цвет текста */
-  color: var(--c-almost-white);      
+  color: var(--c-almost-white);
   /* Основной шрифт приложения */
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   /* Базовый размер шрифта, умноженный на коэффициент масштаба */
-  font-size: calc(16px * var(--scale-factor)); 
+  font-size: calc(16px * var(--scale-factor));
   /* Блокируем скролл всей страницы (скроллиться будут только внутренние секции) */
-  overflow: hidden;          
+  overflow: hidden;
   /* Блокируем эффект "резинки" (bounce) на iOS */
-  overscroll-behavior: none; 
+  overscroll-behavior: none;
   /* Запрещаем выделение интерфейса (кроме текстовых полей и сцены) */
-  user-select: none;         
+  user-select: none;
   /* Фиксированное позиционирование для тела документа - фикс для iOS Safari (bounce effect) */
   position: fixed;
   /* Привязка к краям экрана */
@@ -102,23 +110,23 @@ html, body {
    ========================================================================== */
 .main-container {
   /* Фиксируем контейнер относительно окна браузера */
-  position: fixed;           
+  position: fixed;
   /* Прижимаем к верхней границе */
-  top: 0;                    
+  top: 0;
   /* Прижимаем к левой границе */
-  left: 0;                   
+  left: 0;
   /* Ширина всегда 100% экрана */
-  width: 100%;               
+  width: 100%;
   /* Высота берется из переменной JS (учитывает виртуальную клавиатуру!) */
-  height: var(--vh);         
+  height: var(--vh);
   /* Используем Flexbox для вертикального расположения секций */
-  display: flex;             
+  display: flex;
   /* Направление оси - колонка (сверху вниз) */
-  flex-direction: column;    
+  flex-direction: column;
   /* Базовый слой отображения */
-  z-index: 1;                
+  z-index: 1;
   /* Фон контейнера */
-  background: var(--c-black);   
+  background: var(--c-black);
   /* Учет безопасных зон (отступы для челки и home bar) */
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
@@ -129,57 +137,58 @@ html, body {
    ========================================================================== */
 .layout-section {
   /* Внутри каждой секции тоже используем Flexbox */
-  display: flex;             
+  display: flex;
   /* Контент располагается вертикально (Контент + Строка управления) */
-  flex-direction: column;    
+  flex-direction: column;
   /* Разрешаем секции сжиматься меньше размера контента (критично для Flex scrolling) */
-  min-height: 0;             
+  min-height: 0;
   /* Относительное позиционирование для внутренних абсолютных элементов */
-  position: relative;        
-  /* Плавность изменения размеров (отключается классом .no-anim при драге) */
-  // transition: flex-grow 0.1s linear; 
+  position: relative;
+  /* Плавность изменения размеров (отключается классом .no-anim при драге) transition: flex-grow 0.1s linear; */
   /* Плавность только для flex-basis */
   transition: flex-basis 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
   /* Скрываем всё, что вылезает за пределы секции */
-  overflow: hidden;          
+  overflow: hidden;
 }
 
 /* --- Область скроллируемого контента (.section-content) --- */
 .section-content {
   /* Занимает всё доступное свободное пространство в секции */
-  flex: 1 1 auto;            
+  flex: 1 1 auto;
   /* Включаем вертикальный скролл при переполнении */
-  overflow-y: auto;          
+  overflow-y: auto;
   /* Запрещаем горизонтальный скролл */
-  overflow-x: hidden;        
+  overflow-x: hidden;
   /* Включаем инерционный (плавный) скролл на iOS */
-  -webkit-overflow-scrolling: touch; 
+  -webkit-overflow-scrolling: touch;
   /* Создаем контекст наложения */
-  position: relative;        
+  position: relative;
 }
 
 /* --- Строки управления (.section-row) --- */
 .section-row {
-/* Высота берется из динамической переменной */
-  flex: 0 0 var(--h-row); 
+  /* Высота берется из динамической переменной */
+  flex: 0 0 var(--h-row);
   /* Запрет на сжатие самой строки */
-  flex-shrink: 0;    
+  flex-shrink: 0;
   /* Элементы внутри выстраиваются в строку */
-  display: flex;             
-  align-items: center;       /* Вертикально по центру */
-  justify-content: space-between; /* Распределение по ширине */
+  display: flex;
+  align-items: center;
+  /* Вертикально по центру */
+  justify-content: space-between;
+  /* Распределение по ширине */
   /* Обрезаем всё, что торчит (на случай экстремального зума) */
-  overflow: hidden;      
+  overflow: hidden;
   /* Фон строки */
-  background: var(--c-graphite-black); 
+  background: var(--c-graphite-black);
   /* Тонкая линия границы сверху */
-  border-top: 1px solid var(--c-border-gray); 
+  border-top: 1px solid var(--c-border-gray);
   /* Тонкая линия границы снизу */
-  border-bottom: 1px solid var(--c-border-gray); 
+  border-bottom: 1px solid var(--c-border-gray);
   /* Внутренние отступы по бокам */
-  padding: 0 10px;           
+  padding: 0 10px;
   /* Строка всегда поверх контента (если вдруг будет наложение) */
-  z-index: 5;                
+  z-index: 5;
 }
 
 
@@ -190,55 +199,71 @@ html, body {
 /* --- ВЕРХНЯЯ СЕКЦИЯ (TOP) --- */
 .section-top {
   /* Высота определяется переменной JS (flex-basis для точных %, без grow/shrink) */
-  flex: 0 0 calc(var(--h-top) * 1%);   
+  flex: 0 0 calc(var(--h-top) * 1%);
   /* Граница снизу, отделяющая от ресайзера */
-  border-bottom: 1px solid var(--c-border-gray); 
+  border-bottom: 1px solid var(--c-border-gray);
 }
 
 /* Текст сцены внутри верхней секции */
 #sceneArea {
   /* Внутренние отступы для текста */
-  padding: 1rem 1.2rem;      
+  padding: 1rem;
   /* Радиальный градиент фона для создания атмосферы виньетки */
-  background: radial-gradient(circle at center, #151515 0%, #000 100%); 
+  background: radial-gradient(circle at center, #151515 0%, #000 85%);
   /* Разрешаем пользователю выделять текст сюжета */
-  user-select: text;         
+  user-select: text;
+}
+
+.scene-text {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 400;
 }
 
 /* Стилизация текста сцены */
 .scene-text p {
   /* Отступ между абзацами */
-  margin-bottom: 0.8rem;     
+  margin-bottom: 0.8rem;
   /* Межстрочный интервал */
-  line-height: 1.4;          
+  line-height: 1.25;
   /* Выравнивание по ширине */
-  text-align: justify;       
+  text-align: justify;
 }
+
 /* Выделение важного золотым */
-.scene-text strong { 
-  color: var(--c-gold); 
-  font-weight: 600; 
-} 
+.scene-text strong {
+  color: var(--c-gold);
+  font-weight: 600;
+}
+
 /* Курсив для мыслей */
-.scene-text em { 
-  color: #aaa; 
-  font-style: italic; 
-} 
+.scene-text em {
+  color: #aaa;
+  font-style: italic;
+}
 
 /* Блок обновлений характеристик (появляется после хода) */
 .scene-updates {
   margin-top: 1rem;
   padding: 0.6rem;
-  background: rgba(139, 0, 0, 0.2); /* Полупрозрачный красный */
-  border-left: 3px solid var(--c-red-blood); /* Красная черта слева */
+  background: rgba(139, 0, 0, 0.2);
+  /* Полупрозрачный красный */
+  border-left: 3px solid var(--c-red-blood);
+  /* Красная черта слева */
+  font-family: var(--font-sans);
   font-size: 0.85rem;
   color: #ffcccc;
-  font-family: monospace;    /* Моноширинный шрифт */
+  font-family: monospace;
+  /* Моноширинный шрифт */
 }
 
 /* Блок рефлексии (мысли героя) */
 .scene-reflection {
   margin-top: 0.8rem;
+  font-family: var(--font-garamond);
+  font-size: 1.2rem;
+  font-weight: 400;
+  line-height: 0.9;
   font-style: italic;
   color: var(--c-light-gray);
   border-left: 2px solid var(--c-gold);
@@ -248,76 +273,93 @@ html, body {
 /* Характеристики в верхней строке */
 .stats-grid {
   /* Flex-контейнер */
-  display: flex;             
+  display: flex;
   /* На всю ширину строки */
-  width: 100%;               
+  width: 100%;
   /* Равномерное распределение элементов */
-  justify-content: space-around; 
+  justify-content: space-around;
   /* Размер шрифта */
-  font-size: 0.8rem;         
+  font-size: 0.8rem;
 }
+
 /* Название характеристики */
-.stat-item .lbl { 
-  color: var(--c-light-gray); 
-  margin-right: 5px; 
-  font-size: 0.7rem; 
-} 
+.stat-item .lbl {
+  color: var(--c-light-gray);
+  margin-right: 5px;
+  font-size: 0.7rem;
+  font-family: var(--font-ui);
+}
+
 /* Значение характеристики */
-.stat-item .val { 
-  color: var(--c-gold); 
-  font-weight: bold; 
-  font-family: monospace; 
-} 
+.stat-item .val {
+  color: var(--c-gold);
+  font-weight: bold;
+  font-family: monospace;
+  font-family: var(--font-ui);
+}
 
 
 /* --- СРЕДНЯЯ СЕКЦИЯ (MID) --- */
 .section-mid {
   /* Высота определяется переменной JS (flex-basis для точных %) */
-  flex: 0 0 calc(var(--h-mid) * 1%);   
+  flex: 0 0 calc(var(--h-mid) * 1%);
   /* Фон секции */
-  background-color: var(--c-almost-black); 
+  background-color: var(--c-almost-black);
 }
 
 /* Область контента середины */
 #middleArea {
   /* Отступ контента */
-  padding: 0.5rem;           
+  padding: 0.5rem;
   /* Flex-колонка для корректного растягивания textarea */
-  display: flex;             
-  flex-direction: column;    
+  display: flex;
+  flex-direction: column;
 }
 
 /* Контейнер кнопок выбора */
 .choices-container {
   /* Если кнопок много, они скроллятся внутри области */
-  width: 100%;               
+  width: 100%;
 }
 
 /* Кнопка выбора варианта */
 .choice-btn {
-  display: block;            /* Блочный элемент */
-  width: 100%;               /* На всю ширину */
-  text-align: left;          /* Текст слева */
-  background: #1a1a1a;       /* Темный фон */
-  border: 1px solid #333;    /* Рамка */
-  padding: 0.6rem;           /* Внутренний отступ */
-  margin-bottom: 0.4rem;     /* Отступ снизу */
-  border-radius: 6px;        /* Скругление углов */
-  color: var(--c-almost-white);      /* Цвет текста */
-  transition: all 0.2s;      /* Анимация нажатия */
-  font-size: 0.9rem;         /* Размер шрифта */
+  display: block;
+  /* Блочный элемент */
+  width: 100%;
+  /* На всю ширину */
+  text-align: left;
+  /* Текст слева */
+  background: #1a1a1a;
+  /* Темный фон */
+  border: 1px solid #333;
+  /* Рамка */
+  padding: 0.6rem;
+  /* Внутренний отступ */
+  margin-bottom: 0.4rem;
+  /* Отступ снизу */
+  border-radius: 6px;
+  /* Скругление углов */
+  color: var(--c-almost-white);
+  /* Цвет текста */
+  transition: all 0.2s;
+  /* Анимация нажатия */
+  font-size: 0.9rem;
+  /* Размер шрифта */
   line-height: 1.2;
 }
+
 /* Эффект нажатия */
-.choice-btn:active { 
-  transform: scale(0.98); 
-} 
+.choice-btn:active {
+  transform: scale(0.98);
+}
+
 /* Стиль выбранной кнопки */
-.choice-btn.selected { 
+.choice-btn.selected {
   border-color: var(--c-red-blood);
   background: linear-gradient(90deg, #2a0a0a 0%, #1a1a1a 100%);
   color: #fff;
-  box-shadow: 0 0 5px rgba(139,0,0,0.3);
+  box-shadow: 0 0 5px rgba(139, 0, 0, 0.3);
 }
 
 /* --- ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМА --- */
@@ -386,32 +428,46 @@ input:checked+.slider {
 /* Контейнер поля свободного ввода */
 .free-input-container {
   /* Растягивается на всю высоту области */
-  flex: 1;                   
-  display: flex;             
-  flex-direction: column;    
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
+
 /* Поле ввода текста */
 #freeInputText {
-  width: 100%;               /* Полная ширина */
-  height: 100%;              /* Полная высота */
+  width: 100%;
+  /* Полная ширина */
+  height: 100%;
+  /* Полная высота */
   /* Важно: минимальная высота, чтобы не схлопнулось */
-  min-height: 80px;          
-  background: #111;          /* Фон */
-  color: #fff;               /* Текст */
-  border: 1px solid #444;    /* Рамка */
-  border-radius: 4px;        /* Скругление */
-  padding: 10px;             /* Внутренний отступ */
-  resize: none;              /* Отключаем уголок ресайза браузера (у нас свои ресайзеры) */
-  font-size: 1rem;           /* Крупный шрифт для удобства */
-  font-family: inherit;      /* Наследуем шрифт */
+  min-height: 80px;
+  background: #111;
+  /* Фон */
+  color: #fff;
+  /* Текст */
+  border: 1px solid #444;
+  /* Рамка */
+  border-radius: 4px;
+  /* Скругление */
+  padding: 10px;
+  /* Внутренний отступ */
+  resize: none;
+  /* Отключаем уголок ресайза браузера (у нас свои ресайзеры) */
+  font-size: 1rem;
+  /* Крупный шрифт для удобства */
+  font-family: inherit;
+  /* Наследуем шрифт */
   overflow-wrap: break-word;
   white-space: pre-wrap;
 }
+
 /* Фокус на поле ввода */
 #freeInputText:focus {
-  outline: none;             /* Убираем дефолтную обводку */
-  border-color: var(--c-red-blood); /* Красная рамка при фокусе */
-    box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
+  outline: none;
+  /* Убираем дефолтную обводку */
+  border-color: var(--c-red-blood);
+  /* Красная рамка при фокусе */
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.7);
 }
 
 #freeInputText:disabled {
@@ -425,49 +481,67 @@ input:checked+.slider {
 .row-controls {
   /* Кнопки по краям, свитч по центру (flex с gap) */
   display: flex;
-  gap: 10px;                 
-  justify-content: space-between; 
-  gap: 10px;              /* Отступ между кнопками */
-  width: 100%;            /* Строка на всю ширину */
+  gap: 10px;
+  justify-content: space-between;
+  gap: 10px;
+  /* Отступ между кнопками */
+  width: 100%;
+  /* Строка на всю ширину */
 }
 
 /* Кнопки иконки (Очистить) */
 .btn-icon {
-  flex: 1;                   /* Коэффициент ширины 1 */
-  min-width: 0;              /* Защита от переполнения */
-  height: 32px;              /* Высота */
-  background: #222;          /* Фон */
-  border: 1px solid #444;    /* Рамка */
-  color: #aaa;               /* Цвет иконки */
-  border-radius: 4px;        /* Скругление */
-  cursor: pointer;           /* Курсор */
+  flex: 1;
+  /* Коэффициент ширины 1 */
+  min-width: 0;
+  /* Защита от переполнения */
+  height: 32px;
+  /* Высота */
+  background: #222;
+  /* Фон */
+  border: 1px solid #444;
+  /* Рамка */
+  color: #aaa;
+  /* Цвет иконки */
+  border-radius: 4px;
+  /* Скругление */
+  cursor: pointer;
+  /* Курсор */
   display: flex;
   justify-content: center;
   align-items: center;
 }
+
 /* Активное состояние кнопки иконки */
-.btn-icon:active { 
-  background: #333; 
-  color: #fff; 
+.btn-icon:active {
+  background: #333;
+  color: #fff;
 }
 
 /* Текстовая кнопка (Открыть в интро) */
 .btn-text-open {
-  flex: 1;                   /* Занимает всё оставшееся место */
-  height: 32px;              /* Высота */
-  color: #fff;               /* Белый текст */
-  border: none;              /* Без рамки */
-  border-radius: 4px;        /* Скругление */
-  font-weight: bold;         /* Жирный текст */
-  text-transform: uppercase; /* Заглавные буквы */
-  cursor: pointer;           
+  flex: 1;
+  /* Занимает всё оставшееся место */
+  height: 32px;
+  /* Высота */
+  color: #fff;
+  /* Белый текст */
+  border: none;
+  /* Без рамки */
+  border-radius: 4px;
+  /* Скругление */
+  font-weight: bold;
+  /* Жирный текст */
+  text-transform: uppercase;
+  /* Заглавные буквы */
+  cursor: pointer;
 }
 
 
 /* --- НИЖНЯЯ СЕКЦИЯ (BOT) --- */
 .section-bot {
   /* Высота определяется переменной JS (flex-basis для точных %) */
-  flex: 0 0 calc(var(--h-bot) * 1%);   
+  flex: 0 0 calc(var(--h-bot) * 1%);
 }
 
 /* Строка заголовка нижней секции (по тапу сворачивает-разворачивает контент секции)*/
@@ -476,16 +550,19 @@ input:checked+.slider {
   justify-content: space-between;
   align-items: center;
 }
+
 .header-left {
   display: flex;
   align-items: center;
   gap: 5px;
 }
+
 .header-right {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+
 .collapse-icon {
   cursor: pointer;
 }
@@ -499,103 +576,141 @@ input:checked+.slider {
 
 /* Левая панель (Прогресс) */
 .pane-left {
-  flex: 1;                   /* Растягивается */
-  min-width: 60px;           /* Минимальная ширина */
-  background: #0a0a0a;       /* Фон */
-  padding: 5px;              /* Отступ */
-  overflow-y: auto;          /* Скролл */
+  flex: 1;
+  /* Растягивается */
+  min-width: 60px;
+  /* Минимальная ширина */
+  background: #0a0a0a;
+  /* Фон */
+  padding: 5px;
+  /* Отступ */
+  overflow-y: auto;
+  /* Скролл */
 }
+
 /* Внутренняя структура прогресса */
 .stats-inner {
   display: flex;
   height: 100%;
 }
+
 /* Трубка прогресса */
 .tube-container {
-  width: 16px;               /* Узкая */
-  background: #200;          /* Темно-красный фон */
-  border-radius: 8px;        /* Скругление */
-  position: relative;        /* Для бара */
-  margin-right: 8px;         /* Отступ от текста */
-  overflow: hidden;          /* Скрываем вылезание бара */
+  width: 16px;
+  /* Узкая */
+  background: #200;
+  /* Темно-красный фон */
+  border-radius: 8px;
+  /* Скругление */
+  position: relative;
+  /* Для бара */
+  margin-right: 8px;
+  /* Отступ от текста */
+  overflow: hidden;
+  /* Скрываем вылезание бара */
 }
+
 .tube-bar {
-  position: absolute;        /* Абсолютное внутри трубки */
-  bottom: 0;                 /* Растет снизу вверх */
-  width: 100%;               /* На всю ширину контейнера */
-  background: linear-gradient(to top, #400, #f00); /* Градиент крови */
-  transition: height 0.5s ease; /* Анимация роста */
+  position: absolute;
+  /* Абсолютное внутри трубки */
+  bottom: 0;
+  /* Растет снизу вверх */
+  width: 100%;
+  /* На всю ширину контейнера */
+  background: linear-gradient(to top, #400, #f00);
+  /* Градиент крови */
+  transition: height 0.5s ease;
+  /* Анимация роста */
 }
 
 /* Контейнер информации о персонаже */
-.info-container { 
-  flex: 1;                   /* Занимает остаток места */
-  padding: 5px;              /* Отступы */
-  overflow-y: auto;          /* Скролл если много текста */
-  font-size: 0.7rem;         
-  color: var(--c-light-gray); 
+.info-container {
+  flex: 1;
+  /* Занимает остаток места */
+  padding: 5px;
+  /* Отступы */
+  overflow-y: auto;
+  /* Скролл если много текста */
+  font-size: 0.8rem;
+  color: var(--c-light-gray);
+  font-family: var(--font-sans);
+  line-height: 1;
 }
-.persona-text { 
-  margin-bottom: 8px; 
-  padding-bottom: 4px; 
-  border-bottom: 1px solid #222; 
+
+.persona-text {
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #222;
   color: #bbb;
 }
-.degree-list { 
-  font-size: 0.6rem; 
-  color: #444; 
+
+.degree-list {
+  font-size: 0.6rem;
+  color: #444;
 }
-.degree-item.passed { 
-  text-decoration: line-through; 
-  opacity: 0.5; 
+
+.degree-item.passed {
+  text-decoration: line-through;
+  opacity: 0.5;
 }
-.degree-item.active { 
-  color: var(--c-red-blood); 
-  font-weight: bold; 
+
+.degree-item.active {
+  color: var(--c-red-blood);
+  font-weight: bold;
 }
 
 /* Правая панель (История) */
 .pane-right {
-  flex: 1;                   /* Растягивается */
-  min-width: 60px;           /* Минимальная ширина */
-  background: #050505;       /* Фон */
-  padding: 5px;              /* Отступ */
-  overflow-y: auto;          /* Скролл */
+  flex: 1;
+  /* Растягивается */
+  min-width: 60px;
+  /* Минимальная ширина */
+  background: #050505;
+  /* Фон */
+  padding: 5px;
+  /* Отступ */
+  overflow-y: auto;
+  /* Скролл */
 }
+
 /* Элемент истории */
-.history-item { 
-  border-bottom: 1px solid #222; 
+.history-item {
+  border-bottom: 1px solid #222;
   padding: 5px 0;
-  font-size: 0.75rem; 
+  font-size: 0.75rem;
 }
-.history-header { 
-  color: #999; 
-  cursor: pointer; 
-  display: flex; 
-  justify-content: space-between; 
+
+.history-header {
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
 }
-.history-content { 
-  display: none; 
-  color: #666; 
-  padding: 5px; 
-  background: #000; 
-  margin-top: 2px; 
+
+.history-content {
+  display: none;
+  color: #666;
+  padding: 5px;
+  background: #000;
+  margin-top: 2px;
 }
-.history-content.open { 
-  display: block; 
+
+.history-content.open {
+  display: block;
 }
-.history-choice-label { 
-  color: var(--c-red-blood); 
-  font-weight: bold; 
-  margin-top: 5px; 
+
+.history-choice-label {
+  color: var(--c-red-blood);
+  font-weight: bold;
+  margin-top: 5px;
 }
 
 /* Состояние "Свернуто" для нижней секции */
 .section-bot.collapsed {
   /* Перебиваем flex-basis, сжимая секцию до высоты строки (оставляем видимой строку) */
-  flex: 0 0 var(--h-row) !important;   
+  flex: 0 0 var(--h-row) !important;
   /* Высота определяется только контентом (строкой заголовка) */
-  min-height: var(--h-row) !important;   
+  min-height: var(--h-row) !important;
 }
 
 /* При сворачивании скрываем контент, но оставляем шапку */
@@ -632,7 +747,8 @@ input:checked+.slider {
 .resizer-vertical::before {
   content: "";
   position: absolute;
-  opacity: 0; /* СКРЫТЫ */
+  opacity: 0;
+  /* СКРЫТЫ */
   transition: all 0.3s ease;
 }
 
@@ -648,7 +764,8 @@ input:checked+.slider {
 
 .resizer-horizontal::before {
   width: 100%;
-  height: 3px; /* ТОНКАЯ */
+  height: 3px;
+  /* ТОНКАЯ */
   top: 50%;
   left: 0;
   transform: translateY(-50%);
@@ -664,7 +781,8 @@ input:checked+.slider {
 
 .resizer-vertical::before {
   height: 100%;
-  width: 3px; /* ТОНКАЯ */
+  width: 3px;
+  /* ТОНКАЯ */
   top: 0;
   left: 50%;
   transform: translateX(-50%);
@@ -674,7 +792,7 @@ input:checked+.slider {
 .resizer-horizontal .resizer-handle {
   width: 32px;
   height: 10px;
-  background: 
+  background:
     radial-gradient(circle 1px at 11px 50%, #bb8822 100%, transparent 100%),
     radial-gradient(circle 1px at 16px 50%, #bb8822 100%, transparent 100%),
     radial-gradient(circle 1px at 21px 50%, #bb8822 100%, transparent 100%);
@@ -687,7 +805,7 @@ input:checked+.slider {
 #resizerBotVert .resizer-handle {
   width: 10px;
   height: 32px;
-  background: 
+  background:
     radial-gradient(circle 1px at 50% 11px, #bb8822 100%, transparent 100%),
     radial-gradient(circle 1px at 50% 16px, #bb8822 100%, transparent 100%),
     radial-gradient(circle 1px at 50% 21px, #bb8822 100%, transparent 100%);
@@ -702,14 +820,17 @@ input:checked+.slider {
    ========================================================================== */
 
 @keyframes bloodgold-glow {
-  0%, 100% {
-    box-shadow: 
+
+  0%,
+  100% {
+    box-shadow:
       0 0 6px rgba(255, 40, 0, 0.9),
       0 0 16px rgba(255, 0, 0, 0.7),
       0 0 30px rgba(255, 180, 0, 0.4);
   }
+  
   50% {
-    box-shadow: 
+    box-shadow:
       0 0 12px rgba(255, 70, 0, 1),
       0 0 24px rgba(255, 20, 0, 0.9),
       0 0 45px rgba(255, 215, 0, 0.5);
@@ -726,34 +847,35 @@ input:checked+.slider {
 
 /* РУЧКА АКТИВНАЯ: 1 ТОЧКА */
 .resizer-horizontal.active .resizer-handle {
-  background: 
+  background:
     radial-gradient(circle 1.5px at 16px 50%, #ffdd88 100%, transparent 100%);
   background-color: #2a0000;
   border-color: #ff7700;
-  box-shadow: 
+  box-shadow:
     0 0 10px rgba(255, 140, 0, 0.8),
     inset 0 0 6px rgba(255, 60, 0, 0.5);
 }
 
 #resizerBotVert.active .resizer-handle {
-  background: 
+  background:
     radial-gradient(circle 1.5px at 50% 16px, #ffdd88 100%, transparent 100%);
   background-color: #2a0000;
   border-color: #ff7700;
-  box-shadow: 
+  box-shadow:
     0 0 10px rgba(255, 140, 0, 0.8),
     inset 0 0 6px rgba(255, 60, 0, 0.5);
 }
 
 /* ИСКРА ПРИ КЛИКЕ */
 @keyframes spark-burst {
-  0% { 
-    box-shadow: 
+  0% {
+    box-shadow:
       0 0 15px rgba(255, 220, 80, 1),
       0 0 30px rgba(255, 160, 0, 0.9);
     filter: brightness(1.5);
   }
-  100% { 
+  
+  100% {
     box-shadow: none;
     filter: brightness(1);
   }
@@ -767,59 +889,72 @@ input:checked+.slider {
 /* ==========================================================================
    ПОЗИЦИОНИРОВАНИЕ ID
    ========================================================================== */
-#resizerTop { top: calc(var(--h-top) * 1%); }
-#resizerBot { top: calc((var(--h-top) + var(--h-mid)) * 1%); }
-#resizerBotVert { /* вертикальный в bottom-grid */ }
+#resizerTop {
+  top: calc(var(--h-top) * 1%);
+}
+
+#resizerBot {
+  top: calc((var(--h-top) + var(--h-mid)) * 1%);
+}
+
+#resizerBotVert {
+  /* вертикальный в bottom-grid */
+}
 
 /* ==========================================================================
    7. УТИЛИТЫ И КОМПОНЕНТЫ
    ========================================================================== */
 /* Класс для отключения анимации (используется JS при перетаскивании) */
 .no-anim {
-  transition: none !important; 
+  transition: none !important;
 }
 
 /* Тумблер (Switch) - стилизация */
-.switch { 
-  position: relative; 
-  display: inline-block; 
-  width: 44px; 
-  height: 24px; 
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
 }
-.switch input { 
-  opacity: 0; 
-  width: 0; 
-  height: 0; 
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
-.slider { 
-  position: absolute; 
-  cursor: pointer; 
-  top: 0; 
-  left: 0; 
-  right: 0; 
-  bottom: 0; 
-  background-color: #333; 
-  transition: .4s; 
-  border-radius: 24px; 
-  border: 1px solid #555; 
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #333;
+  transition: .4s;
+  border-radius: 24px;
+  border: 1px solid #555;
 }
-.slider:before { 
-  position: absolute; 
-  content: ""; 
-  height: 16px; 
-  width: 16px; 
-  left: 3px; 
-  bottom: 3px; 
-  background-color: white; 
-  transition: .4s; 
-  border-radius: 50%; 
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
 }
-input:checked + .slider { 
-  background-color: var(--c-red-blood); 
-  border-color: #f00; 
+
+input:checked+.slider {
+  background-color: var(--c-red-blood);
+  border-color: #f00;
 }
-input:checked + .slider:before { 
-  transform: translateX(20px); 
+
+input:checked+.slider:before {
+  transform: translateX(20px);
 }
 
 
@@ -840,13 +975,13 @@ input:checked + .slider:before {
 }
 
 .fullscreen-btn {
+  background: rgba(0, 0, 0, 0.3);
   position: fixed;
   bottom: 15px;
   left: 15px;
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #222;
   border: 1px solid #444;
   color: #aaa;
   display: flex;
@@ -876,13 +1011,13 @@ input:checked + .slider:before {
 }
 
 .settings-btn {
+  background: rgba(0, 0, 0, 0.3);
   position: fixed;
   bottom: 15px;
   right: 15px;
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #222;
   border: 1px solid #444;
   color: #aaa;
   display: flex;
@@ -908,10 +1043,10 @@ input:checked + .slider:before {
 }
 
 .scale-btn {
+  background: rgba(0, 0, 0, 0.3);
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #222;
   border: 1px solid #444;
   color: #aaa;
   display: flex;
@@ -922,8 +1057,8 @@ input:checked + .slider:before {
 }
 
 .scale-btn:hover {
-  background: #333;
   color: #fff;
+  background: #333;
 }
 
 .current-scale {
@@ -935,64 +1070,71 @@ input:checked + .slider:before {
 
 
 /* Интро экран */
-#intro-screen { 
-  position: fixed; 
-  inset: 0; 
-  background: #000; 
-  z-index: 101; 
-  display: flex; 
-  flex-direction: column; 
-  justify-content: center; 
-  align-items: center; 
-  font-family: 'Segoe UI', sans-serif; 
+#intro-screen {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: 'Segoe UI', sans-serif;
 }
-.intro-text-top { 
-  position: absolute; 
-  top: 15%; 
-  width: 90%; 
-  text-align: center; 
-  color: white; 
-  line-height: 1.4; 
-  z-index: 1; 
+
+.intro-text-top {
+  position: absolute;
+  top: 15%;
+  width: 90%;
+  text-align: center;
+  color: white;
+  line-height: 1.4;
+  z-index: 1;
 }
-.intro-quote-line { 
-  margin-bottom: 5px; 
+
+.intro-quote-line {
+  margin-bottom: 5px;
 }
-.intro-text-center { 
-  position: fixed; /* Изменено с relative на fixed для центрирования по экрану */
+
+.intro-text-center {
+  position: fixed;
+  /* Изменено с relative на fixed для центрирования по экрану */
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%); /* Центрирование по вертикали и горизонтали */
-  z-index: 10; 
-  text-align: center; 
+  transform: translate(-50%, -50%);
+  /* Центрирование по вертикали и горизонтали */
+  z-index: 10;
+  text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  width: 100%; /* Чтобы занимал всю ширину */
+  width: 100%;
+  /* Чтобы занимал всю ширину */
 }
 
-.intro-center-line1 { 
-  font-size: 28px; 
-  font-weight: bold; 
+.intro-center-line1 {
+  font-size: 38px;
+  font-weight: bold;
   color: #fff;
-  margin-bottom: 8px; 
-  text-transform: uppercase; 
-  letter-spacing: 2px; 
-  text-shadow: 
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow:
     0 0 5px #3c0000f0,
     0 0 10px #f00,
     0 0 15px #c00,
     0 0 20px #ff0000,
-    2px 2px 3px rgba(0, 0, 0, 0.8); /* Черная тень для контраста */
+    2px 2px 3px rgba(0, 0, 0, 0.8);
+  /* Черная тень для контраста */
   animation: text-glow 3s infinite alternate;
 }
 
-.intro-center-line2 { 
-  font-size: 28px; 
+.intro-center-line2 {
+  font-size: 28px;
   color: #fff;
-  letter-spacing: 1px; 
-  text-shadow: 
+  letter-spacing: 1px;
+  text-shadow:
     0 0 4px #f00,
     0 0 8px #f00,
     0 0 12px #c00,
@@ -1002,10 +1144,11 @@ input:checked + .slider:before {
 }
 
 /* Символы O.T.O. QUEST */
-.intro-center-line1 + div { /* Стиль для блока с символами */
+.intro-center-line1+div {
+  /* Стиль для блока с символами */
   font-size: 32px;
   color: #c00;
-  text-shadow: 
+  text-shadow:
     0 0 8px #f00,
     0 0 16px #800,
     0 0 24px #400;
@@ -1016,15 +1159,16 @@ input:checked + .slider:before {
 /* Анимации */
 @keyframes text-glow {
   0% {
-    text-shadow: 
+    text-shadow:
       0 0 5px #f00,
       0 0 10px #f00,
       0 0 15px #c00,
       0 0 20px #800,
       2px 2px 3px rgba(0, 0, 0, 0.8);
   }
+  
   100% {
-    text-shadow: 
+    text-shadow:
       0 0 7px #ff5555,
       0 0 14px #ff0000,
       0 0 21px #c00,
@@ -1038,6 +1182,7 @@ input:checked + .slider:before {
     transform: scale(1);
     opacity: 0.8;
   }
+  
   100% {
     transform: scale(1.05);
     opacity: 1;
@@ -1053,12 +1198,10 @@ input:checked + .slider:before {
   transform: translate(-50%, -50%);
   width: 120%;
   height: 150%;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(255, 0, 0, 0.15) 0%,
-    rgba(139, 0, 0, 0.08) 30%,
-    transparent 70%
-  );
+  background: radial-gradient(ellipse at center,
+      rgba(255, 0, 0, 0.15) 0%,
+      rgba(139, 0, 0, 0.08) 30%,
+      transparent 70%);
   z-index: -1;
   pointer-events: none;
   filter: blur(20px);
@@ -1073,22 +1216,23 @@ input:checked + .slider:before {
   transform: translateX(-50%);
   width: 200px;
   height: 20px;
-  background: linear-gradient(
-    90deg,
-    transparent 10%,
-    rgba(128, 0, 0, 0.3) 50%,
-    transparent 90%
-  );
+  background: linear-gradient(90deg,
+      transparent 10%,
+      rgba(128, 0, 0, 0.3) 50%,
+      transparent 90%);
   border-radius: 50%;
   filter: blur(5px);
   animation: blood-drop 4s infinite;
 }
 
 @keyframes blood-drop {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 0.3;
     transform: translateX(-50%) scale(0.9);
   }
+  
   50% {
     opacity: 0.6;
     transform: translateX(-50%) scale(1.1);
@@ -1096,10 +1240,11 @@ input:checked + .slider:before {
 }
 
 /* Добавляем крутой эффект для "OTKPBITb" */
-.intro-text-center > div:last-child { /* Стиль для последнего текста */
+.intro-text-center>div:last-child {
+  /* Стиль для последнего текста */
   font-size: 30px;
   color: #fff;
-  text-shadow: 
+  text-shadow:
     0 0 5px #f00,
     0 0 10px #c00;
   letter-spacing: 3px;
@@ -1110,8 +1255,15 @@ input:checked + .slider:before {
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+  
+  50% {
+    opacity: 0.6;
+  }
 }
 
 /* Эффект при наведении */
@@ -1125,6 +1277,7 @@ input:checked + .slider:before {
 .intro-center-line2 {
   transition: transform 0.3s ease;
 }
+
 .intro-btn-open {
   position: absolute;
   bottom: 15%;
@@ -1155,119 +1308,132 @@ input:checked + .slider:before {
 }
 
 /* Модальные окна */
-.modal { 
-  display: none; 
-  position: fixed; 
-  top: 0; 
-  left: 0; 
-  width: 100%; 
-  height: 100%; 
-  z-index: 1000; 
-  justify-content: center; 
-  align-items: center; 
-  background: rgba(0,0,0,0.95); 
+.modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.95);
 }
-.modal.active { 
-  display: flex !important; 
+
+.modal.active {
+  display: flex !important;
 }
-.modal-overlay { 
-  position: fixed; 
-  top: 0; 
-  left: 0; 
-  width: 100%; 
-  height: 100%; 
-  z-index: 1000; 
-  display: flex; 
-  justify-content: center; 
-  align-items: center; 
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
-.modal-content { 
-  background: #111; 
-  border: 1px solid var(--c-red-blood); 
-  padding: 1rem; 
-  width: 95%; 
-  max-width: 600px; 
-  max-height: 90vh; 
-  overflow: auto; 
-  border-radius: 8px; 
+
+.modal-content {
+  background: #111;
+  border: 1px solid var(--c-red-blood);
+  padding: 1rem;
+  width: 95%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: auto;
+  border-radius: 8px;
 }
-.modal-header { 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
-  border-bottom: 1px solid #333; 
-  padding: 0.8rem; 
-  margin-bottom: 1rem; 
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #333;
+  padding: 0.8rem;
+  margin-bottom: 1rem;
 }
-.close-modal { 
-  background: none; 
-  border: none; 
-  color: #888; 
-  font-size: 1.5rem; 
-  cursor: pointer; 
-  width: 30px; 
-  height: 30px; 
+
+.close-modal {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.5rem;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
 }
-.modal-body { 
-  padding: 1rem; 
-  display: flex; 
-  flex-direction: column; 
-  gap: 1rem; 
+
+.modal-body {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
-.modal-section { 
-  background: rgba(139,0,0,0.1); 
-  border: 1px solid #333; 
-  border-radius: 6px; 
-  padding: 1rem; 
+
+.modal-section {
+  background: rgba(139, 0, 0, 0.1);
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 1rem;
 }
-.modal-section h3 { 
-  color: var(--c-gold); 
-  margin-bottom: 0.5rem; 
-  font-size: 0.9rem; 
-  display: flex; 
-  align-items: center; 
-  gap: 0.3rem; 
+
+.modal-section h3 {
+  color: var(--c-gold);
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
 }
-.form-input { 
-  width: 100%; 
-  padding: 0.5rem; 
-  background: #222; 
-  border: 1px solid #444; 
-  color: #fff; 
-  margin-bottom: 1rem; 
-  border-radius: 4px; 
-  font-size: 0.8rem; 
+
+.form-input {
+  width: 100%;
+  padding: 0.5rem;
+  background: #222;
+  border: 1px solid #444;
+  color: #fff;
+  margin-bottom: 1rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
 }
-.settings-row { 
-  display: flex; 
-  gap: 0.5rem; 
-  margin-bottom: 0.5rem; 
+
+.settings-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 /* --- КНОПКИ (.btn) --- */
 .btn {
   /* 1. Высота всегда меньше высоты строки на 8px (отступы) */
-  height: calc(var(--h-row) - 8px) !important; 
+  height: calc(var(--h-row) - 8px) !important;
   /* Страховка, чтобы не вылезло */
-  max-height: 100%;          
+  max-height: 100%;
   
   /* Убираем лишние margin/padding, которые могут ломать высоту */
   margin: 0;
-  padding: 0 10px;           
+  padding: 0 10px;
   
   /* 2. Центрирование ТЕКСТА/ИКОНКИ внутри кнопки */
   display: flex;
-  align-items: center;       /* Вертикально */
-  justify-content: center;   /* Горизонтально */
+  align-items: center;
+  /* Вертикально */
+  justify-content: center;
+  /* Горизонтально */
   
   border: none;
   border-radius: 6px;
-  gap: 0.5rem; 
+  gap: 0.5rem;
   font-weight: 600;
   font-size: 0.8rem;
   cursor: pointer;
   text-transform: uppercase;
-  white-space: nowrap;       /* Текст не переносится */
+  white-space: nowrap;
+  /* Текст не переносится */
 }
 
 
@@ -1291,9 +1457,10 @@ input:checked + .slider:before {
   flex: 1;
   box-shadow: 0 2px 10px rgba(139, 0, 0, 0.3);
   transition: background 0.2s ease;
-  min-width: 0;              /* Защита от схлопывания */
-  justify-content: center;   /* Центр по горизонтали */
-  align-items: center;       /* Центр по вертикали */
+  min-width: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
 }
 
 .btn-submit:active {
@@ -1306,26 +1473,38 @@ input:checked + .slider:before {
 
 /* --- СПИННЕР (Анимация загрузки) --- */
 .spinner {
-  display: block;            /* Обязательно block или inline-block */
-  width: 18px;               /* Явный размер */
-  height: 18px;              /* Явный размер */
-  border: 2px solid #fff;    /* Белая обводка */
-  border-top-color: transparent; /* Прозрачный верх для эффекта вращения */
-  border-radius: 50%;        /* Круг */
-  animation: spin 0.8s linear infinite; /* Анимация */
-  margin: 0 auto;            /* Центрирование на всякий случай */
+  display: block;
+  /* Обязательно block или inline-block */
+  width: 18px;
+  /* Явный размер */
+  height: 18px;
+  /* Явный размер */
+  border: 2px solid #fff;
+  /* Белая обводка */
+  border-top-color: transparent;
+  /* Прозрачный верх для эффекта вращения */
+  border-radius: 50%;
+  /* Круг */
+  animation: spin 0.8s linear infinite;
+  /* Анимация */
+  margin: 0 auto;
+  /* Центрирование на всякий случай */
 }
 
 @keyframes spin {
-  100% { transform: rotate(360deg); }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 /* --- СТРОКА СТАТУСА ВНИЗУ --- */
 
 /* Левая часть (Режим ответов) */
 #modeText {
-  color: var(--c-gold);      /* Золотой цвет */
-  font-weight: bold;         /* Жирность для читаемости */
+  color: var(--c-gold);
+  /* Золотой цвет */
+  font-weight: bold;
+  /* Жирность для читаемости */
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1339,288 +1518,368 @@ input:checked + .slider:before {
 
 /* Правая часть (Счетчик ходов) */
 #turnCounter {
-  color: var(--c-gold);      /* Золотой цвет */
+  color: var(--c-gold);
+  /* Золотой цвет */
   font-weight: bold;
   font-size: 0.8rem;
-  font-family: monospace;    /* Моноширинный шрифт для цифр выглядит лучше */
+  font-family: monospace;
+  /* Моноширинный шрифт для цифр выглядит лучше */
 }
 
 /* Маленький счетчик (0/3) оставляем серым, чтобы не сливался */
 #choicesCounter {
-  color: #666; 
+  color: #666;
   font-size: 0.75rem;
   margin-left: 5px;
 }
 
 
 /* УВЕДОМЛЕНИЯ (АЛЕРТЫ) */
-.alert-modal-content { 
-  background: #111; 
-  border: 1px solid #444; /* Базовый бордер, переопределяется в типах */
-  border-radius: 12px; /* Более скруглённые углы для симпатичного вида */
-  width: 95%; 
-  max-width: 600px; 
-  max-height: 90vh; 
-  overflow: auto; 
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); /* Добавлена тень для глубины */
-  animation: fadeIn 0.3s ease-out; /* Анимация появления */
-}
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.alert-modal-content.error {
-  background: linear-gradient(to bottom, #220000, #110000); /* Градиент для более симпатичного тёмно-красного */
-  border-color: #ff6b6b; /* Красный бордер */
-}
-.alert-modal-content.success {
-  background: linear-gradient(to bottom, #002200, #001100); /* Градиент для тёмно-зелёного */
-  border-color: #2d8b57; /* Зелёный бордер */
-}
-.alert-modal-content.warning {
-  background: linear-gradient(to bottom, #222200, #111100); /* Градиент для тёмно-жёлтого */
-  border-color: #d4af37; /* Жёлтый бордер */
+.alert-modal-content {
+  background: #111;
+  border: 1px solid #444;
+  /* Базовый бордер, переопределяется в типах */
+  border-radius: 12px;
+  /* Более скруглённые углы для симпатичного вида */
+  width: 95%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  /* Добавлена тень для глубины */
+  animation: fadeIn 0.3s ease-out;
+  /* Анимация появления */
 }
 
-.alert-modal-header { 
-  padding: 1rem; /* Увеличен padding для воздуха */
-  border-bottom: 1px solid #444; /* Базовый бордер, переопределяется */
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
+.alert-modal-content.error {
+  background: linear-gradient(to bottom, #220000, #110000);
+  /* Градиент для более симпатичного тёмно-красного */
+  border-color: #ff6b6b;
+  /* Красный бордер */
+}
+
+.alert-modal-content.success {
+  background: linear-gradient(to bottom, #002200, #001100);
+  /* Градиент для тёмно-зелёного */
+  border-color: #2d8b57;
+  /* Зелёный бордер */
+}
+
+.alert-modal-content.warning {
+  background: linear-gradient(to bottom, #222200, #111100);
+  /* Градиент для тёмно-жёлтого */
+  border-color: #d4af37;
+  /* Жёлтый бордер */
+}
+
+.alert-modal-header {
+  padding: 1rem;
+  /* Увеличен padding для воздуха */
+  border-bottom: 1px solid #444;
+  /* Базовый бордер, переопределяется */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .alert-modal-header.error {
-  background: linear-gradient(to bottom, #440000, #330000); /* Градиент для хедера ошибки */
+  background: linear-gradient(to bottom, #440000, #330000);
+  /* Градиент для хедера ошибки */
   border-bottom-color: #ff6b6b;
 }
+
 .alert-modal-header.success {
-  background: linear-gradient(to bottom, #004400, #003300); /* Градиент для хедера успеха */
+  background: linear-gradient(to bottom, #004400, #003300);
+  /* Градиент для хедера успеха */
   border-bottom-color: #2d8b57;
 }
+
 .alert-modal-header.warning {
-  background: linear-gradient(to bottom, #444400, #333300); /* Градиент для хедера предупреждения */
+  background: linear-gradient(to bottom, #444400, #333300);
+  /* Градиент для хедера предупреждения */
   border-bottom-color: #d4af37;
 }
-.alert-modal-header h2 { /* Стили для заголовка с иконкой */
+
+.alert-modal-header h2 {
+  /* Стили для заголовка с иконкой */
   display: flex;
   align-items: center;
-  gap: 0.5rem; /* Пробел между иконкой и текстом */
-  font-size: 1.2rem; /* Чуть крупнее для симпатичности */
-  letter-spacing: 0.5px; /* Разрядка для читаемости */
+  gap: 0.5rem;
+  /* Пробел между иконкой и текстом */
+  font-size: 1.2rem;
+  /* Чуть крупнее для симпатичности */
+  letter-spacing: 0.5px;
+  /* Разрядка для читаемости */
   margin: 0;
 }
-.alert-modal-header i { /* Стили для иконок (fa-icons) */
+
+.alert-modal-header i {
+  /* Стили для иконок (fa-icons) */
   font-size: 1.2rem;
-  opacity: 0.9; /* Лёгкая прозрачность для стиля */
+  opacity: 0.9;
+  /* Лёгкая прозрачность для стиля */
 }
 
-.alert-textarea { 
-  width: 100%; 
-  min-height: 100px; 
-  max-height: 200px; 
-  background: #000; 
-  color: #ccc; 
-  border: 1px solid #444; 
-  padding: 0.5rem; 
-  font-family: monospace; 
-  font-size: 0.8rem; 
-  resize: vertical; 
-  margin-top: 0.5rem; 
-  border-radius: 6px; /* Скругление для симпатичного вида */
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3); /* Внутренняя тень для глубины */
+.alert-textarea {
+  width: 100%;
+  min-height: 100px;
+  max-height: 200px;
+  background: #000;
+  color: #ccc;
+  border: 1px solid #444;
+  padding: 0.5rem;
+  font-family: monospace;
+  font-size: 0.8rem;
+  resize: vertical;
+  margin-top: 0.5rem;
+  border-radius: 6px;
+  /* Скругление для симпатичного вида */
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  /* Внутренняя тень для глубины */
 }
 
-.alert-copy-btn { 
-  background: #222; 
-  color: #aaa; 
-  border: 1px solid #444; 
-  padding: 0.5rem 1rem; /* Увеличен padding для комфорта */
-  border-radius: 6px; /* Более скруглённые углы */
-  font-size: 0.8rem; 
-  cursor: pointer; 
-  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease; /* Плавный hover */
+.alert-copy-btn {
+  background: #222;
+  color: #aaa;
+  border: 1px solid #444;
+  padding: 0.5rem 1rem;
+  /* Увеличен padding для комфорта */
+  border-radius: 6px;
+  /* Более скруглённые углы */
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  /* Плавный hover */
 }
+
 .alert-copy-btn:hover {
-  background: #333; /* Светлее на hover */
+  background: #333;
+  /* Светлее на hover */
   color: #fff;
-  box-shadow: 0 0 5px rgba(255, 255, 255, 0.1); /* Лёгкий glow */
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.1);
+  /* Лёгкий glow */
 }
 
-.alert-stack { 
-  background: #000; 
-  border: 1px solid #444; 
-  padding: 0.5rem; 
-  margin-top: 0.5rem; 
-  font-size: 0.7rem; 
-  font-family: monospace; 
-  color: #ff6b6b; 
-  max-height: 150px; 
-  overflow: auto; 
-  border-radius: 6px; /* Скругление */
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3); /* Внутренняя тень */
+.alert-stack {
+  background: #000;
+  border: 1px solid #444;
+  padding: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.7rem;
+  font-family: monospace;
+  color: #ff6b6b;
+  max-height: 150px;
+  overflow: auto;
+  border-radius: 6px;
+  /* Скругление */
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  /* Внутренняя тень */
 }
 
-.alert-details { 
-  font-size: 0.7rem; 
-  color: #888; 
-  margin-top: 0.5rem; 
-  padding-top: 0.5rem; 
-  border-top: 1px solid #333; 
-  text-align: center; /* Центрирование для симпатичности */
+.alert-details {
+  font-size: 0.7rem;
+  color: #888;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #333;
+  text-align: center;
+  /* Центрирование для симпатичности */
 }
+
 .alert-details.error {
-  color: #ff6b6b; /* Красный для timestamp в ошибке */
+  color: #ff6b6b;
+  /* Красный для timestamp в ошибке */
 }
+
 .alert-details.success {
-  color: #2d8b57; /* Зелёный для timestamp в успехе */
+  color: #2d8b57;
+  /* Зелёный для timestamp в успехе */
 }
+
 .alert-details.warning {
-  color: #d4af37; /* Жёлтый для timestamp в предупреждении */
+  color: #d4af37;
+  /* Жёлтый для timestamp в предупреждении */
 }
 
 /* Дополнительные стили для текста в сообщении (чтобы не был белым по умолчанию) */
 #alertMessage h3 {
-  color: inherit; /* Наследует от родителя */
-  font-size: 1.1rem; /* Чуть крупнее */
+  color: inherit;
+  /* Наследует от родителя */
+  font-size: 1.1rem;
+  /* Чуть крупнее */
   margin-bottom: 0.5rem;
   letter-spacing: 0.3px;
 }
+
 #alertMessage p {
-  color: #ddd; /* Светло-серый базовый */
-  line-height: 1.4; /* Улучшенный line-height для читаемости */
+  color: #ddd;
+  /* Светло-серый базовый */
+  line-height: 1.4;
+  /* Улучшенный line-height для читаемости */
   margin-bottom: 1rem;
 }
+
 .alert-modal-content.error #alertMessage h3,
 .alert-modal-content.error #alertMessage p {
-  color: #ffdddd; /* Светло-красный текст для ошибки */
+  color: #ffdddd;
+  /* Светло-красный текст для ошибки */
 }
+
 .alert-modal-content.success #alertMessage h3,
 .alert-modal-content.success #alertMessage p {
-  color: #ddffdd; /* Светло-зелёный текст для успеха */
+  color: #ddffdd;
+  /* Светло-зелёный текст для успеха */
 }
+
 .alert-modal-content.warning #alertMessage h3,
 .alert-modal-content.warning #alertMessage p {
-  color: #ffffdd; /* Светло-жёлтый текст для предупреждения */
+  color: #ffffdd;
+  /* Светло-жёлтый текст для предупреждения */
 }
 
 /* Экран окончания */
-.overlay-screen { 
-  display: none; 
-  position: fixed; 
-  top: 0; 
-  left: 0; 
-  width: 100%; 
-  height: 100%; 
-  background: rgba(0,0,0,0.98); 
-  z-index: 2000; 
-  overflow: hidden; 
+.overlay-screen {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.98);
+  z-index: 2000;
+  overflow: hidden;
 }
-.end-text-container { 
-  position: absolute; 
-  top: 50%; 
-  left: 50%; 
-  transform: translate(-50%, -50%); 
-  z-index: 2; 
-  background: rgba(0,0,0,0.85); 
-  padding: 2rem 3rem; 
-  border-radius: 10px; 
-  border: 2px solid; 
-  text-align: center; 
-  max-width: 80%; 
-  min-width: 300px; 
-  box-shadow: 0 0 50px rgba(0,0,0,0.9); 
+
+.end-text-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 2rem 3rem;
+  border-radius: 10px;
+  border: 2px solid;
+  text-align: center;
+  max-width: 80%;
+  min-width: 300px;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
 }
-#matrixCanvas { 
-  position: absolute; 
-  inset: 0; 
-  width: 100%; 
-  height: 100%; 
-  z-index: 1; 
+
+#matrixCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
 }
-.overlay-title { 
-  font-size: 1.6rem; 
-  color: var(--c-red-blood); 
-  margin-bottom: 1rem; 
-  text-transform: uppercase; 
-  letter-spacing: 2px; 
+
+.overlay-title {
+  font-size: 1.6rem;
+  color: var(--c-red-blood);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
 }
-.overlay-msg { 
-  color: #aaa; 
-  margin-bottom: 2rem; 
+
+.overlay-msg {
+  color: #aaa;
+  margin-bottom: 2rem;
 }
-.overlay-buttons { 
-  display: flex; 
-  justify-content: center; 
-  gap: 1rem; 
+
+.overlay-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
 }
-.btn-continue { 
-  padding: 1rem 2rem; 
-  border-radius: 6px; 
-  font-weight: 600; 
-  font-size: 0.8rem; 
-  cursor: pointer; 
-  text-transform: uppercase; 
-  border: none; 
+
+.btn-continue {
+  padding: 1rem 2rem;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  border: none;
 }
 
 /* Подложка фраз героя */
-.thoughts-of-hero-layout { 
-  position: absolute; 
-  top: 0; 
-  left: 0; 
-  width: 100%; 
-  height: 100%; 
-  background: rgba(0,0,0,0.5); 
-  z-index: 10; 
-  display: none; 
-  justify-content: center; 
-  align-items: center; 
-  pointer-events: none; 
+.thoughts-of-hero-layout {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
 }
-.thoughts-of-hero-text { 
-  color: white; 
-  font-size: 1.1rem; 
-  text-align: center; 
-  padding: 1.5rem; 
-  background: rgba(139,0,0,0.3); 
-  border-radius: 10px; 
-  border: 1px solid var(--c-red-blood); 
-  max-width: 90%; 
+
+.thoughts-of-hero-text {
+  color: white;
+  font-size: 1.1rem;
+  text-align: center;
+  padding: 1.5rem;
+  background: rgba(139, 0, 0, 0.3);
+  border-radius: 10px;
+  border: 1px solid var(--c-red-blood);
+  max-width: 90%;
 }
 
 /* Дополнительные стили для API ключей */
-.api-key-field { 
-  display: none; 
-  margin-bottom: 0.5rem; 
+.api-key-field {
+  display: none;
+  margin-bottom: 0.5rem;
 }
-.api-key-field.active { 
-  display: block; 
+
+.api-key-field.active {
+  display: block;
 }
-.api-key-label { 
-  display: block; 
-  font-size: 0.8rem; 
-  color: #888; 
-  margin-bottom: 0.3rem; 
+
+.api-key-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 0.3rem;
 }
-.model-stats { 
-  display: flex; 
-  gap: 10px; 
-  align-items: center; 
+
+.model-stats {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
-.model-stat-item { 
-  display: flex; 
-  align-items: center; 
-  gap: 4px; 
-  font-size: 0.7rem; 
+
+.model-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
 }
-.plot-generator-container { 
-  display: flex; 
-  flex-direction: column; 
-  gap: 0.8rem; 
-  margin-bottom: 0.5rem; 
+
+.plot-generator-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-bottom: 0.5rem;
 }
 
 /* Класс для усиленного reflow (из аудита: GPU-ускорение для mobile repaint) */
 .force-reflow {
-  transform: translateZ(0); /* Forces hardware acceleration */
+  transform: translateZ(0);
+  /* Forces hardware acceleration */
 }
