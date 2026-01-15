@@ -17,21 +17,21 @@ const Prompts = CONFIG.prompts;
 function getDynamicSystemInjections(state) {
     const injections = [];
     const turn = state.turnCount;
-
+    
     // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА (TRIGGER: TWIST)
-    // Если номер хода является кратным 5 (каждый 5-й ход), заставляем ИИ сделать поворот.
-    if (turn > 0 && turn % 5 === 0) {
+    // Если номер хода является кратным 10 (каждый 10-й ход), заставляем ИИ сделать поворот.
+    if (turn > 0 && turn % 10 === 0) {
         console.log(`🌀 [Client Director] Turn ${turn}: Injecting Narrative Twist.`);
         injections.push(`>>> [TRIGGER: TURN ${turn}] ${Prompts.injections.twist}`);
     }
-
+    
     // 2. ИНЪЕКЦИЯ БЕЗУМИЯ (TRIGGER: LOW SANITY)
     // Если показатель Рассудка (Sanity) героя опускается ниже 20, LLM получает инструкцию изменить стиль.
     if (state.stats.sanity < 20) {
         console.log(`🌀 [Client Director] Sanity Low (${state.stats.sanity}): Injecting Insanity.`, );
         injections.push(`>>> [TRIGGER: LOW SANITY] ${Prompts.injections.insanity}`);
     }
-
+    
     // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ ПЕТЕЛЬ СЮЖЕТА (TRIGGER: LOOP DETECTED)
     // Сравниваем начальную часть текущей сцены с предыдущей в истории.
     // Если обнаруживается слишком сильное совпадение, заставляем ИИ кардинально сменить обстановку.
@@ -45,16 +45,16 @@ function getDynamicSystemInjections(state) {
             const startOfCurrentScene = currentSceneText.substring(0, comparisonLength).trim();
             
             // Проверяем, не содержат ли сцены друг друга в начале или не очень ли похожи
-            if (startOfLastScene === startOfCurrentScene || 
-                lastSceneText.includes(startOfCurrentScene) || 
-                currentSceneText.includes(startOfLastScene)) 
+            if (startOfLastScene === startOfCurrentScene ||
+                lastSceneText.includes(startOfCurrentScene) ||
+                currentSceneText.includes(startOfLastScene))
             {
                 console.log(`🌀 [Client Director] Loop/Repetition Detected: Injecting Anti-Loop.`);
                 injections.push(`>>> [TRIGGER: LOOP DETECTED] ${Prompts.injections.antiLoop}`);
             }
         }
     }
-
+    
     // --- ИНЪЕКЦИЯ РИТУАЛА (НОВОЕ) ---
     if (state.isRitualActive) {
         console.log(`🕯️ [Client Director] RITUAL MODE ACTIVE.`);
@@ -68,13 +68,13 @@ function getDynamicSystemInjections(state) {
         4. ЗАВЕРШЕНИЕ: Когда игрок пройдет испытание, ОБЯЗАТЕЛЬНО добавь в JSON поле "end_ritual": true и начисли награду прогресса.
         5. ВИЗУАЛ: Описывай запахи, звуки, свет свечей, тени.`);
     }
-
+    
     // 4. БАЗОВЫЕ ИНСТРУКЦИИ ДЛЯ ВСЕХ ЗАПРОСОВ
     // Эти инструкции всегда присутствуют для LLM, они направляют базовую логику генерации.
-    injections.push(Prompts.injections.coreMovement);       // Основные правила нарратива
+    injections.push(Prompts.injections.coreMovement); // Основные правила нарратива
     injections.push(Prompts.format.summaryAndMemoryInstructions); // Требования по short_summary и aiMemory
-    injections.push(Prompts.format.jsonFewShot);            // Пример ожидаемого JSON (few-shot learning)
-
+    injections.push(Prompts.format.jsonFewShot); // Пример ожидаемого JSON (few-shot learning)
+    
     return injections.join('\n\n'); // Собираем все динамические инструкции в одну строку
 }
 
@@ -88,32 +88,32 @@ function getDynamicSystemInjections(state) {
  */
 function buildContextBlock(state) {
     let parts = [];
-
+    
     // А. ГЛОБАЛЬНАЯ ЛЕТОПИСЬ (Summary)
     // Содержит краткие сводки всех предыдущих ходов. Это "долгосрочная память" ИИ.
     if (state.summary && state.summary.length > 0) {
         parts.push(`${Prompts.userHeaders.contextGlobal}\n${state.summary}`);
     }
-
+    
     // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ МИРА (aiMemory)
     // Неструктурированные данные (инвентарь, флаги квестов, статусы NPC), которые ИИ сам добавил в прошлых ходах.
     // LLM видит эти данные и может их обновлять в своем ответе.
     if (state.aiMemory && Object.keys(state.aiMemory).length > 0) {
         parts.push(`${Prompts.userHeaders.contextMemory}\n${JSON.stringify(state.aiMemory, null, 2)}`);
     }
-
+    
     // В. КРАТКОСРОЧНАЯ ИСТОРИЯ (Short-Term Memory)
     // Последние N полных ходов (сцена, выбор, изменения) для сохранения непрерывности текущего диалога.
     const turnsToTake = state.summary ? CONFIG.activeContextTurns : CONFIG.historyContext;
     const historySlice = state.history.slice(-turnsToTake);
     
     if (historySlice.length > 0) {
-        const historyString = historySlice.map(entry => 
+        const historyString = historySlice.map(entry =>
             `СЦЕНА: ${entry.fullText}\nВЫБОР: ${entry.choice}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`
         ).join('\n---\n'); // Разделитель для ясности
         parts.push(`${Prompts.userHeaders.contextShort}\n${historyString}`);
     }
-
+    
     // Если контекст пуст (самое начало игры), даем соответствующее сообщение.
     return parts.length > 0 ? parts.join('\n\n') : "История: Это начало пути. Предыдущих событий нет.";
 }
@@ -142,15 +142,15 @@ function prepareRequestPayload(state, choiceText, d10, customContext = null) {
 ${dynamicSystemPart}
 
 ${Prompts.format.jsonFormatStrict}`; // Завершающая строгая инструкция по формату
-                                        // ВАЖНО: Ниже будет добавляться только User-prompt
-                                        // Все форматы и ограничения LLM должны быть здесь (SYSTEM)
-                                        // или в финале USER промпта (User prompt footer)
+    // ВАЖНО: Ниже будет добавляться только User-prompt
+    // Все форматы и ограничения LLM должны быть здесь (SYSTEM)
+    // или в финале USER промпта (User prompt footer)
     // 2. Формируем ПОЛНЫЙ ПОЛЬЗОВАТЕЛЬСКИЙ ПРОМПТ
     const contextBlock = customContext || buildContextBlock(state);
     
     // Дополнительная задача по генерации мыслей героя (если нужно)
     const thoughtsRequestInstruction = needsHeroPhrases ? Prompts.userHeaders.reqThoughts : "";
-
+    
     // Строим основной User-промпт, интегрируя все части
     const userPrompt = `
 ${Prompts.format.mainTaskPrefix}
@@ -188,7 +188,7 @@ ${Prompts.userHeaders.action}
 ${thoughtsRequestInstruction}
     
 ${Prompts.userHeaders.reqJsonEnd}`; // Финальная инструкция: "Сгенерируй JSON"
-
+    
     // Возвращаем объект payload, совместимый с API OpenAI Chat Completions.
     return {
         messages: [
@@ -212,46 +212,46 @@ ${Prompts.userHeaders.reqJsonEnd}`; // Финальная инструкция: 
  * @throws {Error} В случае ошибки сети или неуспешного HTTP-ответа (статус 4xx, 5xx).
  */
 async function executeFetch(url, headers, payload, abortController) {
-	// Инициализация цикла повторных попыток на основе глобального конфига
+    // Инициализация цикла повторных попыток на основе глобального конфига
     const maxAttempts = CONFIG.maxRetries || 3;
     // Переменная для сохранения ошибки последней неудачной попытки
     let lastError;
-
+    
     // Цикл выполнения сетевого запроса с лимитом попыток
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-    const options = {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(payload) // Конвертируем payload в JSON строку
-    };
-    
-    // Если предоставлен AbortController, привязываем его к сигналу запроса.
-    if (abortController) {
-        options.signal = abortController.signal;
-    }
-
-    // Выполняем HTTP-запрос.
-    const response = await fetch(url, options);
-    
-    // Проверяем статус ответа: если не OK (2xx), считаем это ошибкой.
-    if (!response.ok) {
-        // Читаем текст ошибки для подробной информации и бросаем исключение.
-        const errorText = await response.text();
-        throw new Error(`HTTP Error ${response.status}: ${errorText}`);
-    }
-    
-    // Если запрос успешен, парсим ответ как JSON и возвращаем его.
-    return await response.json();
-     } catch (error) {
+            const options = {
+                method: 'POST',
+                headers: headers,
+                body: JSON.stringify(payload) // Конвертируем payload в JSON строку
+            };
+            
+            // Если предоставлен AbortController, привязываем его к сигналу запроса.
+            if (abortController) {
+                options.signal = abortController.signal;
+            }
+            
+            // Выполняем HTTP-запрос.
+            const response = await fetch(url, options);
+            
+            // Проверяем статус ответа: если не OK (2xx), считаем это ошибкой.
+            if (!response.ok) {
+                // Читаем текст ошибки для подробной информации и бросаем исключение.
+                const errorText = await response.text();
+                throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+            }
+            
+            // Если запрос успешен, парсим ответ как JSON и возвращаем его.
+            return await response.json();
+        } catch (error) {
             // Сохранение ошибки текущей итерации
             lastError = error;
-
+            
             // Если запрос был отменен намеренно, прекращаем цикл без ретраев
             if (error.name === 'AbortError') throw error;
-
+            
             console.warn(`[API_Request] Попытка ${attempt}/${maxAttempts} не удалась: ${error.message}`);
-
+            
             // Проверка необходимости ожидания перед следующей попыткой
             if (attempt < maxAttempts) {
                 // Асинхронная пауза между запросами (по умолчанию 1000мс из CONFIG)
@@ -261,7 +261,7 @@ async function executeFetch(url, headers, payload, abortController) {
     }
     // Выброс финального исключения после исчерпания всех попыток
     throw lastError;
-
+    
 }
 
 // Экспортируем публичные методы модуля для использования другими модулями (например, API_Facade).
