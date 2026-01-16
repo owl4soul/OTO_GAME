@@ -48,6 +48,7 @@ export const CONFIG = {
     
     // Алиасы для названий характеристик
     statAliases: {
+        'reason' : 'sanity',
         'разум': 'sanity',
         'рассудок': 'sanity',
         'ум': 'sanity',
