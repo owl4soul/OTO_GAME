@@ -340,6 +340,8 @@ function processTurn(data, playerChoice, d10) {
     
     // ВАЖНО: Синхронизируем состояние UI (выход из режима ввода)
     UI.setFreeModeUI(false);
+    dom.freeInputText.disabled = false;
+    dom.freeInputText.style.opacity = '1';
     dom.freeModeToggle.checked = false;
     
     dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
