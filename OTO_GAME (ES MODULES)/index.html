@@ -244,9 +244,13 @@
           <div class="modal-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
               <h3 style="margin: 0;"><i class="fas fa-brain"></i> Модель</h3>
-              <div class="model-stats">
-                 <span id="modelTotal">0</span>/<span id="modelSuccess">0</span>
-              </div>
+              <!-- ИСПРАВЛЕННЫЙ БЛОК СТАТИСТИКИ (4 ИКОНКИ) -->
+<div class="model-stats" style="display: flex; gap: 10px; align-items: center; font-size: 0.9em;">
+  <span title="Всего моделей"><i class="fas fa-database" style="color:#aaa;"></i> <span id="modelTotal">0</span></span>
+  <span title="Работают"><i class="fas fa-check-circle" style="color:#4cd137;"></i> <span id="modelSuccess">0</span></span>
+  <span title="Ошибка"><i class="fas fa-times-circle" style="color:#e84118;"></i> <span id="modelError">0</span></span>
+  <span title="Не проверено"><i class="fas fa-question-circle" style="color:#7f8fa6;"></i> <span id="modelUntested">0</span></span>
+</div>
             </div>
             <select id="modelInput" class="form-input"></select>
             <div id="modelDetails" style="margin-top:0.5rem; padding:0.5rem; background:#1a0000; font-size:0.8rem;"></div>

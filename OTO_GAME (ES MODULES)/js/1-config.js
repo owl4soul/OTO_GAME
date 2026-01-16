@@ -99,7 +99,7 @@ export const CONFIG = {
             
             scenarioWriter: `Ты — Архитектор Сценариев. Сгенерируй сложную, многослойную стартовую точку игры в формате JSON. Обязательно создай начальный инвентарь и начальные статусы фракций.`,
             
-            simpleTest: `SYSTEM CHECK. Status: Online.`
+            simpleTest: `ПРОВЕРКА СВЯЗИ.`
         },
 
         // --- БЛОК 2: АЛГОРИТМЫ И ФОРМАТЫ (Instruction Set) ---
@@ -245,14 +245,15 @@ export const CONFIG = {
 
         // --- БЛОК 5: ТЕХНИЧЕСКИЕ СООБЩЕНИЯ ---
         technical: {
-            jsonRepair: `SYSTEM ERROR: Invalid JSON syntax.
-            PROTOCOL:
-            1. Check for missing quotes or commas.
-            2. Verify nested objects.
-            3. Return ONLY the repaired JSON object.`,
+            jsonRepair: `СИСТЕМНАЯ ОШИБКА:
+            Недопустимый синтаксис JSON сломал парсинг.
+            АКТИВАЦИЯ ПРОТОКОЛА ИСПРАВЛЕНИЯ:
+            1. Проверь на наличие отсутствующих/лишних скобок, кавычек, запятых.
+            2. Проверь вложенные объекты.
+            3. Верни ИСПРАВЛЕННЫЙ объект JSON.`,
             
-            testMessage: `System Status Check. Reply "OK".`,
-            testSelf: `Identify Engine Version.`
+            testMessage: `Проверка системы. Ответь "ОК".`,
+            testSelf: `Выведи краткое описание себя (не более 200 символов).`
         }
     },
     

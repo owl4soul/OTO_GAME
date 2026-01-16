@@ -301,15 +301,18 @@ function updateScale(newScaleIndex) {
 }
 
 /**
- * Получение статистики моделей (для UI)
- * @returns {Object} Статистика
+ * Подсчет статистики моделей для заголовка (4 значка)
  */
 function getModelStats() {
-    const total = state.models.length;
-    const success = state.models.filter(m => m.status === 'success').length;
-    const error = state.models.filter(m => m.status === 'error').length;
-    const untested = state.models.filter(m => m.status === 'untested').length;
+    // Если модели еще не загружены, берем дефолт
+    const models = state.models || [];
     
+    const total = models.length;
+    const success = models.filter(m => m.status === 'success').length;
+    const error = models.filter(m => m.status === 'error').length;
+    // Все, что не успех и не ошибка — считается "не проверено" (untested/pending)
+    const untested = total - success - error;
+
     return { total, success, error, untested };
 }
 
