@@ -162,7 +162,7 @@ function renderAuditList() {
             // ВАЖНО: white-space: pre-wrap для переноса строк JSON на мобильном
             requestHtml = `
             <details>
-                <summary style="cursor:pointer; color:#aaa;">▼ Request Payload</summary>
+                <summary style="cursor:pointer; color:#aaa;">Request Payload</summary>
                 <pre style="font-size:0.65rem; color:#ccc; background:#111; padding:5px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #333;">${entry.requestDebug.body}</pre>
             </details>`;
         }
@@ -173,7 +173,7 @@ function renderAuditList() {
             // ВАЖНО: Выводим ПОЛНЫЙ текст без substring
             responseHtml = `
             <details>
-                <summary style="cursor:pointer; color:${statusColor};">▼ Full Response</summary>
+                <summary style="cursor:pointer; color:${statusColor};">Full Response</summary>
                 <pre style="font-size:0.65rem; color:${statusColor}; background:#1a1a1a; padding:5px; overflow-x:auto; white-space: pre-wrap; border: 1px solid ${borderColor};">${entry.fullResponse}</pre>
             </details>`;
         }

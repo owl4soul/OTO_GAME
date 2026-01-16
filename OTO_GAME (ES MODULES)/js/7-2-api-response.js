@@ -81,12 +81,14 @@ function processAIResponse(rawText) {
         }
     }
     
-    // Возвращаем две части: 
+    // Возвращаем три части: 
     // `cleanData` - стандартные игровые данные для `Game.js`
     // `memoryUpdate` - объект с динамическими полями для обновления `aiMemory` в `State.js`
+    // `rawText` - исходный текст для лога
     return {
         cleanData: parsedData,
-        memoryUpdate: dynamicMemoryUpdates
+        memoryUpdate: dynamicMemoryUpdates,
+        rawText: rawText
     };
 }
 
@@ -104,12 +106,14 @@ function processAIResponse(rawText) {
  * @throws {Error} В случае критических ошибок (сеть, лимит попыток, окончательный провал парсинга).
  */
 async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiRequestModule, abortCtrl) {
+    let contentFromAI = null; // Объявляем переменную здесь, чтобы она была доступна в блоке catch
+    
     try {
         // Шаг 1: Выполняем базовый сетевой запрос через apiRequestModule.
         const rawApiResponse = await apiRequestModule.executeFetch(url, headers, payload, abortCtrl);
         
         // Шаг 2: Извлекаем основной контент (текст сцены) из ответа LLM.
-        const contentFromAI = rawApiResponse.choices?.[0]?.message?.content;
+        contentFromAI = rawApiResponse.choices?.[0]?.message?.content;
         if (!contentFromAI) {
             // Если контента нет, считаем это ошибкой.
             throw new Error("Received empty content string from AI provider in response.choices[0].message.content.");
@@ -117,11 +121,14 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
         
         // Шаг 3: Пытаемся обработать полученный контент как JSON.
         try {
-            return processAIResponse(contentFromAI);
+            const result = processAIResponse(contentFromAI);
+            // Если парсер почему-то не вернул rawText, добавим его вручную (страховка)
+            if (!result.rawText) result.rawText = contentFromAI;
+            return result;
         } catch (jsonProcessingError) {
             // Если `processAIResponse` бросил ошибку (значит, контент был плохим JSON),
             // мы ловим эту ошибку здесь и инициируем процесс ремонта.
-            throw new Error(`Invalid JSON format detected. Raw text: "${contentFromAI.substring(0, 200)}..." \nDetails: ${jsonProcessingError.message}`);
+            throw new Error(`Invalid JSON format detected. Details: ${jsonProcessingError.message}`);
         }
         
     } catch (primaryError) {
@@ -172,7 +179,14 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
         
         // C. Если все попытки ремонта ИСЧЕРПАНЫ — сдаемся.
         // Пробрасываем последнюю ошибку парсинга, чтобы UI показал ее игроку.
-        throw new Error(`CRITICAL: AI failed to produce valid JSON after ${CONFIG.autoRepairAttempts} repair attempts. Last error: ${primaryError.message}`);
+        // ВАЖНО: Прикрепляем "мусорный" текст к ошибке, чтобы его можно было залогировать.
+        const finalError = new Error(`CRITICAL: AI failed to produce valid JSON after ${CONFIG.autoRepairAttempts} repair attempts. Last error: ${primaryError.message}`);
+        
+        if (contentFromAI) {
+            finalError.rawResponse = contentFromAI;
+        }
+        
+        throw finalError;
     }
 }
 

@@ -73,7 +73,7 @@ async function sendAIRequest(choiceText, d10, abortController = null) { // Уб�
     // --- ЛОГИРОВАНИЕ: СОЗДАНИЕ ЗАПИСИ ---
     // Создаем запись "pending" через модуль Audit
     const auditEntry = Audit.createEntry(
-        `Игровой ход: ${choiceText}...`,
+        `Игровой ход: ${choiceText.substring(0, 30)}...`,
         requestPayload,
         state.settings.model,
         state.settings.apiProvider
@@ -86,6 +86,7 @@ async function sendAIRequest(choiceText, d10, abortController = null) { // Уб�
         const startTime = Date.now(); // Фиксируем время начала запроса
         
         // Вызов `API_Response.robustFetchWithRepair` - сердце обработки LLM.
+        // Теперь этот метод возвращает { cleanData, memoryUpdate, rawText }
         const processingResult = await API_Response.robustFetchWithRepair(
             url,
             headers,
@@ -107,8 +108,9 @@ async function sendAIRequest(choiceText, d10, abortController = null) { // Уб�
         }
         
         // --- ЛОГИРОВАНИЕ: УСПЕХ ---
-        // Обновляем запись в аудите статусом success и полным ответом
-        Audit.updateEntrySuccess(auditEntry, processingResult.cleanData);
+        // Обновляем запись в аудите статусом success.
+        // ВАЖНО: Передаем СЫРОЙ текст ответа (rawText), чтобы видеть оригинал в логе.
+        Audit.updateEntrySuccess(auditEntry, processingResult.rawText);
         
         // Обновление статистики для выбранной LLM-модели (время ответа, статус)
         const modelInState = state.models.find(model => model.id === state.settings.model);
@@ -127,6 +129,12 @@ async function sendAIRequest(choiceText, d10, abortController = null) { // Уб�
         if (modelInState) modelInState.status = 'error';
         
         // --- ЛОГИРОВАНИЕ: ОШИБКА ---
+        // Если это ошибка парсинга, то в error.rawResponse лежит сырой текст ответа.
+        // Запишем его в лог перед тем, как пометить статус ошибкой.
+        if (error.rawResponse) {
+            auditEntry.fullResponse = error.rawResponse;
+        }
+        
         // Обновляем запись в аудите статусом error
         Audit.updateEntryError(auditEntry, error);
         
@@ -160,7 +168,7 @@ async function generateCustomScene(promptText) {
             { role: "user", content: promptText }
         ],
         max_tokens: 3000,
-        temperature: 0.95
+        temperature: 0.85
     };
     
     // Создаем лог
@@ -170,12 +178,15 @@ async function generateCustomScene(promptText) {
         const rawApiResponse = await API_Request.executeFetch(url, headers, requestBody);
         const content = rawApiResponse.choices[0].message.content;
         
-        // Логируем успех
+        // Логируем успех (Сырой текст)
         Audit.updateEntrySuccess(auditEntry, content);
         
         return content;
     } catch (error) {
         // Логируем ошибку
+        // Здесь rawResponse может не быть, так как executeFetch кидает ошибку до чтения контента при сбоях сети
+        // Но если мы бы обрабатывали ответ как в sendAIRequest, было бы так же.
+        // Сейчас достаточно просто залогировать саму ошибку.
         Audit.updateEntryError(auditEntry, error);
         throw error;
     }

@@ -8,27 +8,22 @@ import { CONFIG } from './1-config.js';
  * @param {string} rawContent - Сырой текст ответа
  * @returns {Object} Распарсенный JSON объект
  */
-/**
- * Надежный парсинг JSON из ответа ИИ
- * @param {string} rawContent - Сырой текст ответа
- * @returns {Object} Распарсенный JSON объект
- */
 function robustJsonParse(rawContent) {
     let text = rawContent.trim();
-
+    
     // Удаляем обертки ```json ``` если они есть
     text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
     text = text.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
-
+    
     // Пытаемся разные способы парсинга
     const attempts = [];
-
+    
     // Способ 1: Стандартный JSON.parse (Самый чистый)
     attempts.push(() => JSON.parse(text));
-
+    
     // Способ 2: Убираем лишние запятые перед закрывающими скобками (Частая ошибка ИИ)
     attempts.push(() => JSON.parse(text.replace(/,\s*([}\]])/g, '$1')));
-
+    
     // Способ 3: Ищем первый { и последний } (Если есть мусор до/после JSON)
     attempts.push(() => {
         let start = text.indexOf('{');
@@ -50,9 +45,9 @@ function robustJsonParse(rawContent) {
         }
         throw new Error('No complete JSON object found');
     });
-
-    // Способ 4: АГРЕССИВНЫЙ FALLBACK (Исправленный)
-    // Работает, если JSON сломан синтаксически (нет кавычек, запятых и т.д.)
+    
+    // Способ 4: АГРЕССИВНЫЙ FALLBACK (ИСПРАВЛЕНО ДЛЯ СКОБОК ВНУТРИ ТЕКСТА)
+    // Работает, если JSON сломан синтаксически (например, 10+5=15 или нет запятых)
     attempts.push(() => {
         console.warn('⚠️ Использован агрессивный парсинг (JSON сломан)');
         
@@ -63,7 +58,7 @@ function robustJsonParse(rawContent) {
             stat_changes: {},
             progress_change: 0
         };
-
+        
         // 1. Вытаскиваем сцену (Ищем поле "scene": "..." или берем текст до choices)
         const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
         if (sceneMatch) {
@@ -73,42 +68,80 @@ function robustJsonParse(rawContent) {
             const splitPoint = text.search(/"choices"|\[/);
             fallback.scene = (splitPoint > -1) ? text.substring(0, splitPoint) : text.substring(0, 800);
             // Чистим от мусора JSON
-            fallback.scene = fallback.scene.replace(/[{}]/g, '').trim(); 
+            fallback.scene = fallback.scene.replace(/[{}]/g, '').trim();
         }
-
-        // 2. Агрессивно ищем варианты (исправляет баг "одного варианта")
-        // Ищем содержимое квадратных скобок choices: [...]
-        const jsonArrayMatch = text.match(/"choices"\s*:\s*\[(.*?)\]/s);
         
-        if (jsonArrayMatch) {
-            const content = jsonArrayMatch[1];
-            // Регулярка ищет текст в кавычках, ИГНОРИРУЯ отсутствие запятых между ними
-            // Это чинит баг, когда ИИ пишет ["Вариант 1" "Вариант 2"] без запятой
-            const choicesFound = [...content.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
+        
+        // [СТАЛО (ВСТАВИТЬ ЭТОТ КОД)]
+        // 2. УМНЫЙ ПОИСК ВАРИАНТОВ (State Machine)
+        // Решает проблему скобок [] внутри текста вариантов, например "Удар [Сила]"
+        const choicesKeyIndex = text.indexOf('"choices"');
+        
+        if (choicesKeyIndex !== -1) {
+            // Находим открывающую скобку массива после слова "choices"
+            const openBracketIndex = text.indexOf('[', choicesKeyIndex);
             
-            if (choicesFound.length > 0) {
-                fallback.choices = choicesFound;
+            if (openBracketIndex !== -1) {
+                let balance = 1; // Счетчик уровня вложенности скобок
+                let inQuotes = false; // Флаг "мы внутри кавычек"
+                let closeBracketIndex = -1;
+                
+                // Идем посимвольно, чтобы найти ИСТИННУЮ закрывающую скобку массива
+                for (let i = openBracketIndex + 1; i < text.length; i++) {
+                    const char = text[i];
+                    const prevChar = text[i - 1];
+                    
+                    // Обработка кавычек (игнорируем экранированные \")
+                    if (char === '"' && prevChar !== '\\') {
+                        inQuotes = !inQuotes;
+                    }
+                    
+                    // Если мы НЕ внутри строки, считаем скобки
+                    if (!inQuotes) {
+                        if (char === '[') balance++;
+                        if (char === ']') {
+                            balance--;
+                            if (balance === 0) {
+                                closeBracketIndex = i;
+                                break; // Нашли конец массива!
+                            }
+                        }
+                    }
+                }
+                
+                if (closeBracketIndex !== -1) {
+                    // Вырезаем всё содержимое массива между [ и ]
+                    const rawArrayContent = text.substring(openBracketIndex + 1, closeBracketIndex);
+                    
+                    // Регулярка ищет текст в кавычках ("Вариант 1", "Вариант 2")
+                    // Флаг 'g' находит все совпадения
+                    const choicesFound = [...rawArrayContent.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
+                    
+                    if (choicesFound.length > 0) {
+                        fallback.choices = choicesFound;
+                    }
+                }
             }
         }
-
-        // 3. Если JSON-массив не нашелся, ищем списки в тексте (1. Вариант, - Вариант)
+        
+        // 3. Если умный поиск не сработал, пробуем грубый поиск списков (1. Вариант, - Вариант)
         if (fallback.choices.length === 0) {
-             const listRegex = /(?:^|\n)\s*(?:[-*]|\d+\.)\s+(.+)/g;
-             const listMatches = [...text.matchAll(listRegex)];
-             if (listMatches.length > 0) {
-                 fallback.choices = listMatches.map(m => m[1].trim());
-             }
+            const listRegex = /(?:^|\n)\s*(?:[-*]|\d+\.)\s+(.+)/g;
+            const listMatches = [...text.matchAll(listRegex)];
+            if (listMatches.length > 0) {
+                fallback.choices = listMatches.map(m => m[1].trim());
+            }
         }
-
-        // Страховка, если совсем ничего не нашли
+        
+        // Страховка
         if (fallback.choices.length === 0) {
             fallback.choices = ["Продолжить... (Ошибка парсинга вариантов)"];
         }
-
+        
         return fallback;
     });
-
-    // === ЦИКЛ ПО ВСЕМ ПОПЫТКАМ (ОН ОСТАЛСЯ!) ===
+    
+    // === ЦИКЛ ПО ВСЕМ ПОПЫТКАМ ===
     for (const attempt of attempts) {
         try {
             return attempt(); // Если попытка успешна, возвращаем результат
@@ -116,7 +149,7 @@ function robustJsonParse(rawContent) {
             // Если ошибка — идем к следующему способу
         }
     }
-
+    
     // Если все способы провалились
     throw new Error("Все способы парсинга провалились. Ответ ИИ некорректен.");
 }
