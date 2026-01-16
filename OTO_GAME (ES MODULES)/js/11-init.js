@@ -230,7 +230,7 @@ function setupSettingsModalEvents() {
     if (btnGen && plotInput) {
         btnGen.onclick = async () => {
             const currentText = plotInput.value.trim();
-            const promptToSend = currentText.length > 0 ? currentText : CONFIG.marsyasScenarioPrompt;
+            const promptToSend = currentText.length > 0 ? currentText + "</br>" + CONFIG.marsyasScenarioPrompt : CONFIG.marsyasScenarioPrompt;
             
             btnGen.disabled = true;
             const oldBtnText = btnGen.innerHTML;
