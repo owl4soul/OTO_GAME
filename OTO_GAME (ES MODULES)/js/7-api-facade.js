@@ -167,7 +167,7 @@ async function generateCustomScene(promptText) {
             { role: "system", content: Prompts.system.scenarioWriter },
             { role: "user", content: promptText }
         ],
-        max_tokens: 3000,
+        max_tokens: 5000,
         temperature: 0.85
     };
     
