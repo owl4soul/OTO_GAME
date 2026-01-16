@@ -28,7 +28,7 @@ function init() {
         // 2. Инициализация UI (Лейаут, Ресайзеры, Viewport)
         // ВАЖНО: Выполняем до рендера контента, чтобы размеры CSS переменных (--h-top и т.д.)
         // были установлены корректно ПЕРЕД тем, как браузер отрисует тяжелый DOM.
-        UI.init(); 
+        UI.init();
         Logger.success('UI', "Интерфейс инициализирован");
         
         // 3. Инициализация интерфейса (Отрисовка HTML)
@@ -40,6 +40,9 @@ function init() {
         
         // 5. Настройка полноэкранного режима
         setupFullscreenListeners();
+        
+        // 6. Обновляем состояние кнопок игры Очистить, Отправить (вдруг есть сохраненный выбор/введённый текст)
+        UI.updateActionButtons();
         
         Logger.success('SYSTEM', "✅ Система готова");
         
@@ -76,9 +79,9 @@ function setupEventListeners() {
             const state = State.getState();
             state.freeModeText = e.target.value;
             const hasText = state.freeModeText.trim().length > 0;
-            dom.btnSubmit.disabled = !hasText;
             dom.choicesCounter.textContent = hasText ? '✓/∞' : '0/∞';
             State.setState({ freeModeText: state.freeModeText });
+            UI.updateActionButtons();
             Saveload.saveState();
         };
         
@@ -167,7 +170,7 @@ function setupSettingsModalEvents() {
         };
         apiKeyOpenrouterInput.value = State.getState().settings.apiKeyOpenrouter;
     }
-
+    
     const apiKeyVsegptInput = document.getElementById('apiKeyVsegptInput');
     if (apiKeyVsegptInput) {
         apiKeyVsegptInput.oninput = () => {
@@ -203,32 +206,32 @@ function setupSettingsModalEvents() {
     if (testSelectedModelBtn) {
         testSelectedModelBtn.onclick = () => API.testSelectedModel();
     }
-
+    
     // --- 5. ГЕНЕРАТОР СЮЖЕТА ---
     const plotInput = document.getElementById('plotInput');
     const btnGen = document.getElementById('btnGenPlot');
     const btnClear = document.getElementById('btnClearPlot');
     const btnAccept = document.getElementById('btnAcceptPlot');
-
+    
     if (plotInput) {
         plotInput.oninput = () => {
             const val = plotInput.value.trim();
             if (btnAccept) btnAccept.disabled = val.length === 0;
         };
     }
-
+    
     if (btnClear && plotInput) {
         btnClear.onclick = () => {
             plotInput.value = '';
             if (btnAccept) btnAccept.disabled = true;
         };
     }
-
+    
     if (btnGen && plotInput) {
         btnGen.onclick = async () => {
             const currentText = plotInput.value.trim();
             const promptToSend = currentText.length > 0 ? currentText : CONFIG.marsyasScenarioPrompt;
-
+            
             btnGen.disabled = true;
             const oldBtnText = btnGen.innerHTML;
             btnGen.innerHTML = '<span class="spinner"></span> ГЕНЕРАЦИЯ...';
@@ -236,7 +239,7 @@ function setupSettingsModalEvents() {
             if (btnAccept) btnAccept.disabled = true;
             if (btnClear) btnClear.disabled = true;
             plotInput.disabled = true;
-
+            
             try {
                 const responseText = await API.generateCustomScene(promptToSend);
                 plotInput.value = responseText;
@@ -245,7 +248,7 @@ function setupSettingsModalEvents() {
                     const json = JSON.parse(responseText);
                     plotInput.value = JSON.stringify(json, null, 2);
                 } catch (e) {}
-
+                
                 Render.showSuccessAlert("Сюжет сгенерирован", "Ответ от ИИ получен.");
             } catch (error) {
                 console.error("Ошибка генерации сюжета:", error);
@@ -259,12 +262,12 @@ function setupSettingsModalEvents() {
             }
         };
     }
-
+    
     if (btnAccept && plotInput) {
         btnAccept.onclick = () => {
             const text = plotInput.value.trim();
             if (!text) return;
-
+            
             try {
                 const sceneData = Utils.safeParseAIResponse(text);
                 if (!sceneData.scene || !sceneData.choices) throw new Error("JSON должен содержать 'scene' и 'choices'.");
@@ -277,7 +280,7 @@ function setupSettingsModalEvents() {
                     choices: sceneData.choices,
                     reflection: sceneData.reflection || ""
                 };
-
+                
                 if (sceneData.stat_changes) {
                     for (const [key, val] of Object.entries(sceneData.stat_changes)) {
                         State.updateStat(key, state.stats[Utils.normalizeStatKey(key)] + val);
@@ -290,7 +293,7 @@ function setupSettingsModalEvents() {
                 if (sceneData.personality_change) {
                     state.personality = sceneData.personality_change;
                 }
-
+                
                 state.history.push({
                     sceneSnippet: "--- НОВЫЙ СЮЖЕТ ---",
                     fullText: "Инициализация новой ветки сюжета.",
@@ -306,12 +309,12 @@ function setupSettingsModalEvents() {
                     personality: state.personality,
                     history: state.history
                 });
-
+                
                 Saveload.saveState();
                 Render.renderAll();
                 UI.closeSettingsModal();
                 Render.showSuccessAlert("Сюжет принят", "Новая сцена загружена.");
-
+                
             } catch (error) {
                 Render.showErrorAlert("Ошибка принятия", "Текст не является валидным JSON.", error);
             }
@@ -471,8 +474,8 @@ function openSettingsModal() {
     if (modal) {
         modal.classList.add('active');
         
-        if(DOM.refresh) DOM.refresh();
-
+        if (DOM.refresh) DOM.refresh();
+        
         const state = State.getState();
         const providerInput = document.getElementById('providerInput');
         const apiKeyOpenrouterInput = document.getElementById('apiKeyOpenrouterInput');

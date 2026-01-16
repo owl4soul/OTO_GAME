@@ -35,6 +35,7 @@ function toggleChoice(idx) {
     
     State.setState({ selectedChoices: state.selectedChoices });
     Render.renderChoices();
+    UI.updateActionButtons();
 }
 
 /**
@@ -50,7 +51,7 @@ function startThoughtsOfHeroDisplay() {
         // Пробуем взять фразу из основного списка
         if (State.getHeroPhrasesCount() > 0) {
             phrase = State.getHeroPhrase();
-        } 
+        }
         // Если список пуст, берем фразу из заглушек
         else if (CONFIG.thoughtsOfHeroFakes.length > 0) {
             const fakePhrases = CONFIG.thoughtsOfHeroFakes;
@@ -98,35 +99,35 @@ function stopThoughtsOfHeroDisplay() {
  */
 async function submitTurn(retries = CONFIG.maxRetries) {
     const state = State.getState();
-
+    
     // Отменяем предыдущий запрос, если он существует
     if (activeAbortController) {
         activeAbortController.abort();
         activeAbortController = null;
     }
-
+    
     let requestText = '';
-
+    
     if (state.freeMode) {
         requestText = state.freeModeText.trim();
         if (requestText.length === 0) return;
-
+        
         dom.freeInputText.disabled = true;
         dom.freeInputText.style.opacity = '0.7';
     } else {
         if (state.selectedChoices.length === 0) return;
         requestText = state.selectedChoices.map(i => state.currentScene.choices[i]).join(' + ');
     }
-
+    
     const d10 = Math.ceil(Math.random() * 10);
-
+    
     dom.btnSubmit.innerHTML = '<span class="spinner"></span>';
     dom.btnSubmit.disabled = true;
     dom.btnClear.disabled = true;
-
+    
     // Запускаем показ фраз на подложке
     startThoughtsOfHeroDisplay();
-
+    
     // Создаем AbortController для таймаута
     activeAbortController = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -139,19 +140,19 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             );
         }
     }, CONFIG.requestTimeout);
-
+    
     try {
         // === ВЫЗОВ API (ИЗМЕНЕНО) ===
         // Мы больше не передаем auditEntry. Facade создаст его сам внутри.
         // Мы передаем только данные для запроса и контроллер отмены.
         const data = await API.sendAIRequest(requestText, d10, activeAbortController);
-
+        
         clearTimeout(timeoutId);
         activeAbortController = null;
-
+        
         // Останавливаем показ фраз на подложке
         stopThoughtsOfHeroDisplay();
-
+        
         if (!data.choices || data.choices.length === 0) {
             if (retries > 0) {
                 console.warn(`Ответ ИИ не содержит действий. Повторная попытка ${CONFIG.maxRetries - retries + 1}.`);
@@ -161,61 +162,61 @@ async function submitTurn(retries = CONFIG.maxRetries) {
                 throw new Error("ИИ не смог сгенерировать варианты действий после нескольких попыток.");
             }
         }
-
+        
         // Проверяем, есть ли в ответе фразы героя
         if (data.thoughtsOfHeroResponse && Array.isArray(data.thoughtsOfHeroResponse)) {
             State.addHeroPhrases(data.thoughtsOfHeroResponse);
         }
-
+        
         processTurn(data, requestText, d10);
     } catch (e) {
         clearTimeout(timeoutId);
         activeAbortController = null;
-
+        
         // Останавливаем показ фраз на подложке
         stopThoughtsOfHeroDisplay();
-
+        
         // Игнорируем ошибки отмены запроса
         if (e.name === 'AbortError') {
             console.log('Запрос отменен');
             return;
         }
-
+        
         if (e.message.includes("парсинга JSON") && retries > 0) {
             console.warn(`JSON повреждён. Повторяем запрос... (${retries} попыток осталось)`);
             await new Promise(r => setTimeout(r, 1500));
             return submitTurn(retries - 1);
         }
-
+        
         console.error('💥 Ошибка в submitTurn:', e);
         
         // Логирование уже произошло внутри API Facade -> Audit.
         // Здесь мы только восстанавливаем UI и показываем алерт.
-
+        
         if (state.freeMode) {
             dom.freeInputText.disabled = false;
             dom.freeInputText.style.opacity = '1';
         }
-
+        
         let errorMsg = e.message;
         if (e.message === 'Failed to fetch') {
             errorMsg += '\n\n🔍 Проверьте:\n- Запущен ли локальный сервер? (не file://)\n- Интернет/VPN?\n- DevTools → Network (ищите красный запрос).';
         } else if (e.message.includes('Введите API ключ')) {
             errorMsg += '\n\n🔑 Введите валидный API-ключ в настройках.';
         }
-
+        
         // Используем улучшенное отображение ошибок
         Render.showErrorAlert(
             "Ошибка соединения",
             errorMsg,
             e
         );
-
+        
         dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
         dom.btnSubmit.disabled = false;
         dom.btnClear.disabled = false;
     } finally {
-        if(state.freeMode) {
+        if (state.freeMode) {
             dom.freeInputText.disabled = false;
             dom.freeInputText.style.opacity = '1';
             // Возвращаем фокус, чтобы можно было сразу править
@@ -235,7 +236,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
 function processTurn(data, playerChoice, d10) {
     const state = State.getState();
     let updates = [];
-
+    
     // Нормализуем и применяем изменения характеристик
     if (data.stat_changes) {
         for (const [rawKey, v] of Object.entries(data.stat_changes)) {
@@ -248,7 +249,7 @@ function processTurn(data, playerChoice, d10) {
         }
         State.setState({ stats: state.stats });
     }
-
+    
     if (data.progress_change !== undefined && data.progress_change !== 0) {
         const oldProgress = state.progress;
         state.progress += data.progress_change;
@@ -256,13 +257,13 @@ function processTurn(data, playerChoice, d10) {
         State.syncDegree();
         State.setState({ progress: state.progress });
     }
-
+    
     if (data.personality_change) {
         state.personality = data.personality_change;
         updates.push(`ЛИЧНОСТЬ обновлена`);
         State.setState({ personality: state.personality });
     }
-
+    
     // --- ЛОГИКА РИТУАЛА ---
     
     // 1. Проверка на начало ритуала от ИИ
@@ -284,11 +285,11 @@ function processTurn(data, playerChoice, d10) {
             Utils.vibrate(CONFIG.vibrationPatterns.success);
         }
     }
-
-    State.setState({ 
-        isRitualActive: state.isRitualActive 
+    
+    State.setState({
+        isRitualActive: state.isRitualActive
     });
-
+    
     // ============================================
     // ЛОГИКА СОЗДАНИЯ КОРОТКОЙ СВОДКИ
     // ============================================
@@ -301,7 +302,7 @@ function processTurn(data, playerChoice, d10) {
         }
         State.setState({ summary: state.summary });
     }
-
+    
     // Добавляем запись в историю
     state.history.push({
         sceneSnippet: state.currentScene.text.substring(0, 60) + "...",
@@ -310,19 +311,19 @@ function processTurn(data, playerChoice, d10) {
         changes: updates.join(' | '),
         d10: d10
     });
-
+    
     // Обновляем текущую сцену
     state.currentScene = {
         text: data.scene || "Ошибка генерации текста сцены.",
         choices: data.choices,
         reflection: data.reflection || ""
     };
-
+    
     // Сбрасываем режим свободного ввода после обработки хода
     state.freeMode = false;
     state.freeModeText = '';
     state.selectedChoices = [];
-
+    
     State.setState({
         history: state.history,
         currentScene: state.currentScene,
@@ -331,24 +332,24 @@ function processTurn(data, playerChoice, d10) {
         selectedChoices: state.selectedChoices
     });
     
+    // Увеличиваем счетчик ходов
+    State.incrementTurnCount();
+    
     // Обновляем UI элементы через рендер
     Render.renderAll();
     
     // ВАЖНО: Синхронизируем состояние UI (выход из режима ввода)
     UI.setFreeModeUI(false);
     dom.freeModeToggle.checked = false;
-
+    
     dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
-    dom.btnSubmit.disabled = false;
-    dom.btnClear.disabled = false;
-
+    // ОБНОВЛЯЕМ ОБЕ КНОПКИ
+    UI.updateActionButtons();
+    
     if (updates.length > 0) {
         dom.updates.style.display = 'block';
         dom.updates.innerHTML = `<strong>Изменения за ход (d10=${d10}):</strong><br>${updates.join('<br>')}`;
     }
-    
-    // Увеличиваем счетчик ходов
-    State.incrementTurnCount();
     
     Saveload.saveState();
     checkEndGame();
@@ -390,49 +391,48 @@ function checkEndGame() {
  */
 function showEndScreen(title, msg, color, isVictory = false) {
     console.log("showEndScreen called");
-
+    
     const canvas = document.getElementById('matrixCanvas');
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-
+    
     const letters = '93 ΘΈΛΗΜΑ 93 ἈΓΆΠΗ 93 THELEMA 93 AGAPE93';
     let letterIndex = 0;
-
+    
     // Слои матричного эффекта
     const layers = [
-        {
-            fontSize: 18,
-            speed: 1.8,
-            alpha: 0.9,
-            colorFactor: 1.0,
-            density: 0.7,
-            resetChance: 0.98
-        },
-        {
-            fontSize: 14,
-            speed: 1.0,
-            alpha: 0.7,
-            colorFactor: 0.7,
-            density: 0.85,
-            resetChance: 0.975
-        },
-        {
-            fontSize: 10,
-            speed: 0.6,
-            alpha: 0.4,
-            colorFactor: 0.4,
-            density: 1.0,
-            resetChance: 0.97
-        }
-    ];
-
+    {
+        fontSize: 18,
+        speed: 1.8,
+        alpha: 0.9,
+        colorFactor: 1.0,
+        density: 0.7,
+        resetChance: 0.98
+    },
+    {
+        fontSize: 14,
+        speed: 1.0,
+        alpha: 0.7,
+        colorFactor: 0.7,
+        density: 0.85,
+        resetChance: 0.975
+    },
+    {
+        fontSize: 10,
+        speed: 0.6,
+        alpha: 0.4,
+        colorFactor: 0.4,
+        density: 1.0,
+        resetChance: 0.97
+    }];
+    
     // Инициализация данных для каждого слоя
     const layerData = [];
     for (let i = 0; i < layers.length; i++) {
         const layer = layers[i];
         const columns = Math.floor(canvas.width / layer.fontSize);
-
+        
         layerData.push({
             fontSize: layer.fontSize,
             speed: layer.speed,
@@ -446,35 +446,35 @@ function showEndScreen(title, msg, color, isVictory = false) {
             waveSpeed: 0.05 + Math.random() * 0.05
         });
     }
-
+    
     // Функция для корректировки цвета
     function adjustColor(factor) {
         var red = Math.floor(0x88 * factor);
         return 'rgb(' + red + ',0,0)';
     }
-
+    
     // Очищаем предыдущий интервал
     if (matrixInterval) clearInterval(matrixInterval);
-
+    
     matrixInterval = setInterval(function() {
         ctx.fillStyle = 'rgba(0,0,0,0.05)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+        
         for (let layerIdx = 0; layerIdx < layerData.length; layerIdx++) {
             const layer = layerData[layerIdx];
             ctx.globalAlpha = layer.alpha;
             ctx.fillStyle = adjustColor(layer.colorFactor);
             ctx.font = 'bold ' + layer.fontSize + 'px monospace';
-
+            
             for (let i = 0; i < layer.drops.length; i++) {
                 if (Math.random() > layer.density) continue;
-
+                
                 const x = i * layer.fontSize + Math.sin(layer.waves[i]) * layer.fontSize * 0.3;
                 layer.waves[i] += layer.waveSpeed;
                 const text = letters.charAt(letterIndex % letters.length);
                 letterIndex++;
                 const y = layer.drops[i] * layer.fontSize;
-
+                
                 if (y > -layer.fontSize && y < canvas.height) {
                     if (layerIdx === 0) {
                         ctx.shadowColor = '#880000';
@@ -484,19 +484,19 @@ function showEndScreen(title, msg, color, isVictory = false) {
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
                 }
-
+                
                 layer.drops[i] += layer.speed;
-
+                
                 if (layer.drops[i] * layer.fontSize > canvas.height && Math.random() > layer.resetChance) {
                     layer.drops[i] = 0;
                     layer.waves[i] = Math.random() * Math.PI * 2;
                 }
             }
         }
-
+        
         ctx.globalAlpha = 1.0;
     }, 33);
-
+    
     // Устанавливаем текст и стили
     document.getElementById('endTitle').textContent = title;
     document.getElementById('endTitle').style.color = color;
@@ -516,7 +516,7 @@ function continueGame() {
     }
 }
 
- /**
+/**
  * Начать заново игру после победы/поражения
  */
 function restartGame() {
@@ -536,11 +536,10 @@ function restartGame() {
  */
 function handleClear() {
     const state = State.getState();
-
+    
     if (state.freeMode) {
         state.freeModeText = '';
         dom.freeInputText.value = '';
-        dom.btnSubmit.disabled = true;
         dom.choicesCounter.textContent = '0/∞';
         State.setState({ freeModeText: '' });
     } else {
@@ -548,6 +547,9 @@ function handleClear() {
         State.setState({ selectedChoices: [] });
         Render.renderChoices();
     }
+    
+    // ОБНОВЛЯЕМ ОБЕ КНОПКИ (Они обе должны стать disabled, т.к. всё очищено)
+    UI.updateActionButtons();
 }
 
 /**
@@ -558,33 +560,25 @@ function handleFreeModeToggle(e) {
     const state = State.getState();
     const isFreeMode = e.target.checked;
     state.freeMode = isFreeMode;
-
+    
     // Сначала обновляем состояние данных
     if (state.freeMode) {
         // Если перешли в Свободный режим — подтягиваем текст из поля (вдруг там что-то было)
         state.freeModeText = dom.freeInputText.value;
-    } 
-
-    // === ЛОГИКА ДИСЕЙБЛИНГА КНОПКИ ===
-    if (state.freeMode) {
-        // Правила Свободного режима: активно, если есть текст
-        const hasText = state.freeModeText && state.freeModeText.trim().length > 0;
-        dom.btnSubmit.disabled = !hasText;
-    } else {
-        // Правила Режима Вариантов: активно, если выбран хотя бы 1 вариант
-        const hasChoices = (state.selectedChoices || []).length > 0;
-        dom.btnSubmit.disabled = !hasChoices;
     }
-
+    
     // Сохраняем стейт
     State.setState({
         freeMode: state.freeMode,
         freeModeText: state.freeModeText,
         selectedChoices: state.selectedChoices
     });
-
+    
     // Обновляем UI (показываем/скрываем нужные блоки)
     UI.setFreeModeUI(isFreeMode);
+    
+    // Обновляем обе кнопки после смены режима
+    UI.updateActionButtons();
     
     // Сохраняем на диск
     Saveload.saveState();

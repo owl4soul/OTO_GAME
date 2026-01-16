@@ -820,7 +820,7 @@ input:checked+.slider {
    ========================================================================== */
 
 @keyframes bloodgold-glow {
-
+  
   0%,
   100% {
     box-shadow:
@@ -1226,7 +1226,7 @@ input:checked+.slider:before {
 }
 
 @keyframes blood-drop {
-
+  
   0%,
   100% {
     opacity: 0.3;
@@ -1255,7 +1255,7 @@ input:checked+.slider:before {
 }
 
 @keyframes blink {
-
+  
   0%,
   100% {
     opacity: 1;
@@ -1443,12 +1443,39 @@ input:checked+.slider:before {
   filter: grayscale(1);
 }
 
+/* Кнопка Очистить (Базовое состояние) */
 .btn-clear {
   background: #222;
   color: #aaa;
+  /* Серый текст по умолчанию */
   flex: 1;
   border: 1px solid #333;
-  transition: background 0.2s ease;
+  transition: all 0.1s ease;
+  /* Добавляем плавность для всех свойств */
+}
+
+/* Кнопка Очистить (АКТИВНАЯ / НЕ ЗАБЛОКИРОВАНА) */
+.btn-clear:not(:disabled) {
+  color: #fff;
+  /* Белый текст, когда кнопка активна */
+  background: #2a2a2a;
+  /* Чуть светлее фон */
+  border-color: #555;
+  /* Светлее рамка */
+}
+
+/* Кнопка Очистить (ПРИ НАЖАТИИ) */
+.btn-clear:not(:disabled):active {
+  background: #444;
+  transform: translateY(1px);
+  /* Эффект нажатия */
+}
+
+/* Кнопка Очистить (ХОВЕР - для десктопа) */
+.btn-clear:not(:disabled):hover {
+  background: #333;
+  border-color: #666;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.1);
 }
 
 .btn-submit {
