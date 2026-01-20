@@ -1998,3 +1998,100 @@ input:checked+.slider:before {
   /* Forces hardware acceleration */
 }
 
+/* Стили для блоков статистики (инвентарь и отношения) */
+.stats-block {
+  margin-top: 10px;
+  padding: 8px;
+  background: rgba(20, 0, 0, 0.25);
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  display: none; /* Скрываем по умолчанию */
+}
+
+.stats-block.active {
+  display: block; /* Показываем когда есть данные */
+}
+
+.stats-header {
+  color: var(--c-gold);
+  font-weight: bold;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #444;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stats-header i {
+  font-size: 0.8rem;
+}
+
+.stats-content {
+  color: #ccc;
+  line-height: 1.3;
+}
+
+/* Стили для инвентаря */
+.inventory-block.active .stats-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.inventory-item {
+  background: rgba(156, 136, 255, 0.1);
+  border: 1px solid rgba(156, 136, 255, 0.3);
+  color: #9c88ff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+}
+
+/* Стили для отношений */
+.relations-block.active .stats-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.relation-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  border-left: 3px solid #aaa;
+}
+
+.relation-item.positive { border-left-color: #4cd137; }
+.relation-item.friendly { border-left-color: #fbc531; }
+.relation-item.neutral { border-left-color: #aaa; }
+.relation-item.negative { border-left-color: #e84118; }
+.relation-item.hostile { border-left-color: #c23616; }
+
+.relation-name {
+  color: #ccc;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.relation-value {
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 0.75rem;
+  min-width: 30px;
+  text-align: right;
+}
+
+.relation-value.positive { color: #4cd137; }
+.relation-value.friendly { color: #fbc531; }
+.relation-value.neutral { color: #aaa; }
+.relation-value.negative { color: #e84118; }
+.relation-value.hostile { color: #c23616; }

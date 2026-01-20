@@ -18,8 +18,9 @@ const KNOWN_FIELDS = [
     "start_ritual", // [string, optional] Флаг/указание на начало инициатического ритуала (например, "I°")
     "end_ritual", // [boolean, optional] Флаг окончания ритуала
     "ritual_completed", // [boolean, optional] Альтернативный флаг окончания ритуала
-    "inventory", // [Array<string>, optional] Инвентарь (может быть и в aiMemory, но здесь для явности)
-    "thoughtsOfHeroResponse", // [Array<string>, optional] Массив коротких фраз - "мыслей героя"
+    "inventory_all", // [Array<string>, optional] Инвентарь
+    "relations_all",
+    "thoughtsOfHero", // [Array<string>, optional] Массив коротких фраз - "мыслей героя"
     "short_summary" // [string] ОДНО предложение - краткое описание этой сцены (для глобальной сводки)
 ];
 
@@ -84,10 +85,6 @@ function processAIResponse(rawText) {
             // Сохраняем его для последующего обновления aiMemory в State.
             dynamicMemoryUpdates[key] = value;
             console.log(`🧠 [AI Memory] Discovered and saved dynamic field: '${key}' with value:`, value);
-        }
-        // Специальная обработка инвентаря: если он пришел в корне, дублируем его в память
-        if (key === 'inventory') {
-            dynamicMemoryUpdates[key] = value;
         }
     }
     

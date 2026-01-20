@@ -11,7 +11,7 @@ import { Utils } from './2-utils.js';
 function saveState() {
     const state = State.getState();
     state.lastSaveTime = new Date().toISOString();
-
+    
     // Собираем данные для сохранения
     const saveData = {
         stats: state.stats,
@@ -32,9 +32,11 @@ function saveState() {
         lastSaveTime: state.lastSaveTime,
         // Сохранение памяти (инвентарь) и изменений за ход
         aiMemory: state.aiMemory,
+        inventory: state.inventory,
+        relations: state.relations,
         lastTurnUpdates: state.lastTurnUpdates
     };
-
+    
     // Сохраняем все в localStorage
     localStorage.setItem('oto_v3_state', JSON.stringify(saveData));
     localStorage.setItem('oto_audit_log', JSON.stringify(state.auditLog));
@@ -58,7 +60,7 @@ function loadState() {
         try {
             const p = JSON.parse(saved);
             const state = State.getState();
-
+            
             // Восстанавливаем состояние игры
             state.stats = p.stats || state.stats;
             state.progress = p.progress || state.progress;
@@ -67,7 +69,8 @@ function loadState() {
             state.isRitualActive = p.isRitualActive || false;
             state.currentScene = p.currentScene || state.currentScene;
             state.history = p.history || state.history;
-            
+            state.inventory = p.inventory || state.inventory;
+            state.relations = p.relations || state.relations;
             state.selectedChoices = p.selectedChoices || state.selectedChoices;
             state.freeMode = p.freeMode || state.freeMode;
             state.freeModeText = p.freeModeText || state.freeModeText;
@@ -79,11 +82,11 @@ function loadState() {
             
             // Восстановление памяти (Инвентарь) и Лога изменений
             // Если в сохранении нет aiMemory, инициализируем пустым объектом
-            state.aiMemory = p.aiMemory || { inventory: [] };
+            state.aiMemory = p.aiMemory || state.aiMemory;
             
             // Восстанавливаем строку изменений за ход
-            state.lastTurnUpdates = p.lastTurnUpdates || "";
-
+            state.lastTurnUpdates = p.lastTurnUpdates || state.lastTurnUpdates;
+            
             // Загружаем аудит-логи
             const savedAudit = localStorage.getItem('oto_audit_log');
             if (savedAudit) {
@@ -94,7 +97,7 @@ function loadState() {
                     state.auditLog = [];
                 }
             }
-
+            
             // Загружаем статусы моделей
             const savedModels = localStorage.getItem('oto_models_status');
             if (savedModels) {
@@ -106,15 +109,15 @@ function loadState() {
                     state.models = aiModels;
                     console.log('Модели загружены из кода');
                 }
-                if(savedModels.ength !== aiModels.length) {
-                	console.log('Модели загружены из кода');
-                	state.models = aiModels;
+                if (savedModels.ength !== aiModels.length) {
+                    console.log('Модели загружены из кода');
+                    state.models = aiModels;
                 }
             } else {
                 state.models = aiModels;
                 console.log('Модели загружены из кода');
             }
-
+            
             // Загружаем масштаб
             const savedScale = localStorage.getItem('oto_scale');
             if (savedScale) {
@@ -122,20 +125,20 @@ function loadState() {
             } else {
                 state.settings.scale = CONFIG.scaleSteps[CONFIG.defaultScaleIndex];
             }
-
+            
             const savedScaleIndex = localStorage.getItem('oto_scale_index');
             if (savedScaleIndex) {
                 state.settings.scaleIndex = parseInt(savedScaleIndex) || CONFIG.defaultScaleIndex;
             } else {
                 state.settings.scaleIndex = CONFIG.defaultScaleIndex;
             }
-
+            
             // Загружаем счетчик ходов
             const savedTurnCount = localStorage.getItem('oto_turn_count');
             if (savedTurnCount) {
                 state.turnCount = parseInt(savedTurnCount) || 0;
             }
-
+            
             // Загружаем фразы героя
             const savedThoughtsOfHero = localStorage.getItem('oto_thoughts_of_hero');
             if (savedThoughtsOfHero) {
@@ -146,7 +149,7 @@ function loadState() {
                     state.thoughtsOfHero = [];
                 }
             }
-
+            
             State.setState(state);
             console.log('Игра загружена из localStorage');
         } catch (e) {

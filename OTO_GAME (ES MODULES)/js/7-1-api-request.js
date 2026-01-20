@@ -99,7 +99,7 @@ function buildContextBlock(state) {
     // Неструктурированные данные (инвентарь, флаги квестов, статусы NPC), которые ИИ сам добавил в прошлых ходах.
     // LLM видит эти данные и может их обновлять в своем ответе.
     if (state.aiMemory && Object.keys(state.aiMemory).length > 0) {
-        parts.push(`${Prompts.userHeaders.contextMemory}\n${JSON.stringify(state.aiMemory, null, 2)}`);
+        parts.push(`${Prompts.userHeaders.aiMemory}\n${JSON.stringify(state.aiMemory, null, 2)}`);
     }
     
     // В. КРАТКОСРОЧНАЯ ИСТОРИЯ (Short-Term Memory)

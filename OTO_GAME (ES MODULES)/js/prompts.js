@@ -53,8 +53,8 @@ export const PROMPTS = {
             ШАГ 4: ОБНОВЛЕНИЕ БАЗЫ ДАННЫХ (World State Update).
             - Сформируй новые значения для полей JSON.
             - Примени изменения согласно ПРОТОКОЛУ "МЕХАНИКА ПРОВЕРОК". Заполни поле stat_changes.
-            - Обнови отношения согласно ПРОТОКОЛУ "ОТНОШЕНИЯ". Заполни поле relations.
-            - Обнови инвентарь согласно ПРОТОКОЛУ "ИНВЕНТАРЬ".Заполни поле inventory.
+            - Обнови отношения согласно ПРОТОКОЛУ "ОТНОШЕНИЯ". Заполни поле relations_all.
+            - Обнови инвентарь согласно ПРОТОКОЛУ "ИНВЕНТАРЬ".Заполни поле inventory_all.
             - Обнови прогресс согласно ПРОТОКОЛУ "ПРОГРЕСС СТЕПЕНЕЙ".Заполни поле progress_change.
             - Обнови личность игрока, если есть изменения: добавь всем статам +1 за изменение личности. Заполни поле personality_change.
             
@@ -62,7 +62,7 @@ export const PROMPTS = {
             - Напиши сцену (HTML теги <b>, <i> приветствуются).
             - В описании сцены отрази градацию успеха/провала согласно ПРОТОКОЛУ "МЕХАНИКА ПРОВЕРОК".
             - Создай краткое описание в short_summary.
-            - Убедись, что заполнил все необходимые поля: stat_changes, personality_change, progress_change, thoughtsOfHeroResponse, inventory и другие.
+            - Убедись, что заполнил все необходимые поля: stat_changes, personality_change, progress_change, thoughtsOfHero, inventory_all, relations_all и другие.
             
             ШАГ 6: ГЕНЕРАЦИЯ НОВЫХ ВЫБОРОВ (New Choices Generation).
             - Сгенерируй новые объекты choices для следующего хода (5-10 вариантов).
@@ -165,17 +165,17 @@ export const PROMPTS = {
             
             ПРОТОКОЛ "ОТНОШЕНИЯ" (RELATIONS SYSTEM):
             - Ты обязан отслеживать баланс отношений встреченных npc к игроку
-            - Создай в памяти объект "relations"
+            - Создай в памяти объект "relations_all"
             - Шкала отношений: от -100 (Смертельная вражда) до +100 (Фанатичная преданность)
             - ТЫ ОБЯЗАН менять эти значения в зависимости от действий игрока
             - ТЫ ОБЯЗАН базировать на этом отношении реакции npc на действия игрока. Возможность предательства или неожиданной помощи
-            - Всегда заполняй поле relations.
+            - Всегда заполняй поле relations_all.
             
             ПРОТОКОЛ "ИНВЕНТАРЬ" (INVENTORY SYSTEM):
             - Инвентарь — это массив строк
-            - ПРАВИЛО "REALITY CHECK": Если предмета нет в массиве "inventory" внутри aiMemory, значит, его не существует. Игрок не может достать пистолет, если его нет в списке
+            - ПРАВИЛО "REALITY CHECK": Если предмета нет в массиве "inventory_all", значит, его не существует. Игрок не может достать пистолет, если его нет в инвентаре.
             - ПРАВИЛО "LOOT": Если игрок нашел предмет, ты ДОБАВЛЯЕШЬ его в массив. Если использовал/потерял — УДАЛЯЕШЬ. Предлагай варианты действий с подходящими предметами
-            - Всегда заполняй поле inventory, .
+            - Всегда заполняй присылай обновленное поле inventory_all с полным текущим списком предметов.
             
             ПРОТОКОЛ "ПРОГРЕСС СТЕПЕНЕЙ":
             - Обычное действие не влияет на прогресс.
@@ -195,16 +195,16 @@ export const PROMPTS = {
               {
                 "text": "Попробовать взломать архив (Риск привлечь внимание охраны)",
                 "requirements": {
-                  "stats": { "reason": 12, "stealth": 8 },
+                  "stats": { "sanity": 12, "stealth": 8 },
                   "inventory": "Отмычки"
                 },
                 "success_changes": {
-                  "stats": { "reason": 2, "stealth": 1 },
+                  "stats": { "sanity": 2, "stealth": 1 },
                   "inventory_add": ["Секретные документы"],
                   "inventory_remove": []
                 },
                 "failure_changes": {
-                  "stats": { "reason": -3, "stealth": -5 },
+                  "stats": { "sanity": -3, "stealth": -5 },
                   "inventory_add": [],
                   "inventory_remove": ["Отмычки"]
                 }
@@ -212,16 +212,16 @@ export const PROMPTS = {
               {
                 "text": "Изучить ритуальные символы на стене (Шанс понять истинную природу места)",
                 "requirements": {
-                  "stats": { "reason": 14 },
+                  "stats": { "sanity": 14 },
                   "inventory": null
                 },
                 "success_changes": {
-                  "stats": { "reason": 3 },
+                  "stats": { "sanity": 3 },
                   "inventory_add": ["Записи о символизме"],
                   "inventory_remove": []
                 },
                 "failure_changes": {
-                  "stats": { "reason": -3 },
+                  "stats": { "sanity": -3 },
                   "inventory_add": [],
                   "inventory_remove": []
                 }
@@ -263,16 +263,16 @@ export const PROMPTS = {
               {
                 "text": "Вступить в переговоры с агентом ФСБ (Риск быть записанным в осведомители)",
                 "requirements": {
-                  "stats": { "influence": 13, "reason": 11 },
+                  "stats": { "influence": 13, "sanity": 11 },
                   "inventory": "Удостоверение личности"
                 },
                 "success_changes": {
-                  "stats": { "influence": 3, "reason": 1 },
+                  "stats": { "influence": 3, "sanity": 1 },
                   "inventory_add": ["Контакты информатора"],
                   "inventory_remove": []
                 },
                 "failure_changes": {
-                  "stats": { "influence": -4, "reason": -2 },
+                  "stats": { "influence": -4, "sanity": -2 },
                   "inventory_add": ["Компромат на себя"],
                   "inventory_remove": []
                 }
@@ -287,23 +287,23 @@ export const PROMPTS = {
       
       jsonFewShot: `ПРИМЕР ОТВЕТА (ШАБЛОН):
             {
-              "design_notes": "АНАЛИЗ: Игрок выбрал действие: 'Спрятаться среди теней под черной мантией...'. Requirements: stealth=10, reason=8, inventory=чёрная мантия. Текущие статы: stealth=65, reason=45. d10=5. Расчет: stealth_actual=6+5=11, reason_actual=4+5=9. Проверка по каждому стату: stealth_actual≥10=true, reason_actual≥8=true. ЧИСТЫЙ УСПЕХ. Сумма_actual=20, Сумма_required=18, Delta=+2 → закономерный успех. Применяю обещанную награду success_changes: stealth+2, reason+1, черная мантия становится артефактом с бонусом к скрытности +1 при действии с предметом. ФСБ не удаётся обнаружить спрятавшегося игрока.",
+              "design_notes": "АНАЛИЗ: Игрок выбрал действие: 'Спрятаться среди теней под черной мантией...'. Requirements: stealth=10, sanity=8, inventory=чёрная мантия. Текущие статы: stealth=65, sanity=45. d10=5. Расчет: stealth_actual=6+5=11, sanity_actual=4+5=9. Проверка по каждому стату: stealth_actual≥10=true, sanity_actual≥8=true. ЧИСТЫЙ УСПЕХ. Сумма_actual=20, Сумма_required=18, Delta=+2 → закономерный успех. Применяю обещанную награду success_changes: stealth+2, sanity+1, черная мантия становится артефактом с бонусом к скрытности +1 при действии с предметом. ФСБ не удаётся обнаружить спрятавшегося игрока.",
               "scene": "Вы оборачиваетесь в черную мантию, и ткань будто поглощает свет... Вы растворяетесь в тенях настолько гармонично, что становитесь частью самой тьмы.",
               "short_summary": "Безупречная маскировка в тени под покровом мантии заставила ФСБ потерять след героя.",
               "choices": [
                 {
                   "text": "Подслушать разговор у двери (При провале отношение агента Волкова ухудшится)",
                   "requirements": {
-                    "stats": { "stealth": 11, "reason": 9 },
+                    "stats": { "stealth": 11, "sanity": 9 },
                     "inventory": null
                   },
                   "success_changes": {
-                    "stats": { "stealth": 3, "reason": 1 },
+                    "stats": { "stealth": 3, "sanity": 1 },
                     "inventory_add": [],
                     "inventory_remove": []
                   },
                   "failure_changes": {
-                    "stats": { "stealth": -2, "reason": -2 },
+                    "stats": { "stealth": -2, "sanity": -2 },
                     "inventory_add": [],
                     "inventory_remove": []
                   }
@@ -311,16 +311,16 @@ export const PROMPTS = {
                 {
                   "text": "Изучить ритуальные символы на стене (Шанс открыть сюжетную развилку)",
                   "requirements": {
-                    "stats": { "reason": 13 },
+                    "stats": { "sanity": 13 },
                     "inventory": null
                   },
                   "success_changes": {
-                    "stats": { "reason": 3 },
+                    "stats": { "sanity": 3 },
                     "inventory_add": [],
                     "inventory_remove": []
                   },
                   "failure_changes": {
-                    "stats": { "reason": -2 },
+                    "stats": { "sanity": -2 },
                     "inventory_add": [],
                     "inventory_remove": []
                   }
@@ -377,11 +377,11 @@ export const PROMPTS = {
                   }
                 }
               ],
-              "stat_changes": {"stealth":2, "reason":1},
+              "stat_changes": {"stealth":2, "sanity":1},
               "progress_change": 1,
-              "thoughtsOfHeroResponse": ["Тени обнимают меня как старые друзья", "Мантия Марсия работает - я почти невидим", "Чувствую силу ритуала в каждой нити ткани", "Зачем только я забрался сюда?"],
-              "inventory": ["чёрная мантия", "кинжал Пана"],
-              "relations": {
+              "thoughtsOfHero": ["Тени обнимают меня как старые друзья", "Мантия Марсия работает - я почти невидим", "Чувствую силу ритуала в каждой нити ткани", "Зачем только я забрался сюда?"],
+              "inventory_all": ["чёрная мантия", "кинжал Пана"],
+              "relations_all": {
                   "Frater Marsyas": 15,
                   "Agent Volkov": -20
               },
@@ -397,10 +397,12 @@ export const PROMPTS = {
             }`,
       
       summaryAndMemoryInstructions: `КРИТИЧЕСКИ ВАЖНО ПОМНИТЬ:
-            1. Поле "inventory" — это ЕДИНСТВЕННАЯ истина о вещах героя. Всегда возвращай массив целиком.
-            2. Поле "relations" — это ЕДИНСТВЕННАЯ истина об отношениях.
-            3. Поле "choices" — содержит объекты действий с требованиями и изменениями для следующего хода.
-            4. Любое поле, которое ты добавишь в JSON, будет сохранено и возвращено тебе в каждый следующий ход.`
+      1. STATS KEYS: Используй ТОЛЬКО: "will", "stealth", "influence", "sanity". ЗАПРЕЩЕНО: "sanity", "volya", "воля" и другие алиасы. Всегда возвращай изменения в stat_changes.
+      2. INVENTORY: "inventory_all" - полный список предметов. При добавлении/удалении возвращай ОБНОВЛЕННЫЙ список. Всегда возвращай массив целиком.
+      3. PERSONALITY: Всегда возвращай поле "personality" (текущее или новое). 
+      4. Поле "relations_all" — это ЕДИНСТВЕННАЯ истина об отношениях. Всегда обновляй его и возвращай.
+      5. Поле "choices" — содержит объекты действий с требованиями и последствиями успеха/провала для следующего хода. Строго следуй формату!!!
+      6. Любое поле, которое ты добавишь в JSON, будет сохранено и возвращено тебе в каждый следующий ход в aiMemory.`
     },
     
     // --- БЛОК 3: ТРИГГЕРЫ СОБЫТИЙ (Injections) ---
@@ -411,7 +413,7 @@ export const PROMPTS = {
             ДИРЕКТИВА: Введи "Черного Лебедя" — событие, полностью ломающее текущий контекст (взрыв стены, арест всех присутствующих, появление демона).`,
       
       twist: `ДИРЕКТИВА: СЮЖЕТНЫЙ ПОВОРОТ.
-            Измени расклад сил. Друг оказывается предателем. Враг предлагает союз. Обнови поле "relations" соответственно.`,
+            Измени расклад сил. Друг оказывается предателем. Враг предлагает союз. Обнови поле "relations_all" соответственно.`,
       
       insanity: `РЕЖИМ ПСИХОЗА (Sanity < 20).
             Игрок больше не может доверять своим чувствам.
@@ -421,17 +423,17 @@ export const PROMPTS = {
     
     // --- БЛОК 4: РАЗМЕТКА ДАННЫХ (Data Headers) ---
     userHeaders: {
-    d10Luck: `[INPUT: РЕЗУЛЬТАТ БРОСКА УДАЧИ D10]: `,
-    actualStatesValues: `[INPUT: ТЕКУЩИЕ СТАТЫ ГЕРОЯ (0-100)]:`,
-    historyPrefix: `[INPUT: ЛОГ СОБЫТИЙ (HISTORY)]:`,
-    contextGlobal: `== ГЛОБАЛЬНАЯ ХРОНИКА ==`,
-    contextMemory: `== БАЗА ДАННЫХ ИИ (aiMemory) - ИСПОЛЬЗУЙ ДЛЯ СЮЖЕТА ==`,
-    contextShort: `== ПОСЛЕДНИЕ ДЕЙСТВИЯ ==`,
-    currentScene: `[ТЕКУЩАЯ СЮЖЕТНАЯ СЦЕНА]:`,
-    selectedActions: `[ВЫБРАННЫЕ ИГРОКОМ ДЕЙСТВИЯ]:`,
-    reqThoughts: `ЗАПРОС 10 КОНТЕКСТНЫХ МЫСЛЕЙ ГЕРОЯ`,
-    reqJsonEnd: `ВЫПОЛНИТЬ ПРОТОКОЛЫ. СГЕНЕРИРОВАТЬ JSON.`
-},
+      d10Luck: `[INPUT: РЕЗУЛЬТАТ БРОСКА УДАЧИ D10]: `,
+      actualStatesValues: `[INPUT: ТЕКУЩИЕ СТАТЫ ГЕРОЯ (0-100)]:`,
+      historyPrefix: `[INPUT: ЛОГ СОБЫТИЙ (HISTORY)]:`,
+      contextGlobal: `== ГЛОБАЛЬНАЯ ХРОНИКА ==`,
+      aiMemory: `== БАЗА ДАННЫХ ИИ (aiMemory) - ИСПОЛЬЗУЙ ДЛЯ СЮЖЕТА ==`,
+      contextShort: `== ПОСЛЕДНИЕ ДЕЙСТВИЯ ==`,
+      currentScene: `[ТЕКУЩАЯ СЮЖЕТНАЯ СЦЕНА]:`,
+      selectedActions: `[ВЫБРАННЫЕ ИГРОКОМ ДЕЙСТВИЯ]:`,
+      reqThoughts: `ЗАПРОС 10 КОНТЕКСТНЫХ МЫСЛЕЙ ГЕРОЯ`,
+      reqJsonEnd: `ВЫПОЛНИТЬ ПРОТОКОЛЫ. СГЕНЕРИРОВАТЬ JSON.`
+    },
     
     // --- БЛОК 5: ТЕХНИЧЕСКИЕ СООБЩЕНИЯ ---
     technical: {
@@ -489,16 +491,16 @@ export const PROMPTS = {
         {
           "text": "Проявить осторожность и скепсис (Задать probing вопросы о рисках)",
           "requirements": {
-            "stats": { "reason": 8 },
+            "stats": { "sanity": 8 },
             "inventory": null
           },
           "success_changes": {
-            "stats": { "reason": 2 },
+            "stats": { "sanity": 2 },
             "inventory_add": ["Записи о подозрениях"],
             "inventory_remove": []
           },
           "failure_changes": {
-            "stats": { "reason": -2 },
+            "stats": { "sanity": -2 },
             "inventory_add": [],
             "inventory_remove": []
           }
@@ -523,16 +525,16 @@ export const PROMPTS = {
         {
           "text": "Наблюдать и анализировать (Изучить обстановку, не раскрывая своих намерений)",
           "requirements": {
-            "stats": { "stealth": 6, "reason": 7 },
+            "stats": { "stealth": 6, "sanity": 7 },
             "inventory": null
           },
           "success_changes": {
-            "stats": { "stealth": 2, "reason": 1 },
+            "stats": { "stealth": 2, "sanity": 1 },
             "inventory_add": ["Заметки о ритуальных предметах"],
             "inventory_remove": []
           },
           "failure_changes": {
-            "stats": { "stealth": -3, "reason": -1 },
+            "stats": { "stealth": -3, "sanity": -1 },
             "inventory_add": [],
             "inventory_remove": []
           }
@@ -540,16 +542,16 @@ export const PROMPTS = {
         {
           "text": "Применить оккультные знания (Цитировать Кроули или демонстрировать эрудицию)",
           "requirements": {
-            "stats": { "reason": 10 },
+            "stats": { "sanity": 10 },
             "inventory": "Книга Закона"
           },
           "success_changes": {
-            "stats": { "reason": 3 },
+            "stats": { "sanity": 3 },
             "inventory_add": ["Заметки Марсия на полях вашей книги"],
             "inventory_remove": []
           },
           "failure_changes": {
-            "stats": { "reason": -3 },
+            "stats": { "sanity": -3 },
             "inventory_add": [],
             "inventory_remove": ["Книга Закона"]
           }
@@ -559,8 +561,8 @@ export const PROMPTS = {
       "stat_changes": {},
       "progress_change": 0,
       "personality_change": "Минервал, стоящий перед Лидером Ложи в час сумерек Закона.",
-      "thoughtsOfHeroResponse": ["Мысли героя о Марсии", "Мысли о ситуации", "Мысли о Телеме", "И т.д. генерируй по 5-10 мыслей"],
-      "inventory": [], 
-      "relations": {}
+      "thoughtsOfHero": ["Мысли героя о Марсии", "Мысли о ситуации", "Мысли о Телеме", "И т.д. генерируй по 5-10 мыслей"],
+      "inventory_all": [], 
+      "relations_all": {}
     }`
 };

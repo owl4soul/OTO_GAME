@@ -3,6 +3,7 @@
 
 import { CONFIG, initialScene, aiModels } from './1-config.js';
 import { Utils } from './2-utils.js';
+import { Saveload } from './9-saveload.js';
 
 // Начальное состояние игры
 let state = {
@@ -11,7 +12,6 @@ let state = {
     progress: 0,
     degreeIndex: 0,
     personality: 'Молодой Минервал, ещё не присягнувший в верности Ордену, полный идеалов, но ещё не испытанный тьмой.',
-    
     // Флаги состояний
     isRitualActive: false,
     
@@ -26,10 +26,11 @@ let state = {
     
     // Динамическая память ИИ (Неструктурированные данные), также отправляется и сохраняется
     aiMemory: {},
-    aiMemory: { inventory: [] }, // Гарантируем объект памяти
     
     // Хранение HTML-строки последних изменений за ход для восстановления после перезагрузки
-    lastTurnUpdates: "", 
+    lastTurnUpdates: "",
+    inventory: [],
+    relations: {},
     
     // Режимы ввода
     freeMode: false,
@@ -91,6 +92,79 @@ function syncDegree() {
     state.degreeIndex = newIndex;
 }
 
+function applyParsedChanges(parsedData) {
+    if (parsedData.stat_changes && typeof parsedData.stat_changes === 'object') {
+        Object.entries(parsedData.stat_changes).forEach(([key, value]) => {
+            const normKey = Utils.normalizeStatKey(key);
+            if (normKey && state.stats.hasOwnProperty(normKey)) {
+                state.stats[normKey] += parseInt(value, 10) || 0;
+                state.stats[normKey] = Math.max(0, Math.min(100, state.stats[normKey]));
+            }
+        });
+    }
+    
+    if (typeof parsedData.progress_change === 'number') {
+        state.progress += parsedData.progress_change;
+        syncDegree();
+    }
+    
+    if (parsedData.personality && typeof parsedData.personality === 'string') {
+        state.personality = parsedData.personality;
+    }
+    
+    
+    if (parsedData.inventory_all && Array.isArray(parsedData.inventory_all)) {
+        state.inventory = [...new Set(parsedData.inventory_all)];
+        console.log("📦 Инвентарь обновлен:", state.inventory);
+    }
+    
+    if (parsedData.relations_all && typeof parsedData.relations_all === 'object') {
+        state.relations = { ...state.relations, ...parsedData.relations_all };
+        console.log("🤝 Отношения обновлены:", state.relations);
+    }
+    
+    
+    if (parsedData.thoughtsOfHero && Array.isArray(parsedData.thoughtsOfHero)) {
+        addHeroPhrases(parsedData.thoughtsOfHero);
+    }
+    
+    state.currentScene = {
+        text: parsedData.scene,
+        choices: parsedData.choices || state.currentScene.choices
+    };
+    state.summary = parsedData.short_summary || state.summary;
+    state.history.push({
+        fullText: parsedData.scene,
+        summary: parsedData.short_summary
+    });
+    if (state.history.length > CONFIG.historyContext) {
+        state.history = state.history.slice(-CONFIG.historyContext);
+    }
+    
+    localStorage.setItem('oto_v3_state', JSON.stringify(state));
+}
+
+function applyChoiceChanges(changes) {
+    if (changes.stats && typeof changes.stats === 'object') {
+        Object.entries(changes.stats).forEach(([key, value]) => {
+            const normKey = Utils.normalizeStatKey(key);
+            if (normKey && state.stats.hasOwnProperty(normKey)) {
+                state.stats[normKey] += parseInt(value, 10) || 0;
+                state.stats[normKey] = Math.max(0, Math.min(100, state.stats[normKey]));
+            }
+        });
+    }
+    
+    if (changes.inventory_add && Array.isArray(changes.inventory_add)) {
+        state.inventory = [...new Set([...state.inventory, ...changes.inventory_add])];
+    }
+    if (changes.inventory_remove && Array.isArray(changes.inventory_remove)) {
+        state.inventory = state.inventory.filter(item => !changes.inventory_remove.includes(item));
+    }
+    
+    localStorage.setItem('oto_v3_state', JSON.stringify(state));
+}
+
 /**
  * Сброс только игрового прогресса (без настроек)
  * @returns {Object} Новое состояние
@@ -105,6 +179,9 @@ function resetGameProgress() {
         state.currentScene = { ...initialScene };
         state.history = [];
         state.selectedChoices = [];
+        state.lastTurnUpdates = "";
+        state.inventory = [];
+        state.relations = {};
         state.freeMode = false;
         state.freeModeText = '';
         state.turnCount = 0; // Сброс счетчика ходов
@@ -165,6 +242,8 @@ function exportFullState() {
             summary: state.summary, // Экспорт сводки
             aiMemory: { ...state.aiMemory }, // Экспорт динамической памяти
             selectedChoices: [...state.selectedChoices],
+            inventory: [...state.inventory],
+            relations: { ...state.relations },
             freeMode: state.freeMode,
             freeModeText: state.freeModeText,
             turnCount: state.turnCount,
@@ -214,6 +293,8 @@ function importFullState(importData) {
         state.currentScene = importData.gameState.currentScene || state.currentScene;
         state.history = importData.gameState.history || state.history;
         state.selectedChoices = importData.gameState.selectedChoices || state.selectedChoices;
+        state.inventory = importData.gameState.inventory || state.inventory;
+        state.relations = importData.gameState.relations || {};
         state.summary = importData.gameState.summary || ""; // Импорт сводки
         state.aiMemory = importData.gameState.aiMemory || {}; // Импорт динамической памяти
         state.freeMode = importData.gameState.freeMode || state.freeMode;
@@ -315,7 +396,7 @@ function getModelStats() {
     const error = models.filter(m => m.status === 'error').length;
     // Все, что не успех и не ошибка — считается "не проверено" (untested/pending)
     const untested = total - success - error;
-
+    
     return { total, success, error, untested };
 }
 
@@ -471,6 +552,9 @@ export const State = {
         state = { ...state, ...newState };
         // Если обновили UI, сохраняем настройки интерфейса отдельно
         if (newState.ui) saveUiState();
+        
+        // Сохраняем изменения в localStorage
+        Saveload.saveState();
     },
     
     // === Управление UI (Getters/Setters для UI) ===

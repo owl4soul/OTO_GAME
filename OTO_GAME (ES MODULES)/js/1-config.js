@@ -48,23 +48,31 @@ export const CONFIG = {
     
     // Алиасы для названий характеристик
     statAliases: {
-        'reason': 'sanity',
-        'разум': 'sanity',
-        'рассудок': 'sanity',
-        'ум': 'sanity',
-        'интеллект': 'sanity',
-        'ментальность': 'sanity',
-        'воля': 'will',
-        'сила воли': 'will',
-        'решимость': 'will',
-        'скрытность': 'stealth',
-        'незаметность': 'stealth',
-        'тайность': 'stealth',
-        'влияние': 'influence',
-        'авторитет': 'influence',
-        'убеждение': 'influence',
-        'харизма': 'influence'
-    },
+    'will': 'will',
+    'stealth': 'stealth',
+    'influence': 'influence',
+    'sanity': 'sanity',
+    
+    'reason': 'sanity',
+    'разум': 'sanity',
+    'рассудок': 'sanity',
+    'ум': 'sanity',
+    'интеллект': 'sanity',
+    'ментальность': 'sanity',
+    
+    'воля': 'will',
+    'сила воли': 'will',
+    'решимость': 'will',
+    
+    'скрытность': 'stealth',
+    'незаметность': 'stealth',
+    'тайность': 'stealth',
+    
+    'влияние': 'influence',
+    'авторитет': 'influence',
+    'убеждение': 'influence',
+    'харизма': 'influence'
+},
     
     // Заглушки фраз героя
     thoughtsOfHeroFakes: [

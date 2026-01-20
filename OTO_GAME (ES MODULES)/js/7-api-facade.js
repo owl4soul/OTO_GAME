@@ -99,9 +99,30 @@ async function sendAIRequest(selectedChoices, d10, abortController = null) { // 
         // Обновление Динамической Памяти ИИ (`aiMemory`)
         if (processingResult.memoryUpdate && Object.keys(processingResult.memoryUpdate).length > 0) {
             const currentState = State.getState();
-            currentState.aiMemory = { ...currentState.aiMemory, ...processingResult.memoryUpdate };
-            State.setState({ aiMemory: currentState.aiMemory });
-            console.log("STATE UPDATED: AI Memory expanded with new dynamic fields.");
+            
+            // Извлекаем инвентарь и отношения из memoryUpdate
+            const { inventory_all, relations_all, ...otherMemory } = processingResult.memoryUpdate;
+            
+            // Обновляем инвентарь
+            if (inventory_all && Array.isArray(inventory_all)) {
+                currentState.inventory = [...new Set(inventory_all)];
+            }
+            
+            // Обновляем отношения
+            if (relations_all && typeof relations_all === 'object') {
+                currentState.relations = { ...currentState.relations, ...relations_all };
+            }
+            
+            // Обновляем остальную память
+            currentState.aiMemory = { ...currentState.aiMemory, ...otherMemory };
+            
+            State.setState({
+                inventory: currentState.inventory,
+                relations: currentState.relations,
+                aiMemory: currentState.aiMemory
+            });
+            
+            console.log("STATE UPDATED: Inventory, relations, and AI Memory expanded.");
         }
         
         // --- ЛОГИРОВАНИЕ: УСПЕХ ---

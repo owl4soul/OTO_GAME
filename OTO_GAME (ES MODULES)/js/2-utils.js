@@ -16,7 +16,7 @@ function repairTruncatedJSON(text) {
     // Считаем неэкранированные кавычки
     let quoteCount = 0;
     for (let i = 0; i < repaired.length; i++) {
-        if (repaired[i] === '"' && (i === 0 || repaired[i-1] !== '\\')) {
+        if (repaired[i] === '"' && (i === 0 || repaired[i - 1] !== '\\')) {
             quoteCount++;
         }
     }
@@ -28,11 +28,11 @@ function repairTruncatedJSON(text) {
         }
         repaired += '"';
     }
-
+    
     // 2. Удаляем "висячую" запятую в конце (частая проблема обрыва массивов/объектов)
     // Например: {"items": ["key",], -> {"items": ["key"]}
     repaired = repaired.replace(/,\s*([}\]]*)$/, '$1');
-
+    
     // 3. Балансируем скобки
     // Считаем фигурные { и }
     const openCurly = (repaired.match(/\{/g) || []).length;
@@ -40,7 +40,7 @@ function repairTruncatedJSON(text) {
     // Считаем квадратные [ и ]
     const openSquare = (repaired.match(/\[/g) || []).length;
     const closeSquare = (repaired.match(/\]/g) || []).length;
-
+    
     // Добавляем недостающие закрывающие скобки.
     // Эвристика: обычно в JSON сначала закрывают массивы, потом объекты.
     if (openSquare > closeSquare) {
@@ -131,7 +131,7 @@ function robustJsonParse(rawContent) {
     if (!rawContent) {
         throw new Error('Пустой ответ от ИИ');
     }
-
+    
     let text = rawContent.trim();
     
     // Удаляем обертки markdown
@@ -145,9 +145,6 @@ function robustJsonParse(rawContent) {
         console.warn('Стандартный JSON.parse не удался, переходим к агрессивному парсингу:', e.message);
     }
     
-    // Агрессивный парсинг для нового формата
-    console.warn('⚠️ Агрессивный парсинг для нового формата choices...');
-    
     // Извлекаем основные поля через regex
     const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/);
     const shortSummaryMatch = text.match(/"short_summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
@@ -158,10 +155,52 @@ function robustJsonParse(rawContent) {
         choices: [],
         stat_changes: {},
         progress_change: 0,
-        thoughtsOfHeroResponse: []
+        thoughtsOfHero: []
     };
     
+    const personalityMatch = text.match(/"personality"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (personalityMatch) {
+        fallback.personality = personalityMatch[1].replace(/\\"/g, '"');
+    } else {
+        fallback.personality = null;
+    }
+    
+    const inventoryAllMatch = text.match(/"inventory_all"\s*:\s*(\[.*?\])/s);
+    if (inventoryAllMatch) {
+        try {
+            fallback.inventory_all = JSON.parse(inventoryAllMatch[1]);
+        } catch (e) {
+            fallback.inventory_all = [];
+        }
+    } else {
+        fallback.inventory_all = [];
+    }
+    
+    const relationsAllMatch = text.match(/"relations_all"\s*:\s*(\{.*?\})/s);
+    if (relationsAllMatch) {
+        try {
+            fallback.relations_all = JSON.parse(relationsAllMatch[1]);
+        } catch (e) {
+            fallback.relations_all = {};
+        }
+    } else {
+        fallback.relations_all = {};
+    }
+    
+    const thoughtsMatch = text.match(/"thoughtsOfHero"\s*:\s*\[(.*?)\]/s);
+    if (thoughtsMatch) {
+        try {
+            fallback.thoughtsOfHero = JSON.parse(`[${thoughtsMatch[1]}]`);
+        } catch (e) {
+            fallback.thoughtsOfHero = thoughtsMatch[1].split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+        }
+    } else {
+        fallback.thoughtsOfHero = [];
+    }
+    
     // Специальный парсинг для массива choices в новом формате
+    // Агрессивный парсинг для нового формата
+    console.warn('⚠️ Агрессивный парсинг для нового формата choices...');
     const choicesStartMatch = text.match(/"choices"\s*:\s*\[/);
     if (choicesStartMatch) {
         const startIdx = choicesStartMatch.index + choicesStartMatch[0].length;
@@ -247,15 +286,36 @@ function validateAndFixStructure(data) {
     // Если ИИ решил изменить личность, сохраняем это, иначе null
     data.personality_change = data.personality_change || null;
     
-    // 3. Нормализация инвентаря (ИИ может вернуть строку вместо массива)
-    if (data.inventory) {
-        if (typeof data.inventory === 'string') {
-            // Разбиваем строку по запятым, чистим пробелы и пустые значения
-            data.inventory = data.inventory.split(',').map(s => s.trim()).filter(Boolean);
-        } else if (!Array.isArray(data.inventory)) {
-            // Если пришел мусор, игнорируем
-            data.inventory = null;
+    // 3. Инвентарь
+    if (data.inventory_all) {
+        if (!Array.isArray(data.inventory_all)) {
+            data.inventory_all = [];
         }
+    } else {
+        data.inventory_all = [];
+    }
+    
+    // Отношенич
+    if (data.relations_all) {
+        if (typeof data.relations_all !== 'object') {
+            data.relations_all = {};
+        }
+    } else {
+        data.relations_all = {};
+    }
+    
+    // Личность
+    if (!data.personality) {
+        data.personality = null;
+    }
+    
+    // Мысли
+    if (data.thoughtsOfHero) {
+        if (!Array.isArray(data.thoughtsOfHero)) {
+            data.thoughtsOfHero = [data.thoughtsOfHero.toString()];
+        }
+    } else {
+        data.thoughtsOfHero = [];
     }
     
     // 4. Валидация выборов (choices)
@@ -296,10 +356,10 @@ function validateAndFixStructure(data) {
     data.progress_change = data.progress_change || 0;
     
     // Исправление мыслей героя (иногда ИИ возвращает строку вместо массива)
-    if (data.thoughtsOfHeroResponse && !Array.isArray(data.thoughtsOfHeroResponse)) {
-        data.thoughtsOfHeroResponse = [String(data.thoughtsOfHeroResponse)];
-    } else if (!data.thoughtsOfHeroResponse) {
-        data.thoughtsOfHeroResponse = [];
+    if (data.thoughtsOfHero && !Array.isArray(data.thoughtsOfHero)) {
+        data.thoughtsOfHero = [String(data.thoughtsOfHero)];
+    } else if (!data.thoughtsOfHero) {
+        data.thoughtsOfHero = [];
     }
     
     return data;
@@ -316,10 +376,10 @@ function safeParseAIResponse(text) {
         const data = robustJsonParse(text);
         
         // Попытка извлечь фразы, если их нет в основном объекте
-        if (!data.thoughtsOfHeroResponse || data.thoughtsOfHeroResponse.length === 0) {
+        if (!data.thoughtsOfHero || data.thoughtsOfHero.length === 0) {
             const extraPhrases = parseHeroPhrases(text);
             if (extraPhrases.length > 0) {
-                data.thoughtsOfHeroResponse = extraPhrases;
+                data.thoughtsOfHero = extraPhrases;
             }
         }
         
@@ -331,27 +391,26 @@ function safeParseAIResponse(text) {
             scene: "Ошибка генерации сцены. Ответ ИИ некорректен.",
             short_summary: "Ошибка парсинга",
             choices: [
-                {
-                    text: "Попробовать снова",
-                    requirements: {
-                        stats: {},
-                        inventory: null
-                    },
-                    success_changes: {
-                        stats: {},
-                        inventory_add: [],
-                        inventory_remove: []
-                    },
-                    failure_changes: {
-                        stats: {},
-                        inventory_add: [],
-                        inventory_remove: []
-                    }
+            {
+                text: "Попробовать снова",
+                requirements: {
+                    stats: {},
+                    inventory: null
+                },
+                success_changes: {
+                    stats: {},
+                    inventory_add: [],
+                    inventory_remove: []
+                },
+                failure_changes: {
+                    stats: {},
+                    inventory_add: [],
+                    inventory_remove: []
                 }
-            ],
+            }],
             stat_changes: {},
             progress_change: 0,
-            thoughtsOfHeroResponse: ["Что-то пошло не так..."]
+            thoughtsOfHero: ["Что-то пошло не так..."]
         };
     }
 }
@@ -513,12 +572,12 @@ function selectFolder() {
         
         input.onchange = function(e) {
             const files = Array.from(e.target.files);
-            const folderPath = files.length > 0 ? 
+            const folderPath = files.length > 0 ?
                 files[0].webkitRelativePath.split('/')[0] : null;
             
-            resolve({ 
-                files: files, 
-                folderPath: folderPath 
+            resolve({
+                files: files,
+                folderPath: folderPath
             });
             document.body.removeChild(input);
         };
@@ -588,12 +647,12 @@ function parseHeroPhrases(text) {
     if (!text || typeof text !== 'string') return [];
     
     try {
-        const jsonMatch = text.match(/\{.*"thoughtsOfHeroResponse".*\}/s);
+        const jsonMatch = text.match(/\{.*"thoughtsOfHero".*\}/s);
         if (jsonMatch) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]);
-                if (parsed.thoughtsOfHeroResponse && Array.isArray(parsed.thoughtsOfHeroResponse)) {
-                    return parsed.thoughtsOfHeroResponse;
+                if (parsed.thoughtsOfHero && Array.isArray(parsed.thoughtsOfHero)) {
+                    return parsed.thoughtsOfHero;
                 }
             } catch (jsonError) {
                 // Ignore
@@ -604,14 +663,14 @@ function parseHeroPhrases(text) {
         const phraseCandidates = lines
             .map(line => line.trim())
             .filter(line => {
-                return line.length >= 20 && 
-                        line.length <= 300 &&
-                        !line.includes('{') &&
-                        !line.includes('}') &&
-                        !line.includes('"scene"') &&
-                        !line.includes('"choices"') &&
-                        !line.includes('json') &&
-                        /[.!?;:]$/.test(line);
+                return line.length >= 20 &&
+                    line.length <= 300 &&
+                    !line.includes('{') &&
+                    !line.includes('}') &&
+                    !line.includes('"scene"') &&
+                    !line.includes('"choices"') &&
+                    !line.includes('json') &&
+                    /[.!?;:]$/.test(line);
             });
         
         if (phraseCandidates.length >= 3) {

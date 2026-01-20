@@ -106,29 +106,17 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         activeAbortController = null;
     }
     
-    let selectedChoicesData = []; // Храним объекты выбранных choices
+    let selectedChoicesData = [];
     
     if (state.freeMode) {
         const requestText = state.freeModeText.trim();
         if (requestText.length === 0) return;
         
-        // В режиме свободного ввода создаем псевдо-объект выбора
         selectedChoicesData = [{
             text: requestText,
-            requirements: {
-                stats: {},
-                inventory: null
-            },
-            success_changes: {
-                stats: {},
-                inventory_add: [],
-                inventory_remove: []
-            },
-            failure_changes: {
-                stats: {},
-                inventory_add: [],
-                inventory_remove: []
-            }
+            requirements: { stats: {}, inventory: null },
+            success_changes: { stats: {}, inventory_add: [], inventory_remove: [] },
+            failure_changes: { stats: {}, inventory_add: [], inventory_remove: [] }
         }];
         
         dom.freeInputText.disabled = true;
@@ -136,26 +124,13 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     } else {
         if (state.selectedChoices.length === 0) return;
         
-        // Собираем объекты выбранных choices
         selectedChoicesData = state.selectedChoices.map(i => {
             const choice = state.currentScene.choices[i];
-            // Гарантируем правильную структуру объекта choice
             return {
                 text: choice.text || "Действие",
-                requirements: choice.requirements || {
-                    stats: {},
-                    inventory: null
-                },
-                success_changes: choice.success_changes || {
-                    stats: {},
-                    inventory_add: [],
-                    inventory_remove: []
-                },
-                failure_changes: choice.failure_changes || {
-                    stats: {},
-                    inventory_add: [],
-                    inventory_remove: []
-                }
+                requirements: choice.requirements || { stats: {}, inventory: null },
+                success_changes: choice.success_changes || { stats: {}, inventory_add: [], inventory_remove: [] },
+                failure_changes: choice.failure_changes || { stats: {}, inventory_add: [], inventory_remove: [] }
             };
         });
     }
@@ -202,7 +177,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             }
         }
         
-        // Проверяем, есть ли в ответе фразы героя
+        // Проверяем, есть ли в ответе мысли героя
+        // ИСПРАВЛЕНО: используем thoughtsOfHeroResponse, а не thoughtsOfHero
         if (data.thoughtsOfHeroResponse && Array.isArray(data.thoughtsOfHeroResponse)) {
             State.addHeroPhrases(data.thoughtsOfHeroResponse);
         }
@@ -230,9 +206,6 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         
         console.error('💥 Ошибка в submitTurn:', e);
         
-        // Логирование уже произошло внутри API Facade -> Audit.
-        // Здесь мы только восстанавливаем UI и показываем алерт.
-        
         if (state.freeMode) {
             dom.freeInputText.disabled = false;
             dom.freeInputText.style.opacity = '1';
@@ -245,12 +218,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             errorMsg += '\n\n🔑 Введите валидный API-ключ в настройках.';
         }
         
-        // Используем улучшенное отображение ошибок
-        Render.showErrorAlert(
-            "Ошибка соединения",
-            errorMsg,
-            e
-        );
+        Render.showErrorAlert("Ошибка соединения", errorMsg, e);
         
         dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
         dom.btnSubmit.disabled = false;
@@ -259,14 +227,11 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         if (state.freeMode) {
             dom.freeInputText.disabled = false;
             dom.freeInputText.style.opacity = '1';
-            // Возвращаем фокус, чтобы можно было сразу править
             dom.freeInputText.focus();
         }
-        // ВАЖНО: Render.renderAuditList() здесь не нужен, так как Facade/Audit уже обновили UI.
         Saveload.saveState();
     }
 }
-
 
 
 /**
@@ -277,23 +242,40 @@ async function submitTurn(retries = CONFIG.maxRetries) {
  */
 function processTurn(data, selectedChoices, d10) {
     const state = State.getState();
-    let updatesHTML = []; // Массив HTML строк для лога
+    let updatesHTML = [];
     
     // --- 1. СТАТЫ ---
-    if (data.stat_changes) {
-        for (const [rawKey, v] of Object.entries(data.stat_changes)) {
-            const normalizedKey = Utils.normalizeStatKey(rawKey);
-            if (normalizedKey && v !== 0 && state.stats[normalizedKey] !== undefined) {
-                const oldVal = state.stats[normalizedKey];
-                state.stats[normalizedKey] = Math.max(0, Math.min(100, state.stats[normalizedKey] + v));
+    const VALID_STATS = ['will', 'stealth', 'influence', 'sanity'];
+    
+    if (data.stat_changes && typeof data.stat_changes === 'object') {
+        console.log("📊 Статы от ИИ:", data.stat_changes);
+        
+        for (const [rawKey, changeValue] of Object.entries(data.stat_changes)) {
+            let key = Utils.normalizeStatKey(rawKey) || rawKey.toLowerCase();
+            
+            // Исправление common алиасов
+            if (key === 'reason') key = 'sanity';
+            if (key === 'volya' || key === 'воля') key = 'will';
+            
+            if (VALID_STATS.includes(key) && changeValue !== 0) {
+                const oldVal = state.stats[key] || 50;
+                const newVal = Math.max(0, Math.min(100, oldVal + Number(changeValue)));
+                state.stats[key] = newVal;
                 
-                // Получаем русское название характеристики
-                const russianName = Render.getRussianStatName(normalizedKey);
+                const russianName = Render.getRussianStatName(key);
+                const color = changeValue > 0 ? '#4cd137' : '#e84118';
+                const sign = changeValue > 0 ? '+' : '';
                 
-                // Цвет: Зеленый (+) / Красный (-)
-                const color = v > 0 ? '#4cd137' : '#e84118';
-                const sign = v > 0 ? '+' : '';
-                updatesHTML.push(`<span style="color:${color}; font-weight:bold;">${russianName}: ${sign}${v}</span> <span style="color:#666; font-size:0.8em;">(${oldVal}→${state.stats[normalizedKey]})</span>`);
+                updatesHTML.push(`
+                    <div style="margin-bottom: 6px;">
+                        <span style="color:${color}; font-weight:bold;">
+                            ${russianName}: ${sign}${changeValue}
+                        </span>
+                        <span style="color:#666; font-size:0.8em;">
+                            (${oldVal}→${newVal})
+                        </span>
+                    </div>
+                `);
             }
         }
         State.setState({ stats: state.stats });
@@ -304,61 +286,116 @@ function processTurn(data, selectedChoices, d10) {
         const oldProgress = state.progress;
         state.progress += data.progress_change;
         const pColor = data.progress_change > 0 ? '#fbc531' : '#e84118';
-        updatesHTML.push(`<span style="color:${pColor}; font-weight:bold;">ПРОГРЕСС ${data.progress_change > 0 ? '+' : ''}${data.progress_change}</span> <span style="color:#666; font-size:0.8em;">(${oldProgress}→${state.progress})</span>`);
-        
+        updatesHTML.push(`
+            <div style="margin-bottom: 6px;">
+                <span style="color:${pColor}; font-weight:bold;">
+                    ПРОГРЕСС ${data.progress_change > 0 ? '+' : ''}${data.progress_change}
+                </span>
+                <span style="color:#666; font-size:0.8em;">
+                    (${oldProgress}→${state.progress})
+                </span>
+            </div>
+        `);
         State.syncDegree();
         State.setState({ progress: state.progress });
     }
     
     // --- 3. ЛИЧНОСТЬ ---
-    if (data.personality_change && data.personality_change !== state.personality) {
+    const newPersonality = data.personality || data.personality_change;
+    if (newPersonality && newPersonality !== state.personality) {
+        // Защитное преобразование в строку
+        const newPersonalityStr = String(newPersonality);
         const oldPersonality = state.personality;
-        state.personality = data.personality_change;
-        updatesHTML.push(`<span style="color:#00a8ff; font-weight:bold;"><i class="fas fa-brain"></i> Личность изменилась:</span><br><span style="color:#ccc; padding-left: 15px;">"${oldPersonality}" → "${state.personality}"</span>`);
+        state.personality = newPersonalityStr;
+        
+        updatesHTML.push(`
+        <div style="margin-bottom: 10px;">
+            <span style="color:#00a8ff; font-weight:bold;">
+                <i class="fas fa-brain"></i> Личность изменилась
+            </span>
+            <div style="color:#ccc; padding-left: 15px; font-size: 0.9em;">
+                <div><strong>Было:</strong> ${oldPersonality ? oldPersonality.substring(0, 100) : ''}...</div>
+                <div><strong>Стало:</strong> ${newPersonalityStr.substring(0, 100)}...</div>
+            </div>
+        </div>
+    `);
         State.setState({ personality: state.personality });
     }
     
-    // --- 4. ИНВЕНТАРЬ (Сравнение) ---
-    // Получаем старый инвентарь из памяти для сравнения
-    let oldInv = [];
-    if (state.aiMemory.inventory) {
-        oldInv = Array.isArray(state.aiMemory.inventory) ?
-            state.aiMemory.inventory :
-            String(state.aiMemory.inventory).split(',').map(s => s.trim()).filter(Boolean);
-    }
-    
-    // Если ИИ прислал новый инвентарь - это истина
-    if (data.inventory) {
-        const newInv = Array.isArray(data.inventory) ? data.inventory : [];
+    // --- 4. ИНВЕНТАРЬ (используем inventory_all) ---
+    if (data.inventory_all && Array.isArray(data.inventory_all)) {
+        const oldInv = [...state.inventory];
+        const newInv = data.inventory_all;
         
-        // Вычисляем разницу
-        const added = newInv.filter(x => !oldInv.includes(x));
-        const removed = oldInv.filter(x => !newInv.includes(x));
+        const added = newInv.filter(item => !oldInv.includes(item));
+        const removed = oldInv.filter(item => !newInv.includes(item));
         
         if (added.length > 0) {
-            updatesHTML.push(`<span style="color:#9c88ff; font-weight:bold;"><i class="fas fa-plus-circle"></i> Получены предметы:</span>`);
+            updatesHTML.push(`
+            <div style="margin-bottom: 8px;">
+                <span style="color:#9c88ff; font-weight:bold;">
+                    <i class="fas fa-plus-circle"></i> Получено:
+                </span>
+        `);
             added.forEach(item => {
-                updatesHTML.push(`<span style="color:#ccc; padding-left: 15px;">• ${item}</span>`);
+                updatesHTML.push(`
+                <div style="color:#ccc; padding-left: 25px;">• ${item}</div>
+            `);
             });
+            updatesHTML.push(`</div>`);
         }
         
         if (removed.length > 0) {
-            updatesHTML.push(`<span style="color:#7f8fa6; font-weight:bold;"><i class="fas fa-minus-circle"></i> Потеряны предметы:</span>`);
+            updatesHTML.push(`
+            <div style="margin-bottom: 8px;">
+                <span style="color:#7f8fa6; font-weight:bold;">
+                    <i class="fas fa-minus-circle"></i> Потеряно:
+                </span>
+        `);
             removed.forEach(item => {
-                updatesHTML.push(`<span style="color:#ccc; padding-left: 15px; text-decoration: line-through;">• ${item}</span>`);
+                updatesHTML.push(`
+                <div style="color:#ccc; padding-left: 25px; text-decoration: line-through;">• ${item}</div>
+            `);
             });
+            updatesHTML.push(`</div>`);
         }
         
-        // Обновляем память ИИ
-        state.aiMemory.inventory = newInv;
+        // Обновляем инвентарь в состоянии
+        state.inventory = newInv;
     }
-    // Сохраняем прочие обновления памяти
-    if (data.memoryUpdate) {
-        state.aiMemory = { ...state.aiMemory, ...data.memoryUpdate };
-    }
-    State.setState({ aiMemory: state.aiMemory });
     
-    // --- 5. РИТУАЛЫ ---
+    // --- 5. ОТНОШЕНИЯ (используем relations_all) ---
+    if (data.relations_all && typeof data.relations_all === 'object') {
+        const oldRelations = { ...state.relations };
+        const newRelations = data.relations_all;
+        
+        // Обновляем отношения
+        state.relations = newRelations;
+        
+        // Логирование изменений отношений
+        const relationChanges = [];
+        Object.entries(newRelations).forEach(([npc, val]) => {
+            const oldVal = oldRelations[npc] || 0;
+            if (val !== oldVal) {
+                relationChanges.push(`${npc}: ${oldVal} → ${val}`);
+            }
+        });
+        
+        if (relationChanges.length > 0) {
+            updatesHTML.push(`
+            <div style="margin-bottom: 8px;">
+                <span style="color:#fbc531; font-weight:bold;">
+                    <i class="fas fa-handshake"></i> Изменения отношений:
+                </span>
+                <div style="color:#ccc; padding-left: 25px;">
+                    ${relationChanges.map(r => `<div>• ${r}</div>`).join('')}
+                </div>
+            </div>
+        `);
+        }
+    }
+    
+    // --- 6. РИТУАЛЫ ---
     const nextDegree = CONFIG.degrees.find(d => d.threshold > state.progress);
     const thresholdReached = nextDegree && state.progress >= nextDegree.threshold;
     
@@ -375,7 +412,7 @@ function processTurn(data, selectedChoices, d10) {
     }
     State.setState({ isRitualActive: state.isRitualActive });
     
-    // --- 6. ЗАПИСЬ В ИСТОРИЮ ---
+    // --- 7. ЗАПИСЬ В ИСТОРИЮ ---
     // Для истории очищаем HTML теги, чтобы текст был чистым
     let plainUpdates = updatesHTML.map(u => u.replace(/<[^>]*>?/gm, '')).join(' | ');
     let playerChoiceText = state.freeMode ? selectedChoices[0].text : selectedChoices.map(c => c.text).join(' + ');
@@ -388,7 +425,7 @@ function processTurn(data, selectedChoices, d10) {
         d10: d10
     });
     
-    // --- 7. ОБНОВЛЕНИЕ СЦЕНЫ ---
+    // --- 8. ОБНОВЛЕНИЕ СЦЕНЫ ---
     state.currentScene = {
         text: data.scene || "...",
         choices: data.choices,
@@ -403,20 +440,25 @@ function processTurn(data, selectedChoices, d10) {
     state.freeMode = false;
     state.freeModeText = '';
     state.selectedChoices = [];
+    
+    // Обновляем состояние
     State.setState({
         history: state.history,
         currentScene: state.currentScene,
         freeMode: state.freeMode,
         freeModeText: state.freeModeText,
         selectedChoices: state.selectedChoices,
-        summary: state.summary
+        summary: state.summary,
+        inventory: state.inventory,
+        relations: state.relations,
+        aiMemory: state.aiMemory
     });
     State.incrementTurnCount();
     
-    // --- 8. РЕНДЕР ---
+    // --- 9. РЕНДЕР ---
     Render.renderAll();
     
-    // --- 9. ВЫВОД ЛОГА ИЗМЕНЕНИЙ В DOM И СОХРАНЕНИЕ В STATE ---
+    // --- 10. ВЫВОД ЛОГА ИЗМЕНЕНИЙ В DOM И СОХРАНЕНИЕ В STATE ---
     // Проверяем, есть ли изменения или результат броска
     const hasUpdates = updatesHTML.length > 0;
     const hasD10 = d10 !== undefined && d10 !== null;
@@ -466,7 +508,7 @@ function processTurn(data, selectedChoices, d10) {
                     return `<div style="margin-bottom: 8px; padding-left: 5px; border-left: 2px solid #333;">${group[0]}</div>`;
                 } else {
                     const mainItem = group[0];
-                    const subItems = group.slice(1).map(item => 
+                    const subItems = group.slice(1).map(item =>
                         `<div style="margin-left: 15px; margin-bottom: 3px;">${item}</div>`
                     ).join('');
                     return `<div style="margin-bottom: 10px;">${mainItem}${subItems}</div>`;

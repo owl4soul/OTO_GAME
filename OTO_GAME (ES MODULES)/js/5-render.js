@@ -617,7 +617,7 @@ function renderInventory() {
     }
     
     let items = [];
-    const rawInv = state.aiMemory.inventory;
+    const rawInv = state.inventory;
     if (rawInv) {
         if (Array.isArray(rawInv)) items = rawInv;
         else if (typeof rawInv === 'string') items = rawInv.split(',').map(s => s.trim()).filter(Boolean);
@@ -638,6 +638,68 @@ function renderInventory() {
         html += `</div>`;
     }
     invContainer.innerHTML = html;
+}
+
+/**
+ * Отрисовка отношений (аналогично инвентарю)
+ */
+function renderRelations() {
+    const state = State.getState();
+    
+    // Ищем/создаём контейнер
+    let relContainer = document.getElementById('relationsDisplay');
+    if (!relContainer) {
+        relContainer = document.createElement('div');
+        relContainer.id = 'relationsDisplay';
+        relContainer.className = 'relations-section';
+        // Ставим сразу под инвентарь, если он есть, иначе под personality
+        const invContainer = document.getElementById('inventoryContainer');
+        if (invContainer && invContainer.parentNode) {
+            invContainer.parentNode.insertBefore(relContainer, invContainer.nextSibling);
+        } else if (dom.pers && dom.pers.parentNode) {
+            dom.pers.parentNode.insertBefore(relContainer, dom.pers.nextSibling);
+        }
+    }
+
+    // Нормализуем отношения
+    let pairs = [];
+    const rawRel = state.relations;
+    if (rawRel && typeof rawRel === 'object') {
+        pairs = Object.entries(rawRel);
+    }
+
+    let html = `<div style="margin-top:10px; font-weight:bold; color:#fbc531; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
+        <i class="fas fa-handshake"></i> ОТНОШЕНИЯ
+    </div>`;
+
+    if (pairs.length === 0) {
+        html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Пока нет заметных связей...</div>`;
+    } else {
+        // Сортировка по убыванию отношения (от лучших к худшим)
+        pairs.sort(([, a], [, b]) => b - a);
+
+        html += `<div style="display:flex; flex-direction:column; gap:4px; font-size:0.75rem;">`;
+        pairs.forEach(([npc, val]) => {
+            const cleanName = String(npc).replace(/['"]/g, '');
+            const num = Number(val) || 0;
+
+            // Цвет по силе отношения
+            let color = '#ccc';
+            if (num >= 60) color = '#4cd137';        // сильный позитив
+            else if (num >= 20) color = '#9c88ff';   // умеренный позитив
+            else if (num > -20) color = '#fbc531';   // нейтрально
+            else if (num > -60) color = '#e84118';   // негатив
+            else color = '#c23616';                  // сильный негатив
+
+            html += `<div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                <span style="color:#ccc; max-width:60%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${cleanName}</span>
+                <span style="color:${color}; font-family:monospace;">${num}</span>
+            </div>`;
+        });
+        html += `</div>`;
+    }
+
+    relContainer.innerHTML = html;
 }
 
 /**
@@ -714,6 +776,7 @@ function renderAll() {
     renderStats();
     renderChoices();
     renderInventory(); 
+    renderRelations()
     renderHistory();
     applyStateEffects(); 
     
