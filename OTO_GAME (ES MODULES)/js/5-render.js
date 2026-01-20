@@ -218,6 +218,15 @@ function renderScene() {
         dom.reflection.style.display = 'none';
     }
     
+    // Восстановление плашки изменений за ход после перезагрузки
+    if (state.lastTurnUpdates && state.lastTurnUpdates.length > 0) {
+        dom.updates.style.display = 'block';
+        dom.updates.innerHTML = state.lastTurnUpdates;
+    } else {
+        dom.updates.style.display = 'none';
+        dom.updates.innerHTML = '';
+    }
+    
     // Скрываем обновления (будут показаны после хода)
     dom.updates.style.display = 'none';
 }
@@ -270,25 +279,297 @@ function updateUIMode() {
 }
 
 /**
- * Отрисовка вариантов выбора
+ * Нормализует название характеристики к стандартному ключу
+ * @param {string} statName - Название характеристики
+ * @returns {string} Нормализованный ключ (will, stealth, influence, sanity)
+ */
+function normalizeStatKey(statName) {
+    if (!statName) return '';
+    
+    const lowerStat = statName.toString().toLowerCase().trim();
+    
+    // Ищем в алиасах конфига
+    for (const [alias, key] of Object.entries(CONFIG.statAliases)) {
+        if (alias.toLowerCase() === lowerStat) {
+            return key; // Возвращаем стандартный ключ
+        }
+    }
+    
+    // Если не нашли в алиасах, проверяем стандартные ключи
+    const standardKeys = ['will', 'stealth', 'influence', 'sanity'];
+    if (standardKeys.includes(lowerStat)) {
+        return lowerStat;
+    }
+    
+    // Если ничего не подошло, возвращаем оригинал
+    return lowerStat;
+}
+
+/**
+ * Получает иконку для стандартного ключа характеристики
+ * @param {string} statKey - Стандартный ключ
+ * @returns {string} HTML иконки
+ */
+function getStatIcon(statKey) {
+    const icons = {
+        'will': '<i class="fas fa-brain" style="color: #ffcc00;"></i>',
+        'stealth': '<i class="fas fa-user-secret" style="color: #00ccff;"></i>',
+        'influence': '<i class="fas fa-crown" style="color: #ff66cc;"></i>',
+        'sanity': '<i class="fas fa-lightbulb" style="color: #66ff66;"></i>'
+    };
+    return icons[statKey] || '<i class="fas fa-question" style="color: #888;"></i>';
+}
+
+/**
+ * Создает компактный HTML для отображения требований (ОБНОВЛЕНО)
+ * @param {Object} requirements - Объект требований
+ * @returns {string} HTML строка
+ */
+function createRequirementsHTML(requirements) {
+    if (!requirements) return '';
+    
+    let html = '<div style="margin: 8px 0 12px 0; padding: 10px; background: rgba(30, 0, 0, 0.3); border-radius: 6px; border: 1px solid #222; font-size: 0.8rem;">';
+    
+    // Заголовок требований
+    html += '<div style="color: #ffcc00; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">';
+    html += '<i class="fas fa-list-check" style="font-size: 0.8rem;"></i>';
+    html += '<span>Требования</span>';
+    html += '</div>';
+    
+    // Статистические требования
+    if (requirements.stats && Object.keys(requirements.stats).length > 0) {
+        const statsList = [];
+        
+        for (const [stat, value] of Object.entries(requirements.stats)) {
+            const normalizedKey = normalizeStatKey(stat);
+            const russianName = getRussianStatName(normalizedKey);
+            const icon = getStatIcon(normalizedKey);
+            
+            statsList.push(`
+                <div style="display: flex; align-items: center; gap: 6px; padding: 3px 8px; background: rgba(0,0,0,0.2); border-radius: 4px; border: 1px solid #333;">
+                    ${icon}
+                    <span style="color: #ccc; min-width: 70px;">${russianName}:</span>
+                    <span style="color: #fff; font-weight: bold; font-family: monospace;">≥ ${value}</span>
+                </div>
+            `);
+        }
+        
+        if (statsList.length > 0) {
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 6px;">';
+            html += statsList.join('');
+            html += '</div>';
+        }
+    }
+    
+    // Требования инвентаря
+    if (requirements.inventory) {
+        html += '<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #333;">';
+        html += '<div style="display: flex; align-items: center; gap: 6px; padding: 4px; background: rgba(0,0,0,0.2); border-radius: 4px;">';
+        html += '<i class="fas fa-box-open" style="font-size: 0.75rem; color: #888;"></i>';
+        html += '<span style="color: #ccc; min-width: 70px;">Предмет:</span>';
+        html += `<span style="color: #fff;">${requirements.inventory}</span>`;
+        html += '</div>';
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    return html;
+}
+
+/**
+ * Создает компактный HTML для отображения изменений (ОБНОВЛЕНО)
+ * @param {Object} changes - Объект изменений
+ * @param {string} type - Тип изменений ('success' или 'failure')
+ * @returns {string} HTML строка
+ */
+function createChangesHTML(changes, type) {
+    if (!changes) return '';
+    
+    const isSuccess = type === 'success';
+    const borderColor = isSuccess ? '#4CAF50' : '#f44336';
+    const headerBg = isSuccess ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)';
+    const typeText = isSuccess ? 'При успехе' : 'При провале';
+    const typeIcon = isSuccess ? 'fas fa-check-circle' : 'fas fa-times-circle';
+    
+    let html = `<div style="border: 1px solid ${borderColor}; border-radius: 6px; overflow: hidden;">`;
+    html += `<div style="background: ${headerBg}; padding: 5px; border-bottom: 1px solid ${borderColor}; display: flex; align-items: center; gap: 5px;">`;
+    html += `<i class="${typeIcon}" style="color: ${borderColor}; font-size: 0.85rem;"></i>`;
+    html += `<span style="color: ${borderColor}; font-weight: 300; font-size: 0.85rem;">${typeText}</span>`;
+    html += '</div>';
+    html += '<div style="padding: 5px;">';
+    
+    // Изменения характеристик
+    if (changes.stats && Object.keys(changes.stats).length > 0) {
+        for (const [stat, value] of Object.entries(changes.stats)) {
+            const normalizedKey = normalizeStatKey(stat);
+            const russianName = getRussianStatName(normalizedKey);
+            const icon = getStatIcon(normalizedKey);
+            const sign = value > 0 ? '+' : '';
+            const valueColor = value > 0 ? '#4CAF50' : '#f44336';
+            
+            html += `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #333;">
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        ${icon}
+                        <span style="color: #ccc; font-size: 0.85rem;">${russianName}:</span>
+                    </div>
+                    <span style="color: ${valueColor}; font-weight: bold; font-family: monospace; font-size: 0.8rem;">${sign}${value}</span>
+                </div>
+            `;
+        }
+    }
+    
+    // Инвентарь (добавление)
+    if (changes.inventory_add && changes.inventory_add.length > 0) {
+        changes.inventory_add.forEach(item => {
+            html += `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #333;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-plus-circle" style="font-size: 0.75rem; color: #4CAF50;"></i>
+                        <span style="color: #ccc; font-size: 0.85rem;">Предмет:</span>
+                    </div>
+                    <span style="color: #4CAF50; font-weight: bold;">${item}</span>
+                </div>
+            `;
+        });
+    }
+    
+    // Инвентарь (удаление)
+    if (changes.inventory_remove && changes.inventory_remove.length > 0) {
+        changes.inventory_remove.forEach(item => {
+            html += `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #333;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-minus-circle" style="font-size: 0.75rem; color: #f44336;"></i>
+                        <span style="color: #ccc; font-size: 0.85rem;">Предмет:</span>
+                    </div>
+                    <span style="color: #f44336; font-weight: bold;">${item}</span>
+                </div>
+            `;
+        });
+    }
+    
+    html += '</div></div>';
+    return html;
+}
+
+// =================================================
+// УПРОЩЕННАЯ ФУНКЦИЯ renderChoices для отладки
+// =================================================
+
+/**
+ * Получение русского названия стата
+ */
+function getRussianStatName(key) {
+    const map = { 
+        'will': 'Воля', 
+        'stealth': 'Скрыт.', 
+        'influence': 'Влияние', 
+        'sanity': 'Разум' 
+    };
+    return map[key] || key;
+}
+
+/**
+ * Компактный формат требований (одной строкой)
+ */
+function formatCompactRequirements(req) {
+    if (!req) return '';
+    let items = [];
+    
+    // Статы
+    if (req.stats) {
+        for (const [key, val] of Object.entries(req.stats)) {
+            const normKey = Utils.normalizeStatKey(key);
+            const ruName = getRussianStatName(normKey);
+            // Желтый цвет для требований
+            items.push(`<span style="color:#fbc531;">${ruName}≥${val}</span>`);
+        }
+    }
+    // Предмет
+    if (req.inventory) {
+        // Голубой цвет для предмета
+        items.push(`<span style="color:#00a8ff;">📦${req.inventory}</span>`);
+    }
+    
+    if (items.length === 0) return '';
+    // Иконка замка
+    return `<div style="font-size:0.75rem; margin-top:3px; color:#888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.3">🔒 Треб: ${items.join(', ')}</div>`;
+}
+
+/**
+ * Компактный формат последствий (одной строкой)
+ */
+function formatCompactChanges(success, failure) {
+    let html = '';
+    
+    // Хелпер для форматирования одного блока (Успех или Провал)
+    const formatBlock = (changes, color, iconSymbol) => {
+        let items = [];
+        // Статы
+        if (changes.stats) {
+            for (const [key, val] of Object.entries(changes.stats)) {
+                if (val === 0) continue;
+                const normKey = Utils.normalizeStatKey(key);
+                const ruName = getRussianStatName(normKey);
+                const sign = val > 0 ? '+' : '';
+                items.push(`${ruName}${sign}${val}`);
+            }
+        }
+        // Инвентарь
+        if (changes.inventory_add && changes.inventory_add.length) {
+            changes.inventory_add.forEach(i => items.push(`+📦${i}`));
+        }
+        if (changes.inventory_remove && changes.inventory_remove.length) {
+            changes.inventory_remove.forEach(i => items.push(`-📦${i}`));
+        }
+        
+        if (items.length === 0) return '';
+        return `<span style="color:${color}; margin-right:8px;">${iconSymbol} ${items.join(', ')}</span>`;
+    };
+
+    const sHtml = formatBlock(success, '#4cd137', '✅'); // Зеленый для успеха
+    const fHtml = formatBlock(failure, '#e84118', '❌'); // Красный для провала
+    
+    if (sHtml) {
+        html = `<div style="font-size:0.75rem; margin-top:2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.3">${sHtml}</div>`;
+    }
+    
+       if (fHtml) {
+        html += `<div style="font-size:0.75rem; margin-top:2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.3">${fHtml}</div>`;
+    }
+    
+    return html;
+}
+
+/**
+ * Отрисовка вариантов выбора (упрощенная версия для отладки)
  */
 function renderChoices() {
     const state = State.getState();
-    
     dom.choicesList.innerHTML = '';
     
-    // Создаем кнопки для каждого варианта
-    state.currentScene.choices.forEach((txt, idx) => {
+    state.currentScene.choices.forEach((choice, idx) => {
         const btn = document.createElement('button');
+        // Добавляем класс selected, если вариант выбран
         btn.className = `choice-btn ${state.selectedChoices.includes(idx) ? 'selected' : ''}`;
-        btn.textContent = txt;
+        
+        // 1. Текст действия
+        let content = `${choice.text}`;
+        
+        // 2. Компактные требования и последствия (под текстом)
+        // Если это режим отладки или просто отображение - показываем всегда
+        content += formatCompactRequirements(choice.requirements);
+        content += formatCompactChanges(choice.success_changes, choice.failure_changes);
+        
+        btn.innerHTML = content;
         btn.onclick = () => Game.toggleChoice(idx);
         dom.choicesList.appendChild(btn);
     });
     
-    // Обновляем счетчик выбранных вариантов
-    dom.choicesCounter.textContent = `${state.selectedChoices.length}/${CONFIG.maxChoices}`;
-    dom.btnSubmit.disabled = state.selectedChoices.length === 0;
+    // Обновляем счетчик
+    const count = state.selectedChoices ? state.selectedChoices.length : 0;
+    dom.choicesCounter.textContent = `${count}/${CONFIG.maxChoices}`;
 }
 
 /**
@@ -321,50 +602,41 @@ function renderStats() {
 }
 
 /**
- * Отрисовка инвентаря
+ * Отрисовка инвентаря (ПРОСТОЙ ИСПРАВЛЕННЫЙ ВАРИАНТ)
  */
 function renderInventory() {
     const state = State.getState();
-    
-    // Ищем или создаем контейнер инвентаря
     let invContainer = document.getElementById('inventoryContainer');
     if (!invContainer) {
         invContainer = document.createElement('div');
         invContainer.id = 'inventoryContainer';
         invContainer.className = 'inventory-section';
-        // Вставляем после списка степеней
-        const degreeList = document.getElementById('degreeListUI');
-        if (degreeList && degreeList.parentNode) {
-            degreeList.parentNode.appendChild(invContainer);
+        if (dom.pers && dom.pers.parentNode) {
+            dom.pers.parentNode.insertBefore(invContainer, dom.pers.nextSibling);
         }
     }
     
-    // Получаем предметы из aiMemory
-    // ИИ может хранить их как массив строк или строку через запятую
     let items = [];
-    if (state.aiMemory && state.aiMemory.inventory) {
-        if (Array.isArray(state.aiMemory.inventory)) {
-            items = state.aiMemory.inventory;
-        } else if (typeof state.aiMemory.inventory === 'string') {
-            items = state.aiMemory.inventory.split(',').map(s => s.trim());
-        }
+    const rawInv = state.aiMemory.inventory;
+    if (rawInv) {
+        if (Array.isArray(rawInv)) items = rawInv;
+        else if (typeof rawInv === 'string') items = rawInv.split(',').map(s => s.trim()).filter(Boolean);
     }
     
-    // Отрисовка
-    let html = `<div class="inventory-title"><i class="fas fa-box-open"></i> АРТЕФАКТЫ</div>`;
+    let html = `<div style="margin-top:15px; font-weight:bold; color:#d4af37; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
+        <i class="fas fa-box-open"></i> ИНВЕНТАРЬ
+    </div>`;
     
     if (items.length === 0) {
-        html += `<div class="inventory-empty">Пусто...</div>`;
+        html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Пусто...</div>`;
     } else {
-        html += `<div class="inventory-grid">`;
+        html += `<div style="display:flex; flex-wrap:wrap; gap:6px;">`;
         items.forEach(item => {
-            // Очищаем от лишних кавычек если есть
             const cleanItem = item.replace(/['"]/g, '');
-            html += `<div class="inventory-item" title="${cleanItem}">${cleanItem}</div>`;
+            html += `<span style="background:rgba(255,255,255,0.08); padding:3px 8px; border-radius:4px; font-size:0.75rem; border:1px solid #444; color:#ccc;">${cleanItem}</span>`;
         });
         html += `</div>`;
     }
-    
     invContainer.innerHTML = html;
 }
 
@@ -598,6 +870,7 @@ export const Render = {
     updateLogCount,
     renderAuditList,
     renderScene,
+    getRussianStatName,
     updateUIMode,
     renderChoices,
     renderStats,

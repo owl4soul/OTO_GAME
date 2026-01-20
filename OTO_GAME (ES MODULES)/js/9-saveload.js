@@ -21,6 +21,7 @@ function saveState() {
         isRitualActive: state.isRitualActive,
         currentScene: state.currentScene,
         history: state.history,
+        summary: state.summary,
         selectedChoices: state.selectedChoices,
         freeMode: state.freeMode,
         freeModeText: state.freeModeText,
@@ -28,7 +29,10 @@ function saveState() {
         thoughtsOfHero: state.thoughtsOfHero,
         settings: state.settings,
         gameId: state.gameId,
-        lastSaveTime: state.lastSaveTime
+        lastSaveTime: state.lastSaveTime,
+        // Сохранение памяти (инвентарь) и изменений за ход
+        aiMemory: state.aiMemory,
+        lastTurnUpdates: state.lastTurnUpdates
     };
 
     // Сохраняем все в localStorage
@@ -63,6 +67,7 @@ function loadState() {
             state.isRitualActive = p.isRitualActive || false;
             state.currentScene = p.currentScene || state.currentScene;
             state.history = p.history || state.history;
+            
             state.selectedChoices = p.selectedChoices || state.selectedChoices;
             state.freeMode = p.freeMode || state.freeMode;
             state.freeModeText = p.freeModeText || state.freeModeText;
@@ -71,6 +76,13 @@ function loadState() {
             state.settings = p.settings || state.settings;
             state.gameId = p.gameId || state.gameId;
             state.lastSaveTime = p.lastSaveTime || state.lastSaveTime;
+            
+            // Восстановление памяти (Инвентарь) и Лога изменений
+            // Если в сохранении нет aiMemory, инициализируем пустым объектом
+            state.aiMemory = p.aiMemory || { inventory: [] };
+            
+            // Восстанавливаем строку изменений за ход
+            state.lastTurnUpdates = p.lastTurnUpdates || "";
 
             // Загружаем аудит-логи
             const savedAudit = localStorage.getItem('oto_audit_log');

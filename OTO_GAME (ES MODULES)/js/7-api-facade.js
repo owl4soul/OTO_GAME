@@ -30,15 +30,12 @@ function getProviderInfo(state) {
 
 /**
  * ОСНОВНАЯ ФУНКЦИЯ: Отправляет запрос игрового хода к LLM и обрабатывает его ответ.
- * Включает логирование через модуль Audit.
- * 
- * @param {string} choiceText - Текстовое описание действия, которое выбрал или ввел игрок.
+ * @param {Array} selectedChoices - Массив выбранных объектов действий.
  * @param {number} d10 - Результат броска виртуального кубика d10.
  * @param {AbortController|null} abortController - Контроллер для возможности отмены запроса.
  * @returns {Promise<Object>} Промис, разрешающийся в очищенный JSON-объект.
- * @throws {Error} Пробрасывает ошибку в случае критических сбоев.
  */
-async function sendAIRequest(choiceText, d10, abortController = null) { // Убран аргумент auditEntry, теперь мы создаем его сами
+async function sendAIRequest(selectedChoices, d10, abortController = null) { // Убран аргумент auditEntry, теперь мы создаем его сами
     const state = State.getState(); // Получаем актуальное состояние игры
     const { url, apiKey, isVsegpt } = getProviderInfo(state); // Определяем провайдера и ключ
     
@@ -59,7 +56,7 @@ async function sendAIRequest(choiceText, d10, abortController = null) { // Уб�
     }
     
     // --- ЭТАП 1: ПОДГОТОВКА PAYLOAD (через API_Request) ---
-    const requestPayload = API_Request.prepareRequestPayload(state, choiceText, d10);
+    const requestPayload = API_Request.prepareRequestPayload(state, selectedChoices, d10);
     
     // Специфические настройки для определенных моделей/провайдеров
     if (isVsegpt && state.settings.model.includes('gpt-3.5-turbo-16k')) {
@@ -73,7 +70,7 @@ async function sendAIRequest(choiceText, d10, abortController = null) { // Уб�
     // --- ЛОГИРОВАНИЕ: СОЗДАНИЕ ЗАПИСИ ---
     // Создаем запись "pending" через модуль Audit
     const auditEntry = Audit.createEntry(
-        `Игровой ход: ${choiceText.substring(0, 30)}...`,
+        `Игровой ход: ${selectedChoices}`,
         requestPayload,
         state.settings.model,
         state.settings.apiProvider
@@ -167,7 +164,7 @@ async function generateCustomScene(promptText) {
             { role: "system", content: Prompts.system.scenarioWriter },
             { role: "user", content: promptText }
         ],
-        max_tokens: 5000,
+        max_tokens: 10000,
         temperature: 0.85
     };
     

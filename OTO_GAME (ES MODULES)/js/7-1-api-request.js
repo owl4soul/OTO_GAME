@@ -120,38 +120,46 @@ function buildContextBlock(state) {
 
 /**
  * Подготовка полного тела запроса (Payload) для отправки в API LLM.
- * Собирает все части промпта (системные, динамические, пользовательские)
- * и оборачивает их в структуру, понятную API.
- * 
  * @param {Object} state - Состояние игры.
- * @param {string} choiceText - Текст действия, которое выбрал или ввел игрок.
- * @param {number} d10 - Результат броска виртуального d10 (используется для влияния на исход).
- * @param {string|null} customContext - Опциональный пользовательский контекст (используется для спец.запросов, напр. генерации начальной сцены).
+ * @param {Array} selectedChoices - Массив выбранных объектов действий.
+ * @param {number} d10 - Результат броска виртуального d10.
+ * @param {string|null} customContext - Опциональный пользовательский контекст.
  * @returns {Object} Объект payload, готовый к JSON.stringify и отправке через fetch.
  */
-function prepareRequestPayload(state, choiceText, d10, customContext = null) {
+function prepareRequestPayload(state, selectedChoices, d10, customContext = null) {
     // Проверяем, нужно ли запросить новые "мысли героя"
     const needsHeroPhrases = State.needsHeroPhrases();
     
     // 1. Формируем ПОЛНЫЙ СИСТЕМНЫЙ ПРОМПТ
-    // Объединяем базовую роль LLM (из конфига) с динамическими инструкциями.
     const dynamicSystemPart = getDynamicSystemInjections(state);
     
     const systemPromptFull = `${Prompts.system.main}
     
 ${dynamicSystemPart}
 
-${Prompts.format.jsonFormatStrict}`; // Завершающая строгая инструкция по формату
-    // ВАЖНО: Ниже будет добавляться только User-prompt
-    // Все форматы и ограничения LLM должны быть здесь (SYSTEM)
-    // или в финале USER промпта (User prompt footer)
+${Prompts.format.jsonFormatStrict}`;
+    
     // 2. Формируем ПОЛНЫЙ ПОЛЬЗОВАТЕЛЬСКИЙ ПРОМПТ
     const contextBlock = customContext || buildContextBlock(state);
     
     // Дополнительная задача по генерации мыслей героя (если нужно)
     const thoughtsRequestInstruction = needsHeroPhrases ? Prompts.userHeaders.reqThoughts : "";
     
-    // Строим основной User-промпт, интегрируя все части
+    // Формируем информацию о выбранных действиях
+    let actionText;
+    let selectedActions = null;
+    
+    if (selectedChoices.length === 1 && selectedChoices[0].text) {
+        // Режим свободного ввода или одиночный выбор
+        actionText = selectedChoices[0].text;
+        selectedActions = JSON.stringify(selectedChoices, null, 2);
+    } else {
+        // Множественный выбор
+        actionText = selectedChoices.map(choice => choice.text).join(' + ');
+        selectedActions = JSON.stringify(selectedChoices, null, 2);
+    }
+    
+    // Строим основной User-промпт
     const userPrompt = `
 ${Prompts.format.mainTaskPrefix}
 ${Prompts.format.mainTask}
@@ -162,11 +170,8 @@ ${Prompts.format.progressAndDegrees}
 Текущий прогресс игрока: ${state.progress}
 Следующая степень: ${CONFIG.degrees.find(d => d.threshold > state.progress)?.name || "XI° и выше"}
 Порог следующей степени: ${CONFIG.degrees.find(d => d.threshold > state.progress)?.threshold || "∞"}
-Если state.progress ≥ порог следующей степени и игрок ещё не проходил ритуал этой степени → немедленно начинай Посвятический Ритуал (2–10 сцен).
-Во время ритуала progress_change = 0.
-В последней сцене ритуала обязательно включи в свой ответ рефлексию и обнови Личность под новую Степень.
 
-${Prompts.userHeaders.d10PromptPart}${d10}
+${Prompts.userHeaders.d10Luck}${d10}
 
 ${Prompts.userHeaders.historyPrefix}
 ${contextBlock || "История отсутствует"}
@@ -174,7 +179,7 @@ ${contextBlock || "История отсутствует"}
 ${Prompts.userHeaders.currentScene}
 ${state.currentScene.text}
 
-${Prompts.userHeaders.stateParametersPrefix}
+${Prompts.userHeaders.actualStatesValues}
 [Воля: ${state.stats.will},
 Скрытность: ${state.stats.stealth},
 Влияние: ${state.stats.influence},
@@ -183,19 +188,21 @@ ${Prompts.userHeaders.stateParametersPrefix}
 [Личность: ${state.personality}]
 
 ${Prompts.userHeaders.action}
-"${choiceText}"
+"${actionText}"
+
+[СТРУКТУРИРОВАННЫЕ ВЫБРАННЫЕ ДЕЙСТВИЯ]:
+${selectedActions}
 
 ${thoughtsRequestInstruction}
     
-${Prompts.userHeaders.reqJsonEnd}`; // Финальная инструкция: "Сгенерируй JSON"
+${Prompts.userHeaders.reqJsonEnd}`;
     
-    // Возвращаем объект payload, совместимый с API OpenAI Chat Completions.
     return {
         messages: [
             { role: "system", content: systemPromptFull },
             { role: "user", content: userPrompt }
         ],
-        model: state.settings.model // Используемая модель ИИ
+        model: state.settings.model
     };
 }
 

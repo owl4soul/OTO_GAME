@@ -60,6 +60,16 @@ function processAIResponse(rawText) {
     if (!parsedData.choices || !Array.isArray(parsedData.choices) || parsedData.choices.length === 0) {
         // Если нет вариантов выбора или они пусты, предлагаем стандартное действие.
         parsedData.choices = ["Попытаться осмыслить произошедшее..."];
+    } else {
+        // ВАЖНО: НОРМАЛИЗАЦИЯ CHOICES
+        // Если ИИ все же вернул массив строк (старый формат), преобразуем их в объекты "на лету",
+        // чтобы Render не сломался.
+        parsedData.choices = parsedData.choices.map(choice => {
+            if (typeof choice === 'string') {
+                return { text: choice }; // Оборачиваем строку в объект
+            }
+            return choice; // Если уже объект, возвращаем как есть
+        });
     }
     
     // 4. ДЕТЕКТОР ДИНАМИЧЕСКИХ ПОЛЕЙ (Unknown Fields Extractor).

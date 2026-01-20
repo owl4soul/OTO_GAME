@@ -4,154 +4,356 @@
 import { CONFIG } from './1-config.js';
 
 /**
+ * Пытается починить обрезанный JSON (Auto-Heal)
+ * Восстанавливает закрывающие кавычки и скобки.
+ * @param {string} text - Битая JSON строка
+ * @returns {string} - Потенциально валидная JSON строка
+ */
+function repairTruncatedJSON(text) {
+    let repaired = text.trim();
+    
+    // 1. Если обрыв внутри строки (нечетное кол-во кавычек), закрываем кавычку
+    // Считаем неэкранированные кавычки
+    let quoteCount = 0;
+    for (let i = 0; i < repaired.length; i++) {
+        if (repaired[i] === '"' && (i === 0 || repaired[i-1] !== '\\')) {
+            quoteCount++;
+        }
+    }
+    
+    if (quoteCount % 2 !== 0) {
+        // Если обрыв произошел прямо на экранирующем слеше, убираем его
+        if (repaired.endsWith('\\')) {
+            repaired = repaired.slice(0, -1);
+        }
+        repaired += '"';
+    }
+
+    // 2. Удаляем "висячую" запятую в конце (частая проблема обрыва массивов/объектов)
+    // Например: {"items": ["key",], -> {"items": ["key"]}
+    repaired = repaired.replace(/,\s*([}\]]*)$/, '$1');
+
+    // 3. Балансируем скобки
+    // Считаем фигурные { и }
+    const openCurly = (repaired.match(/\{/g) || []).length;
+    const closeCurly = (repaired.match(/\}/g) || []).length;
+    // Считаем квадратные [ и ]
+    const openSquare = (repaired.match(/\[/g) || []).length;
+    const closeSquare = (repaired.match(/\]/g) || []).length;
+
+    // Добавляем недостающие закрывающие скобки.
+    // Эвристика: обычно в JSON сначала закрывают массивы, потом объекты.
+    if (openSquare > closeSquare) {
+        repaired += ']'.repeat(openSquare - closeSquare);
+    }
+    if (openCurly > closeCurly) {
+        repaired += '}'.repeat(openCurly - closeCurly);
+    }
+    
+    return repaired;
+}
+
+/**
+ * Извлекает объекты choices из текста массива (новый формат)
+ * Знаем структуру: text, requirements{stats{}, inventory}, success_changes, failure_changes
+ * @param {string} choicesText - Текст массива choices
+ * @returns {Array} Массив объектов choice
+ */
+function extractChoiceObjects(choicesText) {
+    const choiceObjects = [];
+    let currentObject = '';
+    let braceDepth = 0;
+    let inString = false;
+    let escapeNext = false;
+    
+    for (let i = 0; i < choicesText.length; i++) {
+        const char = choicesText[i];
+        
+        if (escapeNext) {
+            currentObject += char;
+            escapeNext = false;
+            continue;
+        }
+        
+        if (char === '\\') {
+            currentObject += char;
+            escapeNext = true;
+            continue;
+        }
+        
+        if (char === '"') {
+            inString = !inString;
+        }
+        
+        if (!inString) {
+            if (char === '{') {
+                if (braceDepth === 0) {
+                    currentObject = '';
+                }
+                braceDepth++;
+            } else if (char === '}') {
+                braceDepth--;
+                if (braceDepth === 0) {
+                    currentObject += char;
+                    try {
+                        const parsedObject = JSON.parse(currentObject);
+                        // Валидируем структуру объекта choice
+                        if (parsedObject.text && typeof parsedObject.text === 'string') {
+                            choiceObjects.push(parsedObject);
+                        }
+                    } catch (e) {
+                        console.warn('Не удалось распарсить объект choice:', currentObject.substring(0, 100));
+                    }
+                    currentObject = '';
+                    continue;
+                }
+            } else if (char === ',' && braceDepth === 0) {
+                // Разделитель между объектами - пропускаем
+                continue;
+            }
+        }
+        
+        if (braceDepth > 0) {
+            currentObject += char;
+        }
+    }
+    
+    return choiceObjects;
+}
+
+/**
  * Надежный парсинг JSON из ответа ИИ
+ * Специально для нового формата с requirements, success_changes, failure_changes
  * @param {string} rawContent - Сырой текст ответа
  * @returns {Object} Распарсенный JSON объект
  */
 function robustJsonParse(rawContent) {
+    if (!rawContent) {
+        throw new Error('Пустой ответ от ИИ');
+    }
+
     let text = rawContent.trim();
     
-    // Удаляем обертки ```json ``` если они есть
+    // Удаляем обертки markdown
     text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
     text = text.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
     
-    // Пытаемся разные способы парсинга
-    const attempts = [];
+    // Пытаемся стандартный парсинг
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        console.warn('Стандартный JSON.parse не удался, переходим к агрессивному парсингу:', e.message);
+    }
     
-    // Способ 1: Стандартный JSON.parse (Самый чистый)
-    attempts.push(() => JSON.parse(text));
+    // Агрессивный парсинг для нового формата
+    console.warn('⚠️ Агрессивный парсинг для нового формата choices...');
     
-    // Способ 2: Убираем лишние запятые перед закрывающими скобками (Частая ошибка ИИ)
-    attempts.push(() => JSON.parse(text.replace(/,\s*([}\]])/g, '$1')));
+    // Извлекаем основные поля через regex
+    const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    const shortSummaryMatch = text.match(/"short_summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
     
-    // Способ 3: Ищем первый { и последний } (Если есть мусор до/после JSON)
-    attempts.push(() => {
-        let start = text.indexOf('{');
-        if (start === -1) throw new Error('No { found');
-        let braceCount = 0;
-        let lastValidPos = -1;
-        for (let i = start; i < text.length; i++) {
-            if (text[i] === '{') braceCount++;
-            if (text[i] === '}') {
-                braceCount--;
-                if (braceCount === 0) lastValidPos = i + 1;
-            }
-        }
-        if (lastValidPos > start) {
-            let candidate = text.substring(start, lastValidPos);
-            // Удаляем висячую запятую, если она есть
-            candidate = candidate.replace(/,\s*$/, '');
-            return JSON.parse(candidate);
-        }
-        throw new Error('No complete JSON object found');
-    });
+    const fallback = {
+        scene: sceneMatch ? sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : "Сцена не сгенерирована",
+        short_summary: shortSummaryMatch ? shortSummaryMatch[1].replace(/\\"/g, '"') : "",
+        choices: [],
+        stat_changes: {},
+        progress_change: 0,
+        thoughtsOfHeroResponse: []
+    };
     
-    // Способ 4: АГРЕССИВНЫЙ FALLBACK (ИСПРАВЛЕНО ДЛЯ СКОБОК ВНУТРИ ТЕКСТА)
-    // Работает, если JSON сломан синтаксически (например, 10+5=15 или нет запятых)
-    attempts.push(() => {
-        console.warn('⚠️ Использован агрессивный парсинг (JSON сломан)');
+    // Специальный парсинг для массива choices в новом формате
+    const choicesStartMatch = text.match(/"choices"\s*:\s*\[/);
+    if (choicesStartMatch) {
+        const startIdx = choicesStartMatch.index + choicesStartMatch[0].length;
+        let choicesText = '';
+        let bracketCount = 1;
+        let inString = false;
+        let escapeNext = false;
         
-        const fallback = {
-            scene: "",
-            choices: [],
-            reflection: "",
-            stat_changes: {},
-            progress_change: 0
-        };
-        
-        // 1. Вытаскиваем сцену (Ищем поле "scene": "..." или берем текст до choices)
-        const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-        if (sceneMatch) {
-            fallback.scene = sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-        } else {
-            // Если ключ scene не найден, берем всё до начала массива choices
-            const splitPoint = text.search(/"choices"|\[/);
-            fallback.scene = (splitPoint > -1) ? text.substring(0, splitPoint) : text.substring(0, 800);
-            // Чистим от мусора JSON
-            fallback.scene = fallback.scene.replace(/[{}]/g, '').trim();
-        }
-        
-        
-        // [СТАЛО (ВСТАВИТЬ ЭТОТ КОД)]
-        // 2. УМНЫЙ ПОИСК ВАРИАНТОВ (State Machine)
-        // Решает проблему скобок [] внутри текста вариантов, например "Удар [Сила]"
-        const choicesKeyIndex = text.indexOf('"choices"');
-        
-        if (choicesKeyIndex !== -1) {
-            // Находим открывающую скобку массива после слова "choices"
-            const openBracketIndex = text.indexOf('[', choicesKeyIndex);
+        // Извлекаем содержимое массива choices
+        for (let i = startIdx; i < text.length; i++) {
+            const char = text[i];
             
-            if (openBracketIndex !== -1) {
-                let balance = 1; // Счетчик уровня вложенности скобок
-                let inQuotes = false; // Флаг "мы внутри кавычек"
-                let closeBracketIndex = -1;
-                
-                // Идем посимвольно, чтобы найти ИСТИННУЮ закрывающую скобку массива
-                for (let i = openBracketIndex + 1; i < text.length; i++) {
-                    const char = text[i];
-                    const prevChar = text[i - 1];
-                    
-                    // Обработка кавычек (игнорируем экранированные \")
-                    if (char === '"' && prevChar !== '\\') {
-                        inQuotes = !inQuotes;
-                    }
-                    
-                    // Если мы НЕ внутри строки, считаем скобки
-                    if (!inQuotes) {
-                        if (char === '[') balance++;
-                        if (char === ']') {
-                            balance--;
-                            if (balance === 0) {
-                                closeBracketIndex = i;
-                                break; // Нашли конец массива!
-                            }
-                        }
-                    }
-                }
-                
-                if (closeBracketIndex !== -1) {
-                    // Вырезаем всё содержимое массива между [ и ]
-                    const rawArrayContent = text.substring(openBracketIndex + 1, closeBracketIndex);
-                    
-                    // Регулярка ищет текст в кавычках ("Вариант 1", "Вариант 2")
-                    // Флаг 'g' находит все совпадения
-                    const choicesFound = [...rawArrayContent.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map(m => m[1]);
-                    
-                    if (choicesFound.length > 0) {
-                        fallback.choices = choicesFound;
+            if (escapeNext) {
+                choicesText += char;
+                escapeNext = false;
+                continue;
+            }
+            
+            if (char === '\\') {
+                choicesText += char;
+                escapeNext = true;
+                continue;
+            }
+            
+            if (char === '"') {
+                inString = !inString;
+            }
+            
+            if (!inString) {
+                if (char === '[') {
+                    bracketCount++;
+                } else if (char === ']') {
+                    bracketCount--;
+                    if (bracketCount === 0) {
+                        break;
                     }
                 }
             }
+            
+            choicesText += char;
         }
         
-        // 3. Если умный поиск не сработал, пробуем грубый поиск списков (1. Вариант, - Вариант)
-        if (fallback.choices.length === 0) {
-            const listRegex = /(?:^|\n)\s*(?:[-*]|\d+\.)\s+(.+)/g;
-            const listMatches = [...text.matchAll(listRegex)];
-            if (listMatches.length > 0) {
-                fallback.choices = listMatches.map(m => m[1].trim());
-            }
-        }
-        
-        // Страховка
-        if (fallback.choices.length === 0) {
-            fallback.choices = ["Продолжить... (Ошибка парсинга вариантов)"];
-        }
-        
-        return fallback;
-    });
+        // Парсим объекты choices из извлеченного текста
+        const choiceObjects = extractChoiceObjects(choicesText);
+        fallback.choices = choiceObjects;
+    }
     
-    // === ЦИКЛ ПО ВСЕМ ПОПЫТКАМ ===
-    for (const attempt of attempts) {
+    // Парсим stat_changes
+    const statChangesMatch = text.match(/"stat_changes"\s*:\s*(\{[^}]*\})/);
+    if (statChangesMatch) {
         try {
-            return attempt(); // Если попытка успешна, возвращаем результат
+            fallback.stat_changes = JSON.parse(statChangesMatch[1]);
         } catch (e) {
-            // Если ошибка — идем к следующему способу
+            // Ручной парсинг stat_changes
+            const statRegex = /"(\w+)"\s*:\s*(-?\d+)/g;
+            let match;
+            while ((match = statRegex.exec(statChangesMatch[1])) !== null) {
+                fallback.stat_changes[match[1]] = parseInt(match[2]);
+            }
         }
     }
     
-    // Если все способы провалились
-    throw new Error("Все способы парсинга провалились. Ответ ИИ некорректен.");
+    return validateAndFixStructure(fallback);
+}
+
+
+/**
+ * Проверяет структуру и добавляет дефолтные значения (Safety Layer)
+ * Только новый формат: requirements, success_changes, failure_changes
+ * @param {Object} data - Распарсенный объект
+ * @returns {Object} - Валидный игровой объект
+ */
+function validateAndFixStructure(data) {
+    if (typeof data !== 'object' || data === null) {
+        throw new Error('Результат парсинга не является объектом');
+    }
+    
+    // 1. Гарантируем обязательные текстовые поля
+    data.scene = data.scene || "Сцена не сгенерирована (Ошибка данных).";
+    data.short_summary = data.short_summary || "";
+    
+    // 2. Пробрасываем поля изменений, если они есть
+    // Если ИИ решил изменить личность, сохраняем это, иначе null
+    data.personality_change = data.personality_change || null;
+    
+    // 3. Нормализация инвентаря (ИИ может вернуть строку вместо массива)
+    if (data.inventory) {
+        if (typeof data.inventory === 'string') {
+            // Разбиваем строку по запятым, чистим пробелы и пустые значения
+            data.inventory = data.inventory.split(',').map(s => s.trim()).filter(Boolean);
+        } else if (!Array.isArray(data.inventory)) {
+            // Если пришел мусор, игнорируем
+            data.inventory = null;
+        }
+    }
+    
+    // 4. Валидация выборов (choices)
+    if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
+        data.choices = [{
+            text: "Продолжить...",
+            requirements: {},
+            success_changes: {},
+            failure_changes: {}
+        }];
+    } else {
+        data.choices = data.choices.map(choice => {
+            // Создаем безопасную копию объекта выбора
+            const safeChoice = {
+                text: (typeof choice === 'string') ? choice : (choice.text || "Действие"),
+                requirements: choice.requirements || {},
+                success_changes: choice.success_changes || {},
+                failure_changes: choice.failure_changes || {}
+            };
+            
+            // Гарантируем вложенную структуру для рендера
+            if (!safeChoice.requirements.stats) safeChoice.requirements.stats = {};
+            // Inventory в требованиях может быть строкой или null
+            
+            if (!safeChoice.success_changes.stats) safeChoice.success_changes.stats = {};
+            if (!safeChoice.success_changes.inventory_add) safeChoice.success_changes.inventory_add = [];
+            if (!safeChoice.success_changes.inventory_remove) safeChoice.success_changes.inventory_remove = [];
+            
+            if (!safeChoice.failure_changes.stats) safeChoice.failure_changes.stats = {};
+            if (!safeChoice.failure_changes.inventory_add) safeChoice.failure_changes.inventory_add = [];
+            if (!safeChoice.failure_changes.inventory_remove) safeChoice.failure_changes.inventory_remove = [];
+            
+            return safeChoice;
+        });
+    }
+    
+    data.stat_changes = data.stat_changes || {};
+    data.progress_change = data.progress_change || 0;
+    
+    // Исправление мыслей героя (иногда ИИ возвращает строку вместо массива)
+    if (data.thoughtsOfHeroResponse && !Array.isArray(data.thoughtsOfHeroResponse)) {
+        data.thoughtsOfHeroResponse = [String(data.thoughtsOfHeroResponse)];
+    } else if (!data.thoughtsOfHeroResponse) {
+        data.thoughtsOfHeroResponse = [];
+    }
+    
+    return data;
+}
+
+/**
+ * Безопасный парсинг ответа ИИ
+ * Обертка над robustJsonParse с дополнительным извлечением фраз
+ * @param {string} text - Текст ответа ИИ
+ * @returns {Object} Распарсенные данные
+ */
+function safeParseAIResponse(text) {
+    try {
+        const data = robustJsonParse(text);
+        
+        // Попытка извлечь фразы, если их нет в основном объекте
+        if (!data.thoughtsOfHeroResponse || data.thoughtsOfHeroResponse.length === 0) {
+            const extraPhrases = parseHeroPhrases(text);
+            if (extraPhrases.length > 0) {
+                data.thoughtsOfHeroResponse = extraPhrases;
+            }
+        }
+        
+        return data;
+    } catch (mainError) {
+        console.error('Критическая ошибка парсинга ответа ИИ:', mainError);
+        // Возвращаем аварийный объект в новом формате
+        return {
+            scene: "Ошибка генерации сцены. Ответ ИИ некорректен.",
+            short_summary: "Ошибка парсинга",
+            choices: [
+                {
+                    text: "Попробовать снова",
+                    requirements: {
+                        stats: {},
+                        inventory: null
+                    },
+                    success_changes: {
+                        stats: {},
+                        inventory_add: [],
+                        inventory_remove: []
+                    },
+                    failure_changes: {
+                        stats: {},
+                        inventory_add: [],
+                        inventory_remove: []
+                    }
+                }
+            ],
+            stat_changes: {},
+            progress_change: 0,
+            thoughtsOfHeroResponse: ["Что-то пошло не так..."]
+        };
+    }
 }
 
 /**
@@ -232,8 +434,11 @@ function generateUniqueId() {
  */
 function getMoscowTime() {
     const now = new Date();
-    const moscowTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
-    return moscowTime;
+    try {
+        return new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Moscow' }));
+    } catch (e) {
+        return now;
+    }
 }
 
 /**
@@ -273,26 +478,22 @@ function normalizeStatKey(key) {
  */
 function selectFile(accept = '.json') {
     return new Promise((resolve) => {
-        // Создаем невидимый элемент input для выбора файла
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = accept;
         input.style.display = 'none';
         
-        // Когда файл выбран
         input.onchange = function(e) {
             const file = e.target.files[0];
-            resolve(file); // Возвращаем выбранный файл
-            document.body.removeChild(input); // Удаляем input из DOM
+            resolve(file);
+            document.body.removeChild(input);
         };
         
-        // Если выбор отменен
         input.oncancel = function() {
-            resolve(null); // Возвращаем null
-            document.body.removeChild(input); // Удаляем input из DOM
+            resolve(null);
+            document.body.removeChild(input);
         };
         
-        // Добавляем input в DOM и запускаем выбор файла
         document.body.appendChild(input);
         input.click();
     });
@@ -304,35 +505,29 @@ function selectFile(accept = '.json') {
  */
 function selectFolder() {
     return new Promise((resolve) => {
-        // Создаем невидимый элемент input для выбора папки
         const input = document.createElement('input');
         input.type = 'file';
-        input.webkitdirectory = true; // Атрибут для выбора папки
-        input.multiple = true; // Разрешаем множественный выбор
+        input.webkitdirectory = true;
+        input.multiple = true;
         input.style.display = 'none';
         
-        // Когда папка выбрана
         input.onchange = function(e) {
             const files = Array.from(e.target.files);
-            // Получаем путь к папке из первого файла
-            const folderPath = files.length > 0 ?
+            const folderPath = files.length > 0 ? 
                 files[0].webkitRelativePath.split('/')[0] : null;
             
-            resolve({
-                files: files, // Список файлов в папке
-                folderPath: folderPath // Название папки
+            resolve({ 
+                files: files, 
+                folderPath: folderPath 
             });
-            
-            document.body.removeChild(input); // Удаляем input из DOM
+            document.body.removeChild(input);
         };
         
-        // Если выбор отменен
         input.oncancel = function() {
-            resolve(null); // Возвращаем null
-            document.body.removeChild(input); // Удаляем input из DOM
+            resolve(null);
+            document.body.removeChild(input);
         };
         
-        // Добавляем input в DOM и запускаем выбор папки
         document.body.appendChild(input);
         input.click();
     });
@@ -347,7 +542,6 @@ function selectFolder() {
  */
 async function saveFileWithFolderPicker(data, defaultFileName, fileType = 'application/json') {
     try {
-        // Пытаемся использовать File System Access API если доступен
         if ('showSaveFilePicker' in window) {
             const options = {
                 suggestedName: defaultFileName,
@@ -364,11 +558,9 @@ async function saveFileWithFolderPicker(data, defaultFileName, fileType = 'appli
             return { success: true, fileName: fileHandle.name };
         }
     } catch (error) {
-        // Если пользователь отменил выбор или API не поддерживается
         console.log('File System Access API не поддерживается или отменено:', error);
     }
     
-    // Fallback: используем стандартное сохранение
     exportToFile(data, defaultFileName, fileType);
     return { success: true, fileName: defaultFileName };
 }
@@ -396,143 +588,46 @@ function parseHeroPhrases(text) {
     if (!text || typeof text !== 'string') return [];
     
     try {
-        // Способ 1: Ищем JSON структуру с thoughtsOfHeroResponse
         const jsonMatch = text.match(/\{.*"thoughtsOfHeroResponse".*\}/s);
         if (jsonMatch) {
             try {
                 const parsed = JSON.parse(jsonMatch[0]);
                 if (parsed.thoughtsOfHeroResponse && Array.isArray(parsed.thoughtsOfHeroResponse)) {
-                    console.log('Нашли фразы в JSON:', parsed.thoughtsOfHeroResponse.length);
                     return parsed.thoughtsOfHeroResponse;
                 }
             } catch (jsonError) {
-                // Если JSON не парсится, пробуем другие способы
-                console.log('Не удалось распарсить JSON с фразами:', jsonError.message);
+                // Ignore
             }
         }
         
-        // Способ 2: Ищем нумерованный список (1. 2. 3. или 1) 2) 3))
-        const numberedListRegex = /(?:^|\n)(?:\d+[\.\)]\s*)(.+?)(?=(?:\n\d+[\.\)]\s*)|\n\n|$)/gs;
-        const numberedMatches = [...text.matchAll(numberedListRegex)];
-        if (numberedMatches.length >= 3) {
-            const phrases = numberedMatches.map(match => match[1].trim()).filter(p => p.length > 10);
-            if (phrases.length > 0) {
-                console.log('Нашли фразы в нумерованном списке:', phrases.length);
-                return phrases.slice(0, 10);
-            }
-        }
-        
-        // Способ 3: Ищем маркированный список (• - * )
-        const bulletListRegex = /(?:^|\n)(?:[•\-\*]\s*)(.+?)(?=(?:\n[•\-\*]\s*)|\n\n|$)/gs;
-        const bulletMatches = [...text.matchAll(bulletListRegex)];
-        if (bulletMatches.length >= 3) {
-            const phrases = bulletMatches.map(match => match[1].trim()).filter(p => p.length > 10);
-            if (phrases.length > 0) {
-                console.log('Нашли фразы в маркированном списке:', phrases.length);
-                return phrases.slice(0, 10);
-            }
-        }
-        
-        // Способ 4: Ищем фразы в кавычках
-        const quoteMatches = text.match(/["']([^"']+)["']/g);
-        if (quoteMatches && quoteMatches.length >= 3) {
-            const phrases = quoteMatches.map(q => q.replace(/["']/g, '').trim())
-                .filter(p => p.length > 10 && p.length < 200);
-            if (phrases.length > 0) {
-                console.log('Нашли фразы в кавычках:', phrases.length);
-                return phrases.slice(0, 10);
-            }
-        }
-        
-        // Способ 5: Ищем строки, которые выглядят как фразы (длинные предложения)
         const lines = text.split('\n');
         const phraseCandidates = lines
             .map(line => line.trim())
             .filter(line => {
-                // Отбираем строки, которые похожи на фразы:
-                // 1. Длина от 20 до 300 символов
-                // 2. Не содержат технических слов (JSON, {, }, и т.д.)
-                // 3. Заканчиваются знаком препинания
-                return line.length >= 20 &&
-                    line.length <= 300 &&
-                    !line.includes('{') &&
-                    !line.includes('}') &&
-                    !line.includes('"scene"') &&
-                    !line.includes('"choices"') &&
-                    !line.includes('json') &&
-                    /[.!?;:]$/.test(line);
+                return line.length >= 20 && 
+                        line.length <= 300 &&
+                        !line.includes('{') &&
+                        !line.includes('}') &&
+                        !line.includes('"scene"') &&
+                        !line.includes('"choices"') &&
+                        !line.includes('json') &&
+                        /[.!?;:]$/.test(line);
             });
         
         if (phraseCandidates.length >= 3) {
-            console.log('Нашли фразы по паттерну предложений:', phraseCandidates.length);
             return phraseCandidates.slice(0, 10);
         }
         
-        // Если ничего не нашли, возвращаем пустой массив
-        console.log('Фразы героя не найдены в ответе');
         return [];
     } catch (e) {
-        // ВАЖНО: Ловим ВСЕ ошибки и возвращаем пустой массив
-        console.error('Ошибка парсинга фраз героя (безопасно обработана):', e.message);
         return [];
-    }
-}
-
-/**
- * Безопасный парсинг ответа ИИ
- * @param {string} text - Текст ответа ИИ
- * @returns {Object} Распарсенные данные
- */
-function safeParseAIResponse(text) {
-    try {
-        // Сначала парсим основной JSON
-        const data = robustJsonParse(text);
-        
-        // Затем безопасно пытаемся извлечь фразы героя
-        try {
-            if (data.thoughtsOfHeroResponse && Array.isArray(data.thoughtsOfHeroResponse)) {
-                // Уже есть в JSON
-                console.log('Фразы уже в JSON:', data.thoughtsOfHeroResponse.length);
-            } else {
-                // Пытаемся извлечь из текста
-                const phrases = parseHeroPhrases(text);
-                if (phrases.length > 0) {
-                    data.thoughtsOfHeroResponse = phrases;
-                }
-            }
-        } catch (phraseError) {
-            // Игнорируем ошибки парсинга фраз - они не должны ломать основной ответ
-            console.warn('Ошибка парсинга фраз героя (проигнорирована):', phraseError.message);
-            // Гарантируем, что поле существует
-            if (!data.thoughtsOfHeroResponse) {
-                data.thoughtsOfHeroResponse = [];
-            }
-        }
-        
-        // Гарантируем, что все обязательные поля существуют
-        data.scene = data.scene || "Сцена не сгенерирована.";
-        data.choices = data.choices || ["Продолжить..."];
-        data.stat_changes = data.stat_changes || {};
-        data.progress_change = data.progress_change || 0;
-        data.thoughtsOfHeroResponse = data.thoughtsOfHeroResponse || [];
-        
-        return data;
-    } catch (mainError) {
-        // Если не удалось распарсить вообще, возвращаем запасной вариант
-        console.error('Критическая ошибка парсинга ответа ИИ:', mainError);
-        return {
-            scene: "Ошибка генерации сцены. " + text.substring(0, 500),
-            choices: ["Попробовать снова", "Вернуться назад"],
-            reflection: "Что-то пошло не так...",
-            stat_changes: {},
-            progress_change: 0,
-            thoughtsOfHeroResponse: []
-        };
     }
 }
 
 // Публичный интерфейс модуля
 export const Utils = {
+    repairTruncatedJSON,
+    validateAndFixStructure,
     robustJsonParse,
     getStatusEmoji,
     formatErrorDetails,

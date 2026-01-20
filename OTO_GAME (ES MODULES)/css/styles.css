@@ -1207,6 +1207,93 @@ input:checked+.slider:before {
   filter: blur(20px);
 }
 
+/* Эффект проходящего света сзади слева-направо */
+@keyframes light-sweep {
+  0%, 100% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  10%, 90% {
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateX(100%) rotate(45deg);
+    opacity: 0.1;
+  }
+}
+
+.intro-text-center::before {
+  animation: bg-pulse 4s infinite alternate,
+             light-sweep 15s infinite linear; /* Добавляем вторую анимацию */
+}
+
+/* Альтернативный вариант - отдельный элемент для света */
+#intro-screen::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: -50;
+  width: 500%;
+  height: 400%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 0, 0, 0.05) 10%,
+    rgba(255, 0, 0, 0.15) 20%,
+    rgba(255, 0, 0, 0.05) 30%,
+    transparent 40%,
+    transparent 60%,
+    rgba(255, 0, 0, 0.05) 70%,
+    rgba(255, 0, 0, 0.15) 80%,
+    rgba(255, 0, 0, 0.05) 90%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: light-pass 20s infinite linear;
+  z-index: 1;
+  pointer-events: none;
+}
+
+@keyframes light-pass {
+  0% {
+    transform: translateX(-100%) scale(2) rotate(-15deg);
+  }
+  100% {
+    transform: translateX(100%) scale(2) rotate(-15deg);
+  }
+}
+
+/* Для более интенсивного эффекта - добавь этот вариант: */
+.light-beam {
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    45deg,
+    transparent 45%,
+    rgba(255, 0, 0, 0.1) 50%,
+    transparent 55%
+  );
+  z-index: 1;
+  pointer-events: none;
+  animation: beam-sweep 8s infinite alternate ease-in-out;
+  filter: blur(20px);
+}
+
+@keyframes beam-sweep {
+  0% {
+    transform: translateX(-30%) translateY(-30%);
+  }
+  100% {
+    transform: translateX(30%) translateY(30%);
+  }
+}
+
+/* В HTML добавь в #intro-screen: */
+/* <div class="light-beam"></div> */
+
 /* Эффект капель крови внизу */
 .intro-text-center::after {
   content: '';
@@ -1910,3 +1997,4 @@ input:checked+.slider:before {
   transform: translateZ(0);
   /* Forces hardware acceleration */
 }
+
