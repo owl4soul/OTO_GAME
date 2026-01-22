@@ -6,92 +6,138 @@ import { Utils } from './2-utils.js';
 
 const Prompts = CONFIG.prompts;
 
-// Список стандартных полей JSON, которые наш код игры ОЖИДАЕТ получить от LLM.
-// Все остальные поля в корне JSON будут интерпретироваться как "Динамическая память ИИ" (aiMemory).
+// Список стандартных полей JSON
 const KNOWN_FIELDS = [
-    "scene", // [string] Основной текст новой сцены
-    "choices", // [Array<string>] Массив вариантов выбора для игрока
-    "reflection", // [string, optional] Размышления или краткий итог сцены
-    "stat_changes", // [Object] Изменения характеристик игрока (например, {"will": -5})
-    "progress_change", // [number] Изменение прогресса посвящения
-    "personality_change", // [string, optional] Обновленное описание личности героя
-    "start_ritual", // [string, optional] Флаг/указание на начало инициатического ритуала (например, "I°")
-    "end_ritual", // [boolean, optional] Флаг окончания ритуала
-    "ritual_completed", // [boolean, optional] Альтернативный флаг окончания ритуала
-    "inventory_all", // [Array<string>, optional] Инвентарь
-    "relations_all",
-    "thoughtsOfHero", // [Array<string>, optional] Массив коротких фраз - "мыслей героя"
-    "short_summary" // [string] ОДНО предложение - краткое описание этой сцены (для глобальной сводки)
+    "scene",
+    "choices",
+    "reflection",
+    "stat_changes",
+    "progress_change",
+    "personality_change",
+    "start_ritual",
+    "end_ritual",
+    "ritual_completed",
+    "inventory_changes", // ЗАМЕНА inventory_all
+    "relations_changes", // ЗАМЕНА relations_all
+    "skill_add", // Новое поле для навыков
+    "thoughtsOfHero",
+    "short_summary"
 ];
 
 /**
- * Основная функция обработки и валидации текстового ответа от ИИ.
- * Преобразует RAW-текст LLM в объект JavaScript, готовя его для использования в игре.
- * 
- * @param {string} rawText - Сырой текстовый контент, полученный в ответе от LLM.
- * @returns {Object} Объект, содержащий { cleanData: {игровые_данные}, memoryUpdate: {динамическая_память} }.
- * @throws {Error} Если текст не поддается никакому парсингу JSON.
+ * Основная функция обработки и валидации текстового ответа от ИИ
  */
 function processAIResponse(rawText) {
-    // 1. Очистка Markdown и лишних символов из RAW-текста LLM.
-    // LLM иногда оборачивают JSON в ```json ```, это нужно убрать перед парсингом.
-    let cleanText = rawText.trim()
-        .replace(/^```json\s*/i, '') // Убираем маркер начала JSON-блока
-        .replace(/\s*```$/i, '') // Убираем маркер конца JSON-блока
-        .replace(/^```\s*/i, ''); // На всякий случай, если просто ``` без `json`
+    if (!rawText || typeof rawText !== 'string') {
+        console.error('❌ Пустой или неверный rawText в processAIResponse');
+        return {
+            cleanData: {
+                scene: "Ошибка: ИИ не вернул текст сцены.",
+                choices: ["Продолжить..."],
+                short_summary: "Ошибка парсинга"
+            },
+            memoryUpdate: {},
+            rawText: rawText || ''
+        };
+    }
     
-    // 2. Попытка парсинга JSON.
+    // 1. Очистка Markdown и лишних символов
+    let cleanText = rawText.trim()
+        .replace(/^```json\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/^javascript\s*/i, '')
+        .replace(/\s*$/, '');
+    
+    // 2. Попытка парсинга JSON
     let parsedData;
     try {
         parsedData = JSON.parse(cleanText);
     } catch (standardParseError) {
-        // Если стандартный JSON.parse() падает (например, из-за нехватки кавычек или лишних запятых),
-        // используем наш более устойчивый (robust) парсер из `Utils`.
         console.warn("JSON.parse() failed with standard parser. Attempting robust parsing.", standardParseError);
-        parsedData = Utils.robustJsonParse(cleanText);
+        try {
+            parsedData = Utils.robustJsonParse(cleanText);
+        } catch (robustError) {
+            console.error("❌ Оба метода парсинга JSON провалились:", robustError);
+            
+            // Создаем минимальный валидный объект
+            parsedData = {
+                scene: "ИИ вернул некорректный JSON. Сцена не сгенерирована.",
+                choices: ["Продолжить..."],
+                short_summary: "Ошибка формата"
+            };
+        }
     }
     
-    // 3. Гарантия наличия ОБЯЗАТЕЛЬНЫХ полей (Fail-safe mechanism).
-    // Если LLM по какой-то причине пропустил обязательное поле, мы предоставляем значение по умолчанию,
-    // чтобы избежать ошибок в работе UI и обеспечить непрерывность игры.
+    // 3. Гарантия наличия обязательных полей
     if (!parsedData.scene) {
-        parsedData.scene = "Ошибка: ИИ не смог сгенерировать текст сцены. Погружающая тьма поглотила все.";
+        parsedData.scene = "ИИ не смог сгенерировать текст сцены.";
     }
     
     if (!parsedData.choices || !Array.isArray(parsedData.choices) || parsedData.choices.length === 0) {
-        // Если нет вариантов выбора или они пусты, предлагаем стандартное действие.
-        parsedData.choices = ["Попытаться осмыслить произошедшее..."];
+        parsedData.choices = ["Продолжить..."];
     } else {
-        // ВАЖНО: НОРМАЛИЗАЦИЯ CHOICES
-        // Если ИИ все же вернул массив строк (старый формат), преобразуем их в объекты "на лету",
-        // чтобы Render не сломался.
+        // Нормализация choices: строки -> объекты
         parsedData.choices = parsedData.choices.map(choice => {
             if (typeof choice === 'string') {
-                return { text: choice }; // Оборачиваем строку в объект
+                return { 
+                    text: choice,
+                    requirements: { stats: {}, inventory: null },
+                    success_changes: { stats: {}, inventory_add: [], inventory_remove: [] },
+                    failure_changes: { stats: {}, inventory_add: [], inventory_remove: [] }
+                };
             }
-            return choice; // Если уже объект, возвращаем как есть
+            
+            // Гарантируем структуру объекта choice
+            return {
+                text: choice.text || "Действие",
+                requirements: choice.requirements || { stats: {}, inventory: null },
+                success_changes: choice.success_changes || { stats: {}, inventory_add: [], inventory_remove: [] },
+                failure_changes: choice.failure_changes || { stats: {}, inventory_add: [], inventory_remove: [] }
+            };
         });
     }
     
-    // 4. ДЕТЕКТОР ДИНАМИЧЕСКИХ ПОЛЕЙ (Unknown Fields Extractor).
-    // Это сердце механизма "Динамической памяти ИИ" (aiMemory).
-    // Любое поле в корневом объекте JSON, которого нет в `KNOWN_FIELDS`,
-    // будет извлечено и сохранено в `memoryUpdate`.
+    // 4. Валидация новых полей формата
+    if (parsedData.inventory_changes && typeof parsedData.inventory_changes !== 'object') {
+        console.warn('⚠️ inventory_changes должен быть объектом, получен:', typeof parsedData.inventory_changes);
+        parsedData.inventory_changes = { add: [], remove: [] };
+    } else if (parsedData.inventory_changes) {
+        if (!Array.isArray(parsedData.inventory_changes.add)) parsedData.inventory_changes.add = [];
+        if (!Array.isArray(parsedData.inventory_changes.remove)) parsedData.inventory_changes.remove = [];
+    }
+    
+    if (parsedData.relations_changes && typeof parsedData.relations_changes !== 'object') {
+        console.warn('⚠️ relations_changes должен быть объектом, получен:', typeof parsedData.relations_changes);
+        parsedData.relations_changes = {};
+    }
+    
+    if (parsedData.skill_add && typeof parsedData.skill_add !== 'string') {
+        console.warn('⚠️ skill_add должен быть строкой');
+        delete parsedData.skill_add;
+    }
+    
+    // 5. ДЕТЕКТОР ДИНАМИЧЕСКИХ ПОЛЕЙ (aiMemory)
     const dynamicMemoryUpdates = {};
     
     for (const [key, value] of Object.entries(parsedData)) {
         if (!KNOWN_FIELDS.includes(key)) {
-            // Найден новый ключ, не относящийся к стандартной структуре игры!
-            // Сохраняем его для последующего обновления aiMemory в State.
             dynamicMemoryUpdates[key] = value;
-            console.log(`🧠 [AI Memory] Discovered and saved dynamic field: '${key}' with value:`, value);
+            console.log(`🧠 [AI Memory] Сохранено динамическое поле: '${key}'`);
         }
     }
     
-    // Возвращаем три части: 
-    // `cleanData` - стандартные игровые данные для `Game.js`
-    // `memoryUpdate` - объект с динамическими полями для обновления `aiMemory` в `State.js`
-    // `rawText` - исходный текст для лога
+    // 6. Удаляем старые поля, если они случайно пришли
+    if (parsedData.inventory_all) {
+        console.warn('⚠️ ИИ вернул устаревшее поле inventory_all, игнорируем');
+        delete parsedData.inventory_all;
+    }
+    
+    if (parsedData.relations_all) {
+        console.warn('⚠️ ИИ вернул устаревшее поле relations_all, игнорируем');
+        delete parsedData.relations_all;
+    }
+    
     return {
         cleanData: parsedData,
         memoryUpdate: dynamicMemoryUpdates,
@@ -100,104 +146,91 @@ function processAIResponse(rawText) {
 }
 
 /**
- * Реализует устойчивый запрос к API LLM с механизмом "Авто-Ремонта" JSON (Robust Fetch with Auto-Repair).
- * Если LLM возвращает невалидный JSON, эта функция рекурсивно пытается "убедить" LLM исправить свою ошибку.
- * 
- * @param {string} url - URL конечной точки API.
- * @param {Object} headers - Заголовки запроса.
- * @param {Object} payload - Исходное тело запроса (сообщения, модель).
- * @param {number} attemptsLeft - Количество оставшихся попыток ремонта JSON.
- * @param {Object} apiRequestModule - Модуль, предоставляющий базовый метод executeFetch.
- * @param {AbortController} abortCtrl - Контроллер для отмены запроса.
- * @returns {Promise<Object>} Промис, который разрешится в объект { cleanData, memoryUpdate } после успешного парсинга и ремонта.
- * @throws {Error} В случае критических ошибок (сеть, лимит попыток, окончательный провал парсинга).
+ * Устойчивый запрос к API LLM с механизмом "Авто-Ремонта" JSON
  */
 async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiRequestModule, abortCtrl) {
-    let contentFromAI = null; // Объявляем переменную здесь, чтобы она была доступна в блоке catch
-    
     try {
-        // Шаг 1: Выполняем базовый сетевой запрос через apiRequestModule.
+        // Шаг 1: Выполняем базовый сетевой запрос
         const rawApiResponse = await apiRequestModule.executeFetch(url, headers, payload, abortCtrl);
         
-        // Шаг 2: Извлекаем основной контент (текст сцены) из ответа LLM.
-        contentFromAI = rawApiResponse.choices?.[0]?.message?.content;
+        // Шаг 2: Извлекаем основной контент
+        const contentFromAI = rawApiResponse.choices?.[0]?.message?.content;
         if (!contentFromAI) {
-            // Если контента нет, считаем это ошибкой.
-            throw new Error("Received empty content string from AI provider in response.choices[0].message.content.");
+            throw new Error("Received empty content string from AI provider");
         }
         
-        // Шаг 3: Пытаемся обработать полученный контент как JSON.
+        // Шаг 3: Пытаемся обработать полученный контент как JSON
         try {
             const result = processAIResponse(contentFromAI);
-            // Если парсер почему-то не вернул rawText, добавим его вручную (страховка)
-            if (!result.rawText) result.rawText = contentFromAI;
             return result;
         } catch (jsonProcessingError) {
-            // Если `processAIResponse` бросил ошибку (значит, контент был плохим JSON),
-            // мы ловим эту ошибку здесь и инициируем процесс ремонта.
-            throw new Error(`Invalid JSON format detected. Details: ${jsonProcessingError.message}`);
+            console.warn(`❌ Ошибка парсинга JSON: ${jsonProcessingError.message}`);
+            
+            // Если есть попытки ремонта
+            if (attemptsLeft > 0) {
+                console.warn(`⚠️ [AI Repair] Инициируем авто-ремонт... Осталось попыток: ${attemptsLeft}`);
+                
+                // Создаем новый payload с инструкцией по ремонту
+                const newPayloadForRepair = JSON.parse(JSON.stringify(payload));
+                newPayloadForRepair.messages.push({
+                    role: "user",
+                    content: Prompts.technical.jsonRepair
+                });
+                
+                // Рекурсивный вызов
+                return robustFetchWithRepair(
+                    url,
+                    headers,
+                    newPayloadForRepair,
+                    attemptsLeft - 1,
+                    apiRequestModule,
+                    abortCtrl
+                );
+            } else {
+                // Попытки исчерпаны
+                const finalError = new Error(`CRITICAL: AI failed to produce valid JSON after ${CONFIG.autoRepairAttempts} repair attempts.`);
+                finalError.rawResponse = contentFromAI.substring(0, 500) + '...';
+                throw finalError;
+            }
         }
         
     } catch (primaryError) {
-        // ============================================
-        // ЛОГИКА АВТО-РЕМОНТА (Auto-Repair Logic)
-        // ============================================
-        
-        // A. Обработка КРИТИЧЕСКИХ ошибок (не подлежат ремонту LLM):
-        // - Сетевые ошибки (fetch, HTTP 4xx/5xx).
-        // - Отмена запроса (AbortError).
-        // В этих случаях LLM ничего не исправит, поэтому просто пробрасываем ошибку выше.
+        // Обработка критических ошибок (сеть, HTTP ошибки)
         const isCriticalError = primaryError.message.startsWith('HTTP Error') ||
             primaryError.name === 'AbortError' ||
-            primaryError.message.includes('fetch');
+            primaryError.message.includes('fetch') ||
+            primaryError.message.includes('network');
         
         if (isCriticalError) {
-            throw primaryError; // Пробрасываем ошибку для обработки в Facade/Game
+            throw primaryError;
         }
         
-        // B. Обработка ошибок ПАРСИНГА JSON (подлежат ремонту LLM):
-        // Если LLM вернул некорректный JSON и у нас ЕЩЕ ЕСТЬ ПОПЫТКИ РЕМОНТА:
+        // Если это ошибка парсинга и попытки есть
         if (attemptsLeft > 0) {
-            console.warn(`⚠️ [AI Repair] Previous AI response was broken JSON. Initiating auto-repair... Attempts left: ${attemptsLeft}`);
-            console.warn(`Original parse error: ${primaryError.message}`);
+            console.warn(`⚠️ [AI Repair] Инициируем авто-ремонт из общего catch...`);
             
-            // Создаем глубокую копию оригинального payload (тела запроса),
-            // чтобы не мутировать его для текущей попытки ремонта.
             const newPayloadForRepair = JSON.parse(JSON.stringify(payload));
-            
-            // Добавляем специальное сообщение в массив messages.
-            // Это "убеждает" LLM пересмотреть свой предыдущий ответ и выдать корректный JSON.
             newPayloadForRepair.messages.push({
                 role: "user",
-                content: Prompts.technical.jsonRepair // Берем инструкцию по ремонту из конфига
+                content: Prompts.technical.jsonRepair
             });
             
-            // Выполняем РЕКУРСИВНЫЙ вызов этой же функции, уменьшая количество попыток.
-            // Это создает цикл "попробуй -> если ошибка -> попроси исправить -> попробуй снова".
             return robustFetchWithRepair(
                 url,
                 headers,
                 newPayloadForRepair,
-                attemptsLeft - 1, // Уменьшаем счетчик попыток
+                attemptsLeft - 1,
                 apiRequestModule,
                 abortCtrl
             );
         }
         
-        // C. Если все попытки ремонта ИСЧЕРПАНЫ — сдаемся.
-        // Пробрасываем последнюю ошибку парсинга, чтобы UI показал ее игроку.
-        // ВАЖНО: Прикрепляем "мусорный" текст к ошибке, чтобы его можно было залогировать.
-        const finalError = new Error(`CRITICAL: AI failed to produce valid JSON after ${CONFIG.autoRepairAttempts} repair attempts. Last error: ${primaryError.message}`);
-        
-        if (contentFromAI) {
-            finalError.rawResponse = contentFromAI;
-        }
-        
-        throw finalError;
+        // Все попытки исчерпаны
+        throw primaryError;
     }
 }
 
-// Экспортируем публичные методы модуля для использования другими модулями.
+// Экспортируем публичные методы модуля
 export const API_Response = {
     processAIResponse,
     robustFetchWithRepair

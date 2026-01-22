@@ -7,44 +7,34 @@ import { State } from './3-state.js';
 const Prompts = CONFIG.prompts;
 
 /**
- * Динамическое формирование системных инъекций на основе текущего состояния игры.
- * Это позволяет "режиссеру" вмешиваться в нарратив, добавляя повороты,
- * корректируя стиль при безумии героя или защищаясь от зацикливания сюжета.
- * 
- * @param {Object} state - Текущее состояние игры.
- * @returns {string} Строка с дополнительными, динамически генерируемыми инструкциями для LLM.
+ * Динамическое формирование системных инъекций
  */
 function getDynamicSystemInjections(state) {
     const injections = [];
     const turn = state.turnCount;
     
-    // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА (TRIGGER: TWIST)
-    // Если номер хода является кратным 10 (каждый 10-й ход), заставляем ИИ сделать поворот.
+    // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА
     if (turn > 0 && turn % 10 === 0) {
         console.log(`🌀 [Client Director] Turn ${turn}: Injecting Narrative Twist.`);
         injections.push(`>>> [TRIGGER: TURN ${turn}] ${Prompts.injections.twist}`);
     }
     
-    // 2. ИНЪЕКЦИЯ БЕЗУМИЯ (TRIGGER: LOW SANITY)
-    // Если показатель Рассудка (Sanity) героя опускается ниже 20, LLM получает инструкцию изменить стиль.
+    // 2. ИНЪЕКЦИЯ БЕЗУМИЯ
     if (state.stats.sanity < 20) {
-        console.log(`🌀 [Client Director] Sanity Low (${state.stats.sanity}): Injecting Insanity.`, );
+        console.log(`🌀 [Client Director] Sanity Low (${state.stats.sanity}): Injecting Insanity.`);
         injections.push(`>>> [TRIGGER: LOW SANITY] ${Prompts.injections.insanity}`);
     }
     
-    // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ ПЕТЕЛЬ СЮЖЕТА (TRIGGER: LOOP DETECTED)
-    // Сравниваем начальную часть текущей сцены с предыдущей в истории.
-    // Если обнаруживается слишком сильное совпадение, заставляем ИИ кардинально сменить обстановку.
+    // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ ПЕТЕЛЬ СЮЖЕТА
     if (state.history.length > 0) {
         const lastSceneText = state.history[state.history.length - 1].fullText;
         const currentSceneText = state.currentScene.text;
-        const comparisonLength = 50; // Количество символов для сравнения
+        const comparisonLength = 50;
         
         if (lastSceneText.length >= comparisonLength && currentSceneText.length >= comparisonLength) {
             const startOfLastScene = lastSceneText.substring(0, comparisonLength).trim();
             const startOfCurrentScene = currentSceneText.substring(0, comparisonLength).trim();
             
-            // Проверяем, не содержат ли сцены друг друга в начале или не очень ли похожи
             if (startOfLastScene === startOfCurrentScene ||
                 lastSceneText.includes(startOfCurrentScene) ||
                 currentSceneText.includes(startOfLastScene))
@@ -55,78 +45,67 @@ function getDynamicSystemInjections(state) {
         }
     }
     
-    // --- ИНЪЕКЦИЯ РИТУАЛА (НОВОЕ) ---
+    // 4. ИНЪЕКЦИЯ РИТУАЛА
     if (state.isRitualActive) {
         console.log(`🕯️ [Client Director] RITUAL MODE ACTIVE.`);
         injections.push(`>>> [CRITICAL MODE: RITUAL OF INITIATION]
         ТЕКУЩИЙ СТАТУС: Игрок проходит Ритуал Посвящения.
         
         ИНСТРУКЦИИ ДЛЯ РИТУАЛА:
-        1. ТОН: Торжественный, архаичный, мистический, пугающий. Используй символизм Телемы (Кроули, Египетские боги, Таро).
+        1. ТОН: Торжественный, архаичный, мистический, пугающий. Используй символизм Телемы.
         2. СТРУКТУРА: Ритуал — это испытание. Не давай простых путей. Проверяй Волю и Разум.
         3. ПРОГРЕСС: Не начисляй очки прогресса (progress_change: 0) пока ритуал не завершится успехом.
         4. ЗАВЕРШЕНИЕ: Когда игрок пройдет испытание, ОБЯЗАТЕЛЬНО добавь в JSON поле "end_ritual": true и начисли награду прогресса.
         5. ВИЗУАЛ: Описывай запахи, звуки, свет свечей, тени.`);
     }
     
-    // 4. БАЗОВЫЕ ИНСТРУКЦИИ ДЛЯ ВСЕХ ЗАПРОСОВ
-    // Эти инструкции всегда присутствуют для LLM, они направляют базовую логику генерации.
-    injections.push(Prompts.injections.coreMovement); // Основные правила нарратива
-    injections.push(Prompts.format.summaryAndMemoryInstructions); // Требования по short_summary и aiMemory
-    injections.push(Prompts.format.jsonFewShot); // Пример ожидаемого JSON (few-shot learning)
+    // 5. БАЗОВЫЕ ИНСТРУКЦИИ
+    injections.push(Prompts.injections.coreMovement);
+    injections.push(Prompts.format.summaryAndMemoryInstructions);
+    injections.push(Prompts.format.jsonFewShot);
     
-    return injections.join('\n\n'); // Собираем все динамические инструкции в одну строку
+    return injections.join('\n\n');
 }
 
 /**
- * Сборка блока контекста для USER-промпта.
- * Включает глобальную сводку, динамическую память ИИ и краткосрочную историю.
- * Это ключевой механизм для управления объемом контекстного окна и сохранениями.
- * 
- * @param {Object} state - Текущее состояние игры.
- * @returns {string} Форматированный текстовый блок контекста.
+ * Сборка блока контекста для USER-промпта
  */
 function buildContextBlock(state) {
     let parts = [];
     
-    // А. ГЛОБАЛЬНАЯ ЛЕТОПИСЬ (Summary)
-    // Содержит краткие сводки всех предыдущих ходов. Это "долгосрочная память" ИИ.
+    // А. ГЛОБАЛЬНАЯ ЛЕТОПИСЬ
     if (state.summary && state.summary.length > 0) {
         parts.push(`${Prompts.userHeaders.contextGlobal}\n${state.summary}`);
     }
     
     // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ МИРА (aiMemory)
-    // Неструктурированные данные (инвентарь, флаги квестов, статусы NPC), которые ИИ сам добавил в прошлых ходах.
-    // LLM видит эти данные и может их обновлять в своем ответе.
     if (state.aiMemory && Object.keys(state.aiMemory).length > 0) {
         parts.push(`${Prompts.userHeaders.aiMemory}\n${JSON.stringify(state.aiMemory, null, 2)}`);
     }
     
-    // В. КРАТКОСРОЧНАЯ ИСТОРИЯ (Short-Term Memory)
-    // Последние N полных ходов (сцена, выбор, изменения) для сохранения непрерывности текущего диалога.
+    // В. КРАТКОСРОЧНАЯ ИСТОРИЯ
     const turnsToTake = state.summary ? CONFIG.activeContextTurns : CONFIG.historyContext;
     const historySlice = state.history.slice(-turnsToTake);
     
     if (historySlice.length > 0) {
         const historyString = historySlice.map(entry =>
             `СЦЕНА: ${entry.fullText}\nВЫБОР: ${entry.choice}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`
-        ).join('\n---\n'); // Разделитель для ясности
+        ).join('\n---\n');
         parts.push(`${Prompts.userHeaders.contextShort}\n${historyString}`);
     }
     
-    // Если контекст пуст (самое начало игры), даем соответствующее сообщение.
     return parts.length > 0 ? parts.join('\n\n') : "История: Это начало пути. Предыдущих событий нет.";
 }
 
 /**
  * Подготовка полного тела запроса (Payload) для отправки в API LLM.
- * @param {Object} state - Состояние игры.
- * @param {Array} selectedChoices - Массив выбранных объектов действий.
- * @param {number} d10 - Результат броска виртуального d10.
- * @param {string|null} customContext - Опциональный пользовательский контекст.
- * @returns {Object} Объект payload, готовый к JSON.stringify и отправке через fetch.
+ * @param {Object} state - Состояние игры ПОСЛЕ применения изменений от действий
+ * @param {string} actionResultsText - Форматированные результаты действий
+ * @param {number|null} d10 - Результат броска виртуального d10 (если требуется)
+ * @param {string|null} customContext - Опциональный пользовательский контекст
+ * @returns {Object} Объект payload, готовый к JSON.stringify и отправке через fetch
  */
-function prepareRequestPayload(state, selectedChoices, d10, customContext = null) {
+function prepareRequestPayload(state, actionResultsText, d10 = null, customContext = null) {
     // Проверяем, нужно ли запросить новые "мысли героя"
     const needsHeroPhrases = State.needsHeroPhrases();
     
@@ -137,27 +116,19 @@ function prepareRequestPayload(state, selectedChoices, d10, customContext = null
     
 ${dynamicSystemPart}
 
-${Prompts.format.jsonFormatStrict}`;
+${Prompts.format.jsonFormatStrict}
+
+ВАЖНОЕ ИЗМЕНЕНИЕ ФОРМАТА:
+1. Вместо "inventory_all" теперь используй "inventory_changes" с полями "add" и "remove"
+2. Вместо "relations_all" теперь используй "relations_changes" с объектом NPC->изменение
+3. Добавь поле "skill_add" для нового навыка героя (если уместно)
+4. Поля "inventory_all" и "relations_all" больше НЕ ДОЛЖНЫ использоваться!`;
     
     // 2. Формируем ПОЛНЫЙ ПОЛЬЗОВАТЕЛЬСКИЙ ПРОМПТ
     const contextBlock = customContext || buildContextBlock(state);
     
-    // Дополнительная задача по генерации мыслей героя (если нужно)
+    // Дополнительная задача по генерации мыслей героя
     const thoughtsRequestInstruction = needsHeroPhrases ? Prompts.userHeaders.reqThoughts : "";
-    
-    // Формируем информацию о выбранных действиях
-    let actionText;
-    let selectedActions = null;
-    
-    if (selectedChoices.length === 1 && selectedChoices[0].text) {
-        // Режим свободного ввода или одиночный выбор
-        actionText = selectedChoices[0].text;
-        selectedActions = JSON.stringify(selectedChoices, null, 2);
-    } else {
-        // Множественный выбор
-        actionText = selectedChoices.map(choice => choice.text).join(' + ');
-        selectedActions = JSON.stringify(selectedChoices, null, 2);
-    }
     
     // Строим основной User-промпт
     const userPrompt = `
@@ -171,7 +142,7 @@ ${Prompts.format.progressAndDegrees}
 Следующая степень: ${CONFIG.degrees.find(d => d.threshold > state.progress)?.name || "XI° и выше"}
 Порог следующей степени: ${CONFIG.degrees.find(d => d.threshold > state.progress)?.threshold || "∞"}
 
-${Prompts.userHeaders.d10Luck}${d10}
+${d10 !== null ? `${Prompts.userHeaders.d10Luck}${d10}` : ''}
 
 ${Prompts.userHeaders.historyPrefix}
 ${contextBlock || "История отсутствует"}
@@ -180,21 +151,23 @@ ${Prompts.userHeaders.currentScene}
 ${state.currentScene.text}
 
 ${Prompts.userHeaders.actualStatesValues}
-[Воля: ${state.stats.will},
-Скрытность: ${state.stats.stealth},
-Влияние: ${state.stats.influence},
-Разум: ${state.stats.sanity}]
+[Воля: ${state.stats.will}, Скрытность: ${state.stats.stealth}, Влияние: ${state.stats.influence}, Разум: ${state.stats.sanity}]
 [Степень: ${CONFIG.degrees[state.degreeIndex].name}]
 [Личность: ${state.personality}]
 
-${Prompts.userHeaders.action}
-"${actionText}"
+${Prompts.userHeaders.inventory_all || '[ИНВЕНТАРЬ]:'}
+${JSON.stringify(state.inventory, null, 2)}
 
-[СТРУКТУРИРОВАННЫЕ ВЫБРАННЫЕ ДЕЙСТВИЯ]:
-${selectedActions}
+${Prompts.userHeaders.relations_all || '[ОТНОШЕНИЯ]:'}
+${JSON.stringify(state.relations, null, 2)}
+
+${state.skills && state.skills.length > 0 ? `${Prompts.userHeaders.skills || '[НАВЫКИ]:'}\n${JSON.stringify(state.skills, null, 2)}` : ''}
+
+${Prompts.userHeaders.action_results || '[РЕЗУЛЬТАТЫ ДЕЙСТВИЙ]:'}
+${actionResultsText}
 
 ${thoughtsRequestInstruction}
-    
+
 ${Prompts.userHeaders.reqJsonEnd}`;
     
     return {
@@ -207,71 +180,49 @@ ${Prompts.userHeaders.reqJsonEnd}`;
 }
 
 /**
- * Базовая функция выполнения сетевого запроса.
- * Это низкоуровневая обертка над `fetch`, которая только отправляет запрос и возвращает RAW ответ API.
- * Не занимается игровой логикой, парсингом JSON или состоянием игры.
- * 
- * @param {string} url - URL конечной точки API (например, OpenRouter или VseGpt).
- * @param {Object} headers - Объект заголовков HTTP (например, Authorization).
- * @param {Object} payload - Объект с данными запроса, который будет конвертирован в JSON (например, messages, model).
- * @param {AbortController} abortController - Инструмент для отмены запроса (таймауты, пользовательская отмена).
- * @returns {Promise<Object>} JSON-объект, полученный напрямую от API LLM.
- * @throws {Error} В случае ошибки сети или неуспешного HTTP-ответа (статус 4xx, 5xx).
+ * Базовая функция выполнения сетевого запроса
  */
 async function executeFetch(url, headers, payload, abortController) {
-    // Инициализация цикла повторных попыток на основе глобального конфига
     const maxAttempts = CONFIG.maxRetries || 3;
-    // Переменная для сохранения ошибки последней неудачной попытки
     let lastError;
     
-    // Цикл выполнения сетевого запроса с лимитом попыток
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
             const options = {
                 method: 'POST',
                 headers: headers,
-                body: JSON.stringify(payload) // Конвертируем payload в JSON строку
+                body: JSON.stringify(payload)
             };
             
-            // Если предоставлен AbortController, привязываем его к сигналу запроса.
             if (abortController) {
                 options.signal = abortController.signal;
             }
             
-            // Выполняем HTTP-запрос.
             const response = await fetch(url, options);
             
-            // Проверяем статус ответа: если не OK (2xx), считаем это ошибкой.
             if (!response.ok) {
-                // Читаем текст ошибки для подробной информации и бросаем исключение.
                 const errorText = await response.text();
                 throw new Error(`HTTP Error ${response.status}: ${errorText}`);
             }
             
-            // Если запрос успешен, парсим ответ как JSON и возвращаем его.
             return await response.json();
         } catch (error) {
-            // Сохранение ошибки текущей итерации
             lastError = error;
             
-            // Если запрос был отменен намеренно, прекращаем цикл без ретраев
             if (error.name === 'AbortError') throw error;
             
             console.warn(`[API_Request] Попытка ${attempt}/${maxAttempts} не удалась: ${error.message}`);
             
-            // Проверка необходимости ожидания перед следующей попыткой
             if (attempt < maxAttempts) {
-                // Асинхронная пауза между запросами (по умолчанию 1000мс из CONFIG)
                 await new Promise(resolve => setTimeout(resolve, CONFIG.retryDelayMs));
             }
         }
     }
-    // Выброс финального исключения после исчерпания всех попыток
-    throw lastError;
     
+    throw lastError;
 }
 
-// Экспортируем публичные методы модуля для использования другими модулями (например, API_Facade).
+// Экспортируем публичные методы модуля
 export const API_Request = {
     prepareRequestPayload,
     executeFetch

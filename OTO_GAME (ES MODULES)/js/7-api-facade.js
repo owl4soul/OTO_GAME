@@ -7,16 +7,12 @@ import { API_Request } from './7-1-api-request.js';
 import { API_Response } from './7-2-api-response.js';
 import { Render } from './5-render.js';
 import { DOM } from './4-dom.js';
-import { Audit } from './8-audit.js'; // ИМПОРТ ОБНОВЛЕННОГО МОДУЛЯ АУДИТА
+import { Audit } from './8-audit.js';
 
 const Prompts = CONFIG.prompts;
 
 /**
- * Вспомогательная функция для получения специфической информации о текущем API-провайдере.
- * Используется для определения URL конечной точки и API-ключа.
- * 
- * @param {Object} state - Текущее состояние игры.
- * @returns {Object} Объект с URL, API-ключом и флагом, указывающим на VseGpt.
+ * Вспомогательная функция для получения специфической информации о текущем API-провайдере
  */
 function getProviderInfo(state) {
     const isVsegpt = state.settings.apiProvider === 'vsegpt';
@@ -29,15 +25,15 @@ function getProviderInfo(state) {
 }
 
 /**
- * ОСНОВНАЯ ФУНКЦИЯ: Отправляет запрос игрового хода к LLM и обрабатывает его ответ.
- * @param {Array} selectedChoices - Массив выбранных объектов действий.
- * @param {number} d10 - Результат броска виртуального кубика d10.
- * @param {AbortController|null} abortController - Контроллер для возможности отмены запроса.
- * @returns {Promise<Object>} Промис, разрешающийся в очищенный JSON-объект.
+ * ОСНОВНАЯ ФУНКЦИЯ: Отправляет запрос игрового хода к LLM
+ * @param {Object} updatedState - Состояние ПОСЛЕ применения изменений от действий
+ * @param {string} actionResultsText - Форматированные результаты действий
+ * @param {AbortController|null} abortController - Контроллер для возможности отмены запроса
+ * @returns {Promise<Object>} Промис, разрешающийся в очищенный JSON-объект
  */
-async function sendAIRequest(selectedChoices, d10, abortController = null) { // Убран аргумент auditEntry, теперь мы создаем его сами
-    const state = State.getState(); // Получаем актуальное состояние игры
-    const { url, apiKey, isVsegpt } = getProviderInfo(state); // Определяем провайдера и ключ
+async function sendAIRequest(updatedState, actionResultsText, abortController = null) {
+    const state = State.getState(); // Получаем оригинальное состояние для настроек
+    const { url, apiKey, isVsegpt } = getProviderInfo(state);
     
     // Валидация наличия API-ключа
     if (!apiKey) {
@@ -49,88 +45,62 @@ async function sendAIRequest(selectedChoices, d10, abortController = null) { // 
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
     };
-    // Для OpenRouter требуются специальные заголовки Referer для правильной работы биллинга
+    
+    // Для OpenRouter требуются специальные заголовки
     if (!isVsegpt) {
         headers['HTTP-Referer'] = 'https://oto-quest.app';
         headers['X-Title'] = 'OTO Quest';
     }
     
-    // --- ЭТАП 1: ПОДГОТОВКА PAYLOAD (через API_Request) ---
-    const requestPayload = API_Request.prepareRequestPayload(state, selectedChoices, d10);
+    // --- ЭТАП 1: ПОДГОТОВКА PAYLOAD ---
+    const requestPayload = API_Request.prepareRequestPayload(updatedState, actionResultsText, null, null);
     
-    // Специфические настройки для определенных моделей/провайдеров
-    if (isVsegpt && state.settings.model.includes('gpt-3.5-turbo-16k')) {
+    // Специфические настройки для моделей/провайдеров
+    if (isVsegpt && updatedState.settings.model.includes('gpt-3.5-turbo-16k')) {
         requestPayload.max_tokens = 1000;
     }
+    
     // Включаем "JSON mode" для OpenRouter
     if (!isVsegpt) {
         requestPayload.response_format = { type: "json_object" };
     }
     
     // --- ЛОГИРОВАНИЕ: СОЗДАНИЕ ЗАПИСИ ---
-    // Создаем запись "pending" через модуль Audit
     const auditEntry = Audit.createEntry(
-        `Игровой ход: ${selectedChoices}`,
+        `Игровой ход: ${actionResultsText.substring(0, 50)}...`,
         requestPayload,
-        state.settings.model,
-        state.settings.apiProvider
+        updatedState.settings.model,
+        updatedState.settings.apiProvider
     );
-    // Дописываем d10 в объект лога для истории
-    auditEntry.d10 = d10;
     
-    // --- ЭТАП 2: ВЫПОЛНЕНИЕ ЗАПРОСА И ОБРАБОТКА ОТВЕТА (через API_Response) ---
+    // --- ЭТАП 2: ВЫПОЛНЕНИЕ ЗАПРОСА И ОБРАБОТКА ОТВЕТА ---
     try {
-        const startTime = Date.now(); // Фиксируем время начала запроса
+        const startTime = Date.now();
         
-        // Вызов `API_Response.robustFetchWithRepair` - сердце обработки LLM.
-        // Теперь этот метод возвращает { cleanData, memoryUpdate, rawText }
+        // Вызов robustFetchWithRepair с правильными аргументами
         const processingResult = await API_Response.robustFetchWithRepair(
             url,
             headers,
             requestPayload,
-            CONFIG.autoRepairAttempts, // Количество попыток авто-ремонта
-            API_Request, // Ссылка на модуль API_Request для выполнения fetch
-            abortController // Контроллер отмены
+            CONFIG.autoRepairAttempts,
+            API_Request,
+            abortController
         );
         
-        const responseTime = Date.now() - startTime; // Время ответа LLM
+        const responseTime = Date.now() - startTime;
         
-        // --- ЭТАП 3: ОБНОВЛЕНИЕ СОСТОЯНИЯ ИГРЫ (Память) ---
-        // Обновление Динамической Памяти ИИ (`aiMemory`)
+        // --- ЭТАП 3: ОБНОВЛЕНИЕ ДИНАМИЧЕСКОЙ ПАМЯТИ ---
         if (processingResult.memoryUpdate && Object.keys(processingResult.memoryUpdate).length > 0) {
             const currentState = State.getState();
-            
-            // Извлекаем инвентарь и отношения из memoryUpdate
-            const { inventory_all, relations_all, ...otherMemory } = processingResult.memoryUpdate;
-            
-            // Обновляем инвентарь
-            if (inventory_all && Array.isArray(inventory_all)) {
-                currentState.inventory = [...new Set(inventory_all)];
-            }
-            
-            // Обновляем отношения
-            if (relations_all && typeof relations_all === 'object') {
-                currentState.relations = { ...currentState.relations, ...relations_all };
-            }
-            
-            // Обновляем остальную память
-            currentState.aiMemory = { ...currentState.aiMemory, ...otherMemory };
-            
-            State.setState({
-                inventory: currentState.inventory,
-                relations: currentState.relations,
-                aiMemory: currentState.aiMemory
-            });
-            
-            console.log("STATE UPDATED: Inventory, relations, and AI Memory expanded.");
+            currentState.aiMemory = { ...currentState.aiMemory, ...processingResult.memoryUpdate };
+            State.setState({ aiMemory: currentState.aiMemory });
+            console.log("🧠 AI Memory updated:", Object.keys(processingResult.memoryUpdate));
         }
         
         // --- ЛОГИРОВАНИЕ: УСПЕХ ---
-        // Обновляем запись в аудите статусом success.
-        // ВАЖНО: Передаем СЫРОЙ текст ответа (rawText), чтобы видеть оригинал в логе.
         Audit.updateEntrySuccess(auditEntry, processingResult.rawText);
         
-        // Обновление статистики для выбранной LLM-модели (время ответа, статус)
+        // Обновление статистики модели
         const modelInState = state.models.find(model => model.id === state.settings.model);
         if (modelInState) {
             modelInState.status = 'success';
@@ -138,7 +108,7 @@ async function sendAIRequest(selectedChoices, d10, abortController = null) { // 
             modelInState.lastTested = new Date().toISOString();
         }
         
-        // Возвращаем очищенные игровые данные в Game.js
+        // Возвращаем очищенные игровые данные
         return processingResult.cleanData;
         
     } catch (error) {
@@ -147,19 +117,20 @@ async function sendAIRequest(selectedChoices, d10, abortController = null) { // 
         if (modelInState) modelInState.status = 'error';
         
         // --- ЛОГИРОВАНИЕ: ОШИБКА ---
-        // Если это ошибка парсинга, то в error.rawResponse лежит сырой текст ответа.
-        // Запишем его в лог перед тем, как пометить статус ошибкой.
         if (error.rawResponse) {
             auditEntry.fullResponse = error.rawResponse;
         }
         
-        // Обновляем запись в аудите статусом error
         Audit.updateEntryError(auditEntry, error);
         
-        // Пробрасываем ошибку дальше по цепочке, чтобы Game.js мог разблокировать интерфейс
+        // Пробрасываем ошибку дальше
         throw error;
     }
 }
+
+// Остальные функции (generateCustomScene, testCurrentProvider, testSelectedModel) остаются без изменений
+// но должны использовать исправленный API_Request.executeFetch
+
 
 /**
  * Генерирует начальную сцену или кастомный сюжет по запросу из UI Настроек.

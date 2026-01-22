@@ -453,10 +453,6 @@ function createChangesHTML(changes, type) {
     return html;
 }
 
-// =================================================
-// УПРОЩЕННАЯ ФУНКЦИЯ renderChoices для отладки
-// =================================================
-
 /**
  * Получение русского названия стата
  */
@@ -702,6 +698,42 @@ function renderRelations() {
     relContainer.innerHTML = html;
 }
 
+// Добавляем функцию отрисовки навыков:
+function renderSkills() {
+    const state = State.getState();
+    
+    // Ищем или создаем контейнер для навыков
+    let skillsContainer = document.getElementById('skillsContainer');
+    if (!skillsContainer) {
+        skillsContainer = document.createElement('div');
+        skillsContainer.id = 'skillsContainer';
+        skillsContainer.className = 'skills-section';
+        
+        // Вставляем после отображения личности
+        const pers = document.getElementById('personalityDisplay');
+        if (pers && pers.parentNode) {
+            pers.parentNode.insertBefore(skillsContainer, pers.nextSibling);
+        }
+    }
+    
+    let html = `<div style="margin-top:15px; font-weight:bold; color:#9c88ff; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
+        <i class="fas fa-scroll"></i> НАВЫКИ
+    </div>`;
+    
+    if (!state.skills || state.skills.length === 0) {
+        html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Еще не изучены...</div>`;
+    } else {
+        html += `<div style="display:flex; flex-wrap:wrap; gap:6px;">`;
+        state.skills.forEach(skill => {
+            const cleanSkill = String(skill).replace(/['"]/g, '');
+            html += `<span style="background:rgba(156, 136, 255, 0.15); padding:3px 8px; border-radius:4px; font-size:0.75rem; border:1px solid rgba(156, 136, 255, 0.3); color:#ccc;">${cleanSkill}</span>`;
+        });
+        html += `</div>`;
+    }
+    
+    skillsContainer.innerHTML = html;
+}
+
 /**
  * Применение визуальных эффектов состояния
  */
@@ -776,9 +808,10 @@ function renderAll() {
     renderStats();
     renderChoices();
     renderInventory(); 
-    renderRelations()
+    renderRelations();
+    renderSkills();
     renderHistory();
-    applyStateEffects(); 
+    applyStateEffects();
     
     // Обновляем счетчик ходов
     if (dom.turnCounter) {
@@ -939,6 +972,7 @@ export const Render = {
     renderStats,
     renderInventory,
     renderHistory,
+    renderSkills,
     renderAll,
     showAlert,
     showErrorAlert,

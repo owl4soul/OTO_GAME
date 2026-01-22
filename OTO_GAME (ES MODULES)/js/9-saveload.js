@@ -19,6 +19,9 @@ function saveState() {
         degreeIndex: state.degreeIndex,
         personality: state.personality,
         isRitualActive: state.isRitualActive,
+    skills: state.skills,
+    ritualProgress: state.ritualProgress || 0,
+    ritualTarget: state.ritualTarget || null,
         currentScene: state.currentScene,
         history: state.history,
         summary: state.summary,
@@ -38,6 +41,7 @@ function saveState() {
     };
     
     // Сохраняем все в localStorage
+localStorage.setItem('oto_skills', JSON.stringify(state.skills));
     localStorage.setItem('oto_v3_state', JSON.stringify(saveData));
     localStorage.setItem('oto_audit_log', JSON.stringify(state.auditLog));
     localStorage.setItem('oto_models_status', JSON.stringify(state.models));
@@ -71,6 +75,10 @@ function loadState() {
             state.history = p.history || state.history;
             state.inventory = p.inventory || state.inventory;
             state.relations = p.relations || state.relations;
+            state.skills = p.skills || state.relations || [],
+state.ritualProgress = p.ritualProgress || state.ritualProgress || 0;
+state.ritualTarget = p.ritualTarget || state.ritualTarget || null;
+
             state.selectedChoices = p.selectedChoices || state.selectedChoices;
             state.freeMode = p.freeMode || state.freeMode;
             state.freeModeText = p.freeModeText || state.freeModeText;

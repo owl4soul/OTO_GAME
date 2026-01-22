@@ -74,6 +74,12 @@ export const CONFIG = {
     'харизма': 'influence'
 },
     
+    actionResultTiers: {
+    success: 6, // d10 ≥ 6 = успех
+    partial: 3, // d10 ≥ 3 = частичный успех
+    failure: 0 // d10 < 3 = провал
+},
+
     // Заглушки фраз героя
     thoughtsOfHeroFakes: [
         "Холодный дождь стучит по стеклу, как метроном времени.",
@@ -135,6 +141,21 @@ export const CONFIG = {
     
     // 1. Основной промт с системными инструкциями
     prompts: PROMPTS.prompts,
+    
+    
+// Добавьте после строки: prompts: PROMPTS.prompts,
+
+
+prompts: {
+    ...PROMPTS.prompts,
+    userHeaders: {
+        ...PROMPTS.prompts.userHeaders,
+        inventory_all: "[ИНВЕНТАРЬ]:",
+        relations_all: "[ОТНОШЕНИЯ]:",
+        action_results: "[РЕЗУЛЬТАТЫ ДЕЙСТВИЙ]:",
+        skills: "[НАВЫКИ]:"
+    }
+},
     
     // 2. Промт для запроса сюжета
     marsyasScenarioPrompt: PROMPTS.marsyasScenarioPrompt

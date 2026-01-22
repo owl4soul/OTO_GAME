@@ -9,6 +9,7 @@ import { Utils } from './2-utils.js';
 import { API } from './7-api-facade.js';
 import { Saveload } from './9-saveload.js';
 import { UI } from './ui.js';
+import { Calculations } from './12-calculations.js'; // ИМПОРТ НОВОГО МОДУЛЯ
 
 const dom = DOM.getDOM();
 
@@ -94,6 +95,83 @@ function stopThoughtsOfHeroDisplay() {
 }
 
 /**
+ * Рассчитывает результаты выбранных действий
+ * @param {Array} selectedChoices - Массив выбранных объектов действий
+ * @param {Object} currentState - Текущее состояние игры
+ * @returns {Array} Массив результатов действий
+ */
+function calculateActionResults(selectedChoices, currentState) {
+    if (!selectedChoices || selectedChoices.length === 0) {
+        return [];
+    }
+    
+    const actionResults = [];
+    
+    // Для каждого выбранного действия рассчитываем результат
+    selectedChoices.forEach(choice => {
+        if (!choice || !choice.text) {
+            console.warn('❌ Пустой выбор в calculateActionResults');
+            return;
+        }
+        
+        // Генерируем d10 для этого действия
+        const d10 = Math.ceil(Math.random() * 10);
+        
+        // Рассчитываем результат
+        const result = Calculations.calculateActionResult(choice, currentState, d10);
+        
+        actionResults.push({
+            text: choice.text,
+            result: result.result,
+            delta: result.delta,
+            d10: result.d10,
+            appliedChanges: result.appliedChanges,
+            requirementsMet: result.requirementsMet
+        });
+    });
+    
+    return actionResults;
+}
+
+/**
+ * Применяет изменения от действий к состоянию
+ * @param {Object} state - Текущее состояние
+ * @param {Array} actionResults - Результаты действий
+ * @returns {Object} Обновленное состояние
+ */
+function applyActionChangesToState(state, actionResults) {
+    if (!actionResults || actionResults.length === 0) {
+        return state;
+    }
+    
+    const updatedState = { ...state };
+    
+    // Применяем изменения от каждого действия
+    actionResults.forEach(action => {
+        if (action.appliedChanges) {
+            Calculations.applyActionChanges(updatedState, action.appliedChanges);
+        }
+    });
+    
+    return updatedState;
+}
+
+/**
+ * Форматирует результаты действий для отправки ИИ
+ * @param {Array} actionResults - Результаты действий
+ * @returns {string} Форматированная строка
+ */
+function formatActionResultsForAI(actionResults) {
+    if (!actionResults || actionResults.length === 0) {
+        return "Действия не выбраны";
+    }
+    
+    return actionResults.map(action => 
+        `"${action.text}" → ${action.result.toUpperCase()} (d10=${action.d10}, изменения: ${action.delta})`
+    ).join('\n');
+}
+
+/**
  * Отправка хода игры
  * @param {number} retries - Количество оставшихся попыток
  */
@@ -108,6 +186,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     
     let selectedChoicesData = [];
     
+    // Собираем данные выбранных действий
     if (state.freeMode) {
         const requestText = state.freeModeText.trim();
         if (requestText.length === 0) return;
@@ -135,7 +214,19 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         });
     }
     
-    const d10 = Math.ceil(Math.random() * 10);
+    // Рассчитываем результаты действий
+    const actionResults = calculateActionResults(selectedChoicesData, state);
+    if (actionResults.length === 0) {
+        Render.showErrorAlert("Ошибка расчета", "Не удалось рассчитать результаты действий");
+        return;
+    }
+    
+    // Применяем изменения от действий к временному состоянию
+    const tempState = JSON.parse(JSON.stringify(state));
+    const updatedTempState = applyActionChangesToState(tempState, actionResults);
+    
+    // Форматируем результаты для ИИ
+    const actionResultsText = formatActionResultsForAI(actionResults);
     
     dom.btnSubmit.innerHTML = '<span class="spinner"></span>';
     dom.btnSubmit.disabled = true;
@@ -158,8 +249,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }, CONFIG.requestTimeout);
     
     try {
-        // Передаем массив объектов выбранных choices
-        const data = await API.sendAIRequest(selectedChoicesData, d10, activeAbortController);
+        // Передаем обновленное состояние и результаты действий
+        const data = await API.sendAIRequest(updatedTempState, actionResultsText, activeAbortController);
         
         clearTimeout(timeoutId);
         activeAbortController = null;
@@ -167,24 +258,24 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         // Останавливаем показ фраз на подложке
         stopThoughtsOfHeroDisplay();
         
-        if (!data.choices || data.choices.length === 0) {
+        if (!data.scene || data.scene.length === 0) {
             if (retries > 0) {
-                console.warn(`Ответ ИИ не содержит действий. Повторная попытка ${CONFIG.maxRetries - retries + 1}.`);
+                console.warn(`Ответ ИИ не содержит сцены. Повторная попытка ${CONFIG.maxRetries - retries + 1}.`);
                 await new Promise(r => setTimeout(r, CONFIG.retryDelayMs));
                 return submitTurn(retries - 1);
             } else {
-                throw new Error("ИИ не смог сгенерировать варианты действий после нескольких попыток.");
+                throw new Error("ИИ не смог сгенерировать сцену после нескольких попыток.");
             }
         }
         
         // Проверяем, есть ли в ответе мысли героя
-        // ИСПРАВЛЕНО: используем thoughtsOfHeroResponse, а не thoughtsOfHero
-        if (data.thoughtsOfHeroResponse && Array.isArray(data.thoughtsOfHeroResponse)) {
-            State.addHeroPhrases(data.thoughtsOfHeroResponse);
+        if (data.thoughtsOfHero && Array.isArray(data.thoughtsOfHero)) {
+            State.addHeroPhrases(data.thoughtsOfHero);
         }
         
-        // Передаем выбранные объекты choices
-        processTurn(data, selectedChoicesData, d10);
+        // Обрабатываем ход с результатами действий
+        processTurn(data, actionResults, selectedChoicesData);
+        
     } catch (e) {
         clearTimeout(timeoutId);
         activeAbortController = null;
@@ -233,55 +324,69 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }
 }
 
-
 /**
- * Обработка ответа ИИ и обновление игры (ИСПРАВЛЕНО)
+ * Обработка ответа ИИ и обновление игры
  * @param {Object} data - Данные от ИИ
- * @param {Array} selectedChoices - Массив выбранных объектов choices
- * @param {number} d10 - Результат броска d10
+ * @param {Array} actionResults - Результаты действий
+ * @param {Array} selectedChoicesData - Исходные данные выбранных действий
  */
-function processTurn(data, selectedChoices, d10) {
+function processTurn(data, actionResults, selectedChoicesData) {
     const state = State.getState();
     let updatesHTML = [];
     
-    // --- 1. СТАТЫ ---
-    const VALID_STATS = ['will', 'stealth', 'influence', 'sanity'];
+    // --- 1. ПРИМЕНЯЕМ ИЗМЕНЕНИЯ ОТ ДЕЙСТВИЙ К РЕАЛЬНОМУ СОСТОЯНИЮ ---
+    actionResults.forEach(action => {
+        Calculations.applyActionChanges(state, action.appliedChanges);
+        
+        // Записываем в историю изменений
+        const actionDescription = `"${action.text}" → ${action.result.toUpperCase()} (d10=${action.d10})`;
+        if (action.delta && action.delta !== 'нет изменений') {
+            updatesHTML.push(`
+                <div style="margin-bottom: 6px;">
+                    <span style="color:${action.result === 'success' ? '#4cd137' : action.result === 'partial' ? '#fbc531' : '#e84118'}; font-weight:bold;">
+                        ${actionDescription}
+                    </span>
+                    <span style="color:#ccc; font-size:0.8em; margin-left: 8px;">
+                        ${action.delta}
+                    </span>
+                </div>
+            `);
+        }
+    });
     
+    // --- 2. ПРИМЕНЯЕМ ИЗМЕНЕНИЯ ОТ ИИ ---
+    
+    // Статы от ИИ
     if (data.stat_changes && typeof data.stat_changes === 'object') {
         console.log("📊 Статы от ИИ:", data.stat_changes);
         
         for (const [rawKey, changeValue] of Object.entries(data.stat_changes)) {
-            let key = Utils.normalizeStatKey(rawKey) || rawKey.toLowerCase();
+            const key = Utils.normalizeStatKey(rawKey) || rawKey.toLowerCase();
+            const numValue = Number(changeValue) || 0;
             
-            // Исправление common алиасов
-            if (key === 'reason') key = 'sanity';
-            if (key === 'volya' || key === 'воля') key = 'will';
-            
-            if (VALID_STATS.includes(key) && changeValue !== 0) {
-                const oldVal = state.stats[key] || 50;
-                const newVal = Math.max(0, Math.min(100, oldVal + Number(changeValue)));
-                state.stats[key] = newVal;
+            if (key && state.stats[key] !== undefined && numValue !== 0) {
+                const oldVal = state.stats[key];
+                state.stats[key] = Math.max(0, Math.min(100, oldVal + numValue));
                 
                 const russianName = Render.getRussianStatName(key);
-                const color = changeValue > 0 ? '#4cd137' : '#e84118';
-                const sign = changeValue > 0 ? '+' : '';
+                const color = numValue > 0 ? '#4cd137' : '#e84118';
+                const sign = numValue > 0 ? '+' : '';
                 
                 updatesHTML.push(`
                     <div style="margin-bottom: 6px;">
                         <span style="color:${color}; font-weight:bold;">
-                            ${russianName}: ${sign}${changeValue}
+                            ${russianName}: ${sign}${numValue}
                         </span>
                         <span style="color:#666; font-size:0.8em;">
-                            (${oldVal}→${newVal})
+                            (${oldVal}→${state.stats[key]})
                         </span>
                     </div>
                 `);
             }
         }
-        State.setState({ stats: state.stats });
     }
     
-    // --- 2. ПРОГРЕСС ---
+    // Прогресс от ИИ
     if (data.progress_change !== undefined && data.progress_change !== 0) {
         const oldProgress = state.progress;
         state.progress += data.progress_change;
@@ -296,106 +401,130 @@ function processTurn(data, selectedChoices, d10) {
                 </span>
             </div>
         `);
-        State.syncDegree();
-        State.setState({ progress: state.progress });
     }
     
-    // --- 3. ЛИЧНОСТЬ ---
+    // Личность от ИИ
     const newPersonality = data.personality || data.personality_change;
     if (newPersonality && newPersonality !== state.personality) {
-        // Защитное преобразование в строку
         const newPersonalityStr = String(newPersonality);
         const oldPersonality = state.personality;
         state.personality = newPersonalityStr;
         
         updatesHTML.push(`
-        <div style="margin-bottom: 10px;">
-            <span style="color:#00a8ff; font-weight:bold;">
-                <i class="fas fa-brain"></i> Личность изменилась
-            </span>
-            <div style="color:#ccc; padding-left: 15px; font-size: 0.9em;">
-                <div><strong>Было:</strong> ${oldPersonality ? oldPersonality.substring(0, 100) : ''}...</div>
-                <div><strong>Стало:</strong> ${newPersonalityStr.substring(0, 100)}...</div>
+            <div style="margin-bottom: 10px;">
+                <span style="color:#00a8ff; font-weight:bold;">
+                    <i class="fas fa-brain"></i> Личность изменилась
+                </span>
+                <div style="color:#ccc; padding-left: 15px; font-size: 0.9em;">
+                    <div><strong>Было:</strong> ${oldPersonality ? oldPersonality.substring(0, 80) : ''}...</div>
+                    <div><strong>Стало:</strong> ${newPersonalityStr.substring(0, 80)}...</div>
+                </div>
             </div>
-        </div>
-    `);
-        State.setState({ personality: state.personality });
+        `);
     }
     
-    // --- 4. ИНВЕНТАРЬ (используем inventory_all) ---
-    if (data.inventory_all && Array.isArray(data.inventory_all)) {
-        const oldInv = [...state.inventory];
-        const newInv = data.inventory_all;
+    // Инвентарь от ИИ (теперь только изменения)
+    if (data.inventory_changes && typeof data.inventory_changes === 'object') {
+        Calculations.processInventoryChanges(state, data.inventory_changes);
         
-        const added = newInv.filter(item => !oldInv.includes(item));
-        const removed = oldInv.filter(item => !newInv.includes(item));
+        const added = data.inventory_changes.add || [];
+        const removed = data.inventory_changes.remove || [];
         
         if (added.length > 0) {
             updatesHTML.push(`
-            <div style="margin-bottom: 8px;">
-                <span style="color:#9c88ff; font-weight:bold;">
-                    <i class="fas fa-plus-circle"></i> Получено:
-                </span>
-        `);
+                <div style="margin-bottom: 8px;">
+                    <span style="color:#9c88ff; font-weight:bold;">
+                        <i class="fas fa-plus-circle"></i> Получено от ИИ:
+                    </span>
+            `);
             added.forEach(item => {
                 updatesHTML.push(`
-                <div style="color:#ccc; padding-left: 25px;">• ${item}</div>
-            `);
+                    <div style="color:#ccc; padding-left: 25px;">• ${item}</div>
+                `);
             });
             updatesHTML.push(`</div>`);
         }
         
         if (removed.length > 0) {
             updatesHTML.push(`
-            <div style="margin-bottom: 8px;">
-                <span style="color:#7f8fa6; font-weight:bold;">
-                    <i class="fas fa-minus-circle"></i> Потеряно:
-                </span>
-        `);
+                <div style="margin-bottom: 8px;">
+                    <span style="color:#7f8fa6; font-weight:bold;">
+                        <i class="fas fa-minus-circle"></i> Утеряно по воле ИИ:
+                    </span>
+            `);
             removed.forEach(item => {
                 updatesHTML.push(`
-                <div style="color:#ccc; padding-left: 25px; text-decoration: line-through;">• ${item}</div>
-            `);
+                    <div style="color:#ccc; padding-left: 25px; text-decoration: line-through;">• ${item}</div>
+                `);
             });
             updatesHTML.push(`</div>`);
         }
-        
-        // Обновляем инвентарь в состоянии
-        state.inventory = newInv;
     }
     
-    // --- 5. ОТНОШЕНИЯ (используем relations_all) ---
-    if (data.relations_all && typeof data.relations_all === 'object') {
-        const oldRelations = { ...state.relations };
-        const newRelations = data.relations_all;
+    // Отношения от ИИ (теперь только изменения)
+    if (data.relations_changes && typeof data.relations_changes === 'object') {
+        Calculations.processRelationsChanges(state, data.relations_changes);
         
-        // Обновляем отношения
-        state.relations = newRelations;
-        
-        // Логирование изменений отношений
         const relationChanges = [];
-        Object.entries(newRelations).forEach(([npc, val]) => {
-            const oldVal = oldRelations[npc] || 0;
-            if (val !== oldVal) {
-                relationChanges.push(`${npc}: ${oldVal} → ${val}`);
+        Object.entries(data.relations_changes).forEach(([npc, change]) => {
+            const numChange = Number(change) || 0;
+            if (numChange !== 0) {
+                const color = numChange > 0 ? '#4cd137' : '#e84118';
+                const sign = numChange > 0 ? '+' : '';
+                relationChanges.push(`<span style="color:${color}">${npc}: ${sign}${numChange}</span>`);
             }
         });
         
         if (relationChanges.length > 0) {
             updatesHTML.push(`
-            <div style="margin-bottom: 8px;">
-                <span style="color:#fbc531; font-weight:bold;">
-                    <i class="fas fa-handshake"></i> Изменения отношений:
-                </span>
-                <div style="color:#ccc; padding-left: 25px;">
-                    ${relationChanges.map(r => `<div>• ${r}</div>`).join('')}
+                <div style="margin-bottom: 8px;">
+                    <span style="color:#fbc531; font-weight:bold;">
+                        <i class="fas fa-handshake"></i> Изменения отношений:
+                    </span>
+                    <div style="color:#ccc; padding-left: 25px;">
+                        ${relationChanges.map(r => `<div>• ${r}</div>`).join('')}
+                    </div>
                 </div>
-            </div>
-        `);
+            `);
         }
     }
     
-    // --- 6. РИТУАЛЫ ---
+    // Навык от ИИ
+    if (data.skill_add && typeof data.skill_add === 'string') {
+        if (Calculations.processSkillAdd(state, data.skill_add)) {
+            updatesHTML.push(`
+                <div style="margin-bottom: 8px;">
+                    <span style="color:#9c88ff; font-weight:bold;">
+                        <i class="fas fa-scroll"></i> Новый навык:
+                    </span>
+                    <div style="color:#ccc; padding-left: 25px;">
+                        <div>• ${data.skill_add}</div>
+                    </div>
+                </div>
+            `);
+        }
+    }
+    
+    // Проверяем достижение новой степени
+    const degreeAdvancement = Calculations.checkAndApplyDegreeAdvancement(state);
+    if (degreeAdvancement.advanced) {
+        updatesHTML.push(`
+            <div style="margin-bottom: 8px; padding: 8px; background: rgba(212, 175, 55, 0.1); border-radius: 6px; border: 1px solid #d4af37;">
+                <span style="color:#d4af37; font-weight:bold;">
+                    <i class="fas fa-crown"></i> ДОСТИГНУТА НОВАЯ СТЕПЕНЬ!
+                </span>
+                <div style="color:#ccc; padding-left: 20px;">
+                    <div>${degreeAdvancement.from.name} → ${degreeAdvancement.to.name}</div>
+                    <div style="color:#fbc531; font-size: 0.9em;">+1 ко всем характеристикам</div>
+                    <div style="color:#c23616; font-size: 0.85em; margin-top: 5px;">
+                        <i class="fas fa-fire"></i> Начинается ритуал посвящения...
+                    </div>
+                </div>
+            </div>
+        `);
+    }
+    
+    // Ритуалы
     const nextDegree = CONFIG.degrees.find(d => d.threshold > state.progress);
     const thresholdReached = nextDegree && state.progress >= nextDegree.threshold;
     
@@ -410,38 +539,46 @@ function processTurn(data, selectedChoices, d10) {
         updatesHTML.push(`<span style="color:#fbc531; font-weight:bold; text-shadow: 0 0 5px #fbc531;"><i class="fas fa-star"></i> РИТУАЛ ЗАВЕРШЕН</span>`);
         Utils.vibrate(CONFIG.vibrationPatterns.success);
     }
-    State.setState({ isRitualActive: state.isRitualActive });
     
-    // --- 7. ЗАПИСЬ В ИСТОРИЮ ---
-    // Для истории очищаем HTML теги, чтобы текст был чистым
-    let plainUpdates = updatesHTML.map(u => u.replace(/<[^>]*>?/gm, '')).join(' | ');
-    let playerChoiceText = state.freeMode ? selectedChoices[0].text : selectedChoices.map(c => c.text).join(' + ');
+    // --- 3. ОБНОВЛЯЕМ ИСТОРИЮ И СЦЕНУ ---
     
+    // Сохраняем сводку изменений
+    const plainUpdates = updatesHTML.map(u => u.replace(/<[^>]*>?/gm, '')).join(' | ');
+    const playerChoiceText = state.freeMode ? 
+        selectedChoicesData[0].text : 
+        selectedChoicesData.map(c => c.text).join(' + ');
+    
+    // Добавляем в историю
     state.history.push({
         sceneSnippet: data.scene.substring(0, 60) + "...",
         fullText: data.scene,
         choice: playerChoiceText,
         changes: plainUpdates,
-        d10: d10
+        d10: actionResults.map(a => a.d10).join(',')
     });
     
-    // --- 8. ОБНОВЛЕНИЕ СЦЕНЫ ---
+    // Обновляем сцену
     state.currentScene = {
         text: data.scene || "...",
-        choices: data.choices,
+        choices: data.choices || state.currentScene.choices,
         reflection: data.reflection || "",
-        d10: d10 // Сохраняем результат броска в сцене
+        d10: actionResults.map(a => a.d10).join(',')
     };
+    
+    // Обновляем сводку
     if (data.short_summary) {
-        state.summary = (state.summary + " " + data.short_summary).trim().substring(state.summary.length - 5000);
+        state.summary = (state.summary + " " + data.short_summary).trim();
+        if (state.summary.length > 5000) {
+            state.summary = state.summary.substring(state.summary.length - 5000);
+        }
     }
     
-    // Сброс UI
+    // Сбрасываем UI состояние
     state.freeMode = false;
     state.freeModeText = '';
     state.selectedChoices = [];
     
-    // Обновляем состояние
+    // Обновляем глобальное состояние
     State.setState({
         history: state.history,
         currentScene: state.currentScene,
@@ -451,101 +588,60 @@ function processTurn(data, selectedChoices, d10) {
         summary: state.summary,
         inventory: state.inventory,
         relations: state.relations,
-        aiMemory: state.aiMemory
+        skills: state.skills,
+        aiMemory: state.aiMemory,
+        stats: state.stats,
+        progress: state.progress,
+        personality: state.personality,
+        degreeIndex: state.degreeIndex,
+        isRitualActive: state.isRitualActive,
+        ritualProgress: state.ritualProgress,
+        ritualTarget: state.ritualTarget
     });
+    
+    // Увеличиваем счетчик ходов
     State.incrementTurnCount();
     
-    // --- 9. РЕНДЕР ---
+    // --- 4. РЕНДЕРИМ ОБНОВЛЕННЫЙ ИНТЕРФЕЙС ---
     Render.renderAll();
     
-    // --- 10. ВЫВОД ЛОГА ИЗМЕНЕНИЙ В DOM И СОХРАНЕНИЕ В STATE ---
-    // Проверяем, есть ли изменения или результат броска
-    const hasUpdates = updatesHTML.length > 0;
-    const hasD10 = d10 !== undefined && d10 !== null;
-    
-    if (hasUpdates || hasD10) {
-        // Создаем HTML для результата броска d10
+    // --- 5. ОТОБРАЖАЕМ ИЗМЕНЕНИЯ ЗА ХОД ---
+    if (updatesHTML.length > 0) {
+        // Создаем HTML для результата бросков d10
+        const d10Results = actionResults.map(a => a.d10).join(', ');
         let d10Block = '';
-        if (hasD10) {
+        if (d10Results) {
             d10Block = `
                 <div style="margin-bottom: 8px; padding: 5px; background: rgba(255, 215, 0, 0.1); border-radius: 4px; border: 1px solid #d4af37; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-dice-d10" style="color: #d4af37;"></i>
-                    <span style="color: #fff;">Результат броска d10: <b style="color: #fbc531;">${d10}</b></span>
+                    <span style="color: #fff;">Результаты бросков d10: <b style="color: #fbc531;">${d10Results}</b></span>
                 </div>
             `;
         }
         
-        // Создаем HTML для списка изменений
-        let updatesList = '';
-        if (hasUpdates) {
-            // Группируем изменения для лучшего отображения
-            const groupedUpdates = [];
-            let currentGroup = [];
-            
-            for (const update of updatesHTML) {
-                // Если обновление начинается с отступа (вложенный элемент), добавляем в текущую группу
-                if (update.includes('padding-left: 15px;')) {
-                    currentGroup.push(update);
-                } else {
-                    // Если есть текущая группа, сохраняем ее
-                    if (currentGroup.length > 0) {
-                        groupedUpdates.push(currentGroup);
-                        currentGroup = [];
-                    }
-                    // Начинаем новую группу с основного элемента
-                    currentGroup.push(update);
-                }
-            }
-            
-            // Добавляем последнюю группу
-            if (currentGroup.length > 0) {
-                groupedUpdates.push(currentGroup);
-            }
-            
-            // Формируем HTML сгруппированных изменений
-            const groupedHTML = groupedUpdates.map(group => {
-                if (group.length === 1) {
-                    return `<div style="margin-bottom: 8px; padding-left: 5px; border-left: 2px solid #333;">${group[0]}</div>`;
-                } else {
-                    const mainItem = group[0];
-                    const subItems = group.slice(1).map(item =>
-                        `<div style="margin-left: 15px; margin-bottom: 3px;">${item}</div>`
-                    ).join('');
-                    return `<div style="margin-bottom: 10px;">${mainItem}${subItems}</div>`;
-                }
-            }).join('');
-            
-            updatesList = `
-                <div style="border-top: 1px solid #333; padding-top: 12px; font-size: 0.85rem; line-height: 1.5;">
-                    ${groupedHTML}
-                </div>
-            `;
-        }
-        
-        // Формируем полный HTML
+        // Формируем полный HTML изменений
         const updatesContent = `
             <div style="color: #d4af37; font-family: 'Roboto Mono', monospace; font-size: 0.9rem; font-weight: bold; margin-bottom: 10px; letter-spacing: 1px;">
                 <i class="fas fa-clipboard-list"></i> ИЗМЕНЕНИЯ ЗА ХОД:
             </div>
             ${d10Block}
-            ${updatesList}
+            <div style="border-top: 1px solid #333; padding-top: 12px; font-size: 0.85rem; line-height: 1.5;">
+                ${updatesHTML.join('')}
+            </div>
         `;
         
         // Показываем блок изменений
         dom.updates.style.display = 'block';
         dom.updates.innerHTML = updatesContent;
         
-        // Сохраняем в стейт (чтобы восстановить при F5)
+        // Сохраняем для восстановления после перезагрузки
         state.lastTurnUpdates = updatesContent;
     } else {
         dom.updates.style.display = 'none';
-        state.lastTurnUpdates = ""; // Очищаем, если изменений нет
+        state.lastTurnUpdates = "";
     }
     
-    // Обновляем стейт перед сохранением
-    State.setState({ lastTurnUpdates: state.lastTurnUpdates });
-    
-    // Восстановление UI кнопок
+    // Восстанавливаем UI
     UI.setFreeModeUI(false);
     dom.freeInputText.disabled = false;
     dom.freeInputText.style.opacity = '1';
@@ -553,6 +649,7 @@ function processTurn(data, selectedChoices, d10) {
     dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
     UI.updateActionButtons();
     
+    // Сохраняем и проверяем конец игры
     Saveload.saveState();
     checkEndGame();
 }
@@ -573,14 +670,6 @@ function checkEndGame() {
     if (state.progress >= 1200) { // Используем новый порог из конфига
         showEndScreen("ПОБЕДА", "Свобода — это отсутствие необходимости выбирать.", "#d4af37", true);
         return;
-    }
-    
-    // Проверка на достижение следующей степени
-    const nextDegree = CONFIG.degrees.find(d => d.threshold > state.progress);
-    if (nextDegree && state.progress >= nextDegree.threshold) {
-        // Игрок достиг порога следующей степени
-        State.syncDegree();
-        Render.renderStats();
     }
 }
 
@@ -750,7 +839,7 @@ function handleClear() {
         Render.renderChoices();
     }
     
-    // ОБНОВЛЯЕМ ОБЕ КНОПКИ (Они обе должны стать disabled, т.к. всё очищено)
+    // Обновляем обе кнопки
     UI.updateActionButtons();
 }
 
@@ -765,7 +854,6 @@ function handleFreeModeToggle(e) {
     
     // Сначала обновляем состояние данных
     if (state.freeMode) {
-        // Если перешли в Свободный режим — подтягиваем текст из поля (вдруг там что-то было)
         state.freeModeText = dom.freeInputText.value;
     }
     
@@ -776,10 +864,10 @@ function handleFreeModeToggle(e) {
         selectedChoices: state.selectedChoices
     });
     
-    // Обновляем UI (показываем/скрываем нужные блоки)
+    // Обновляем UI
     UI.setFreeModeUI(isFreeMode);
     
-    // Обновляем обе кнопки после смены режима
+    // Обновляем кнопки
     UI.updateActionButtons();
     
     // Сохраняем на диск

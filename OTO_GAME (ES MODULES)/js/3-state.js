@@ -12,8 +12,6 @@ let state = {
     progress: 0,
     degreeIndex: 0,
     personality: 'Молодой Минервал, ещё не присягнувший в верности Ордену, полный идеалов, но ещё не испытанный тьмой.',
-    // Флаги состояний
-    isRitualActive: false,
     
     // Текущая сцена
     currentScene: { ...initialScene },
@@ -31,6 +29,13 @@ let state = {
     lastTurnUpdates: "",
     inventory: [],
     relations: {},
+      // Навыки героя
+    skills: [],
+    // Флаги состояния Ритуала
+    isRitualActive: false,
+    // Прогресс Ритуала
+    ritualProgress: 0,
+    ritualTarget: null,
     
     // Режимы ввода
     freeMode: false,
@@ -39,8 +44,15 @@ let state = {
     // Счетчики
     turnCount: parseInt(localStorage.getItem('oto_turn_count') || '0'),
     
-    // Фразы героя
+    // Мысли героя
     thoughtsOfHero: JSON.parse(localStorage.getItem('oto_thoughts_of_hero') || '[]'),
+    
+        // Навыки героя
+    skills: [],
+    
+    // Прогресс ритуала
+    ritualProgress: 0,
+    ritualTarget: null,
     
     // Настройки приложения
     settings: {
@@ -89,7 +101,32 @@ function syncDegree() {
     CONFIG.degrees.forEach((d, i) => {
         if (state.progress >= d.threshold) newIndex = i;
     });
-    state.degreeIndex = newIndex;
+    
+    // Добавляем проверку на повышение степени:
+    // Если степень повысилась
+    if (newIndex > state.degreeIndex) {
+        state.degreeIndex = newIndex;
+        // Бонус за новую степень (+1 ко всем статам)
+        Object.keys(state.stats).forEach(stat => {
+            state.stats[stat] = Math.min(100, state.stats[stat] + 1);
+        });
+        // Активируем ритуал
+        state.isRitualActive = true;
+        state.ritualProgress = 0;
+        state.ritualTarget = CONFIG.degrees[newIndex].lvl;
+    } else {
+        state.degreeIndex = newIndex;
+    }
+}
+
+// Функция для добавления навыка:
+function addSkill(skill) {
+    if (skill && typeof skill === 'string' && !state.skills.includes(skill)) {
+        state.skills.push(skill);
+        localStorage.setItem('oto_skills', JSON.stringify(state.skills));
+        return true;
+    }
+    return false;
 }
 
 function applyParsedChanges(parsedData) {
@@ -575,6 +612,16 @@ export const State = {
         }
     },
     
+
+    // Новые методы для навыков
+    addSkill,
+    getSkills: () => state.skills,
+    clearSkills: () => {
+        state.skills = [];
+        localStorage.removeItem('oto_skills');
+    },
+
+
     // Сброс и рестарт игры
     resetGameProgress,
     resetFullGame,
