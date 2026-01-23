@@ -493,17 +493,23 @@ function formatCompactRequirements(req) {
     return `<div style="font-size:0.75rem; margin-top:3px; color:#888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.3">🔒 Треб: ${items.join(', ')}</div>`;
 }
 
+
 /**
- * Компактный формат последствий (одной строкой)
+ * Компактный формат последствий (одной строкой) - ИСПРАВЛЕННАЯ ВЕРСИЯ
  */
 function formatCompactChanges(success, failure) {
     let html = '';
     
     // Хелпер для форматирования одного блока (Успех или Провал)
     const formatBlock = (changes, color, iconSymbol) => {
+        // ВАЖНОЕ ИСПРАВЛЕНИЕ: Проверяем, что changes не undefined/null
+        if (!changes || typeof changes !== 'object') {
+            return '';
+        }
+        
         let items = [];
-        // Статы
-        if (changes.stats) {
+        // Статы - проверяем существование
+        if (changes.stats && typeof changes.stats === 'object') {
             for (const [key, val] of Object.entries(changes.stats)) {
                 if (val === 0) continue;
                 const normKey = Utils.normalizeStatKey(key);
@@ -512,11 +518,11 @@ function formatCompactChanges(success, failure) {
                 items.push(`${ruName}${sign}${val}`);
             }
         }
-        // Инвентарь
-        if (changes.inventory_add && changes.inventory_add.length) {
+        // Инвентарь - проверяем существование
+        if (changes.inventory_add && Array.isArray(changes.inventory_add) && changes.inventory_add.length) {
             changes.inventory_add.forEach(i => items.push(`+📦${i}`));
         }
-        if (changes.inventory_remove && changes.inventory_remove.length) {
+        if (changes.inventory_remove && Array.isArray(changes.inventory_remove) && changes.inventory_remove.length) {
             changes.inventory_remove.forEach(i => items.push(`-📦${i}`));
         }
         
@@ -524,14 +530,18 @@ function formatCompactChanges(success, failure) {
         return `<span style="color:${color}; margin-right:8px;">${iconSymbol} ${items.join(', ')}</span>`;
     };
 
-    const sHtml = formatBlock(success, '#4cd137', '✅'); // Зеленый для успеха
-    const fHtml = formatBlock(failure, '#e84118', '❌'); // Красный для провала
+    // ВАЖНОЕ ИСПРАВЛЕНИЕ: Проверяем параметры перед передачей
+    const sHtml = success && typeof success === 'object' ? 
+        formatBlock(success, '#4cd137', '✅') : ''; // Зеленый для успеха
+    
+    const fHtml = failure && typeof failure === 'object' ? 
+        formatBlock(failure, '#e84118', '❌') : ''; // Красный для провала
     
     if (sHtml) {
         html = `<div style="font-size:0.75rem; margin-top:2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.3">${sHtml}</div>`;
     }
     
-       if (fHtml) {
+    if (fHtml) {
         html += `<div style="font-size:0.75rem; margin-top:2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.3">${fHtml}</div>`;
     }
     
@@ -539,24 +549,45 @@ function formatCompactChanges(success, failure) {
 }
 
 /**
- * Отрисовка вариантов выбора (упрощенная версия для отладки)
+ * Отрисовка вариантов выбора (ИСПРАВЛЕННАЯ ВЕРСИЯ)
  */
 function renderChoices() {
     const state = State.getState();
+    if (!dom.choicesList) return;
+    
     dom.choicesList.innerHTML = '';
     
+    // Проверяем, что currentScene и choices существуют
+    if (!state.currentScene || !Array.isArray(state.currentScene.choices)) {
+        console.error('❌ Ошибка renderChoices: нет currentScene или choices');
+        return;
+    }
+    
     state.currentScene.choices.forEach((choice, idx) => {
+        // КРИТИЧЕСКАЯ ПРОВЕРКА: убедимся, что choice не undefined
+        if (!choice || typeof choice !== 'object') {
+            console.warn(`⚠️ Пропущен choice с индексом ${idx}: объект не существует или неверный`);
+            return;
+        }
+        
         const btn = document.createElement('button');
         // Добавляем класс selected, если вариант выбран
-        btn.className = `choice-btn ${state.selectedChoices.includes(idx) ? 'selected' : ''}`;
+        const isSelected = state.selectedChoices && Array.isArray(state.selectedChoices) ? 
+            state.selectedChoices.includes(idx) : false;
+        btn.className = `choice-btn ${isSelected ? 'selected' : ''}`;
         
-        // 1. Текст действия
-        let content = `${choice.text}`;
+        // 1. Текст действия (с проверкой)
+        const choiceText = choice.text || "Действие без названия";
+        let content = `${choiceText}`;
         
         // 2. Компактные требования и последствия (под текстом)
-        // Если это режим отладки или просто отображение - показываем всегда
-        content += formatCompactRequirements(choice.requirements);
-        content += formatCompactChanges(choice.success_changes, choice.failure_changes);
+        // Используем безопасные значения по умолчанию
+        const requirements = choice.requirements || {};
+        const successChanges = choice.success_changes || {};
+        const failureChanges = choice.failure_changes || {};
+        
+        content += formatCompactRequirements(requirements);
+        content += formatCompactChanges(successChanges, failureChanges);
         
         btn.innerHTML = content;
         btn.onclick = () => Game.toggleChoice(idx);
@@ -564,8 +595,11 @@ function renderChoices() {
     });
     
     // Обновляем счетчик
-    const count = state.selectedChoices ? state.selectedChoices.length : 0;
-    dom.choicesCounter.textContent = `${count}/${CONFIG.maxChoices}`;
+    const count = state.selectedChoices && Array.isArray(state.selectedChoices) ? 
+        state.selectedChoices.length : 0;
+    if (dom.choicesCounter) {
+        dom.choicesCounter.textContent = `${count}/${CONFIG.maxChoices}`;
+    }
 }
 
 /**
@@ -803,15 +837,22 @@ function renderHistory() {
  * Полная перерисовка интерфейса
  */
 function renderAll() {
+    console.info(`⚠️   RENDER ALL   ⚠️`);
     renderScene();
+    console.info(`Scene rendered`);
     updateUIMode();
+    console.info(`Ui mode updated`);
     renderStats();
+    console.info(`Stats rendered`);
     renderChoices();
+    console.info(`Choices rendered`);
     renderInventory(); 
     renderRelations();
     renderSkills();
     renderHistory();
     applyStateEffects();
+    
+    console.info(`ALL RENDERED`);
     
     // Обновляем счетчик ходов
     if (dom.turnCounter) {

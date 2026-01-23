@@ -1,4 +1,4 @@
-// Модуль 7.1: API REQUEST - Построение и отправка запросов (7-1-api-request.js)
+// Модуль 7.1: API REQUEST - Построение и отправка запросов (ПОЛНОСТЬЮ ПЕРЕПИСАН)
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -98,17 +98,26 @@ function buildContextBlock(state) {
 }
 
 /**
- * Подготовка полного тела запроса (Payload) для отправки в API LLM.
- * @param {Object} state - Состояние игры ПОСЛЕ применения изменений от действий
- * @param {string} actionResultsText - Форматированные результаты действий
- * @param {number|null} d10 - Результат броска виртуального d10 (если требуется)
- * @param {string|null} customContext - Опциональный пользовательский контекст
- * @returns {Object} Объект payload, готовый к JSON.stringify и отправке через fetch
+ * Форматирование selectedActions для промпта
  */
-function prepareRequestPayload(state, actionResultsText, d10 = null, customContext = null) {
-    // Проверяем, нужно ли запросить новые "мысли героя"
-    const needsHeroPhrases = State.needsHeroPhrases();
+function formatSelectedActionsForPrompt(selectedActions) {
+    if (!selectedActions || selectedActions.length === 0) {
+        return "Действия не выбраны";
+    }
     
+    return selectedActions.map(action =>
+        `"${action.text}" → ${action.result} (${action.delta})`
+    ).join('\n');
+}
+
+/**
+ * Подготовка полного тела запроса для нового формата
+ * @param {Object} state - Состояние игры ПОСЛЕ применения изменений от действий
+ * @param {Array} selectedActions - Результаты действий в новом формате [{text, result, delta}]
+ * @param {number} d10 - Результат броска d10
+ * @returns {Object} Объект payload для отправки через fetch
+ */
+function prepareRequestPayload(state, selectedActions, d10) {
     // 1. Формируем ПОЛНЫЙ СИСТЕМНЫЙ ПРОМПТ
     const dynamicSystemPart = getDynamicSystemInjections(state);
     
@@ -116,33 +125,22 @@ function prepareRequestPayload(state, actionResultsText, d10 = null, customConte
     
 ${dynamicSystemPart}
 
-${Prompts.format.jsonFormatStrict}
-
-ВАЖНОЕ ИЗМЕНЕНИЕ ФОРМАТА:
-1. Вместо "inventory_all" теперь используй "inventory_changes" с полями "add" и "remove"
-2. Вместо "relations_all" теперь используй "relations_changes" с объектом NPC->изменение
-3. Добавь поле "skill_add" для нового навыка героя (если уместно)
-4. Поля "inventory_all" и "relations_all" больше НЕ ДОЛЖНЫ использоваться!`;
+${Prompts.format.jsonFormatStrict}`;
     
     // 2. Формируем ПОЛНЫЙ ПОЛЬЗОВАТЕЛЬСКИЙ ПРОМПТ
-    const contextBlock = customContext || buildContextBlock(state);
+    const contextBlock = buildContextBlock(state);
     
-    // Дополнительная задача по генерации мыслей героя
+    // Проверяем, нужно ли запросить новые "мысли героя"
+    const needsHeroPhrases = State.needsHeroPhrases();
     const thoughtsRequestInstruction = needsHeroPhrases ? Prompts.userHeaders.reqThoughts : "";
     
     // Строим основной User-промпт
     const userPrompt = `
 ${Prompts.format.mainTaskPrefix}
 ${Prompts.format.mainTask}
+${Prompts.format.rulesAndProtocols}
 
-${Prompts.format.statAndProgressLogic}
-${Prompts.format.choicesFormat}
-${Prompts.format.progressAndDegrees}
-Текущий прогресс игрока: ${state.progress}
-Следующая степень: ${CONFIG.degrees.find(d => d.threshold > state.progress)?.name || "XI° и выше"}
-Порог следующей степени: ${CONFIG.degrees.find(d => d.threshold > state.progress)?.threshold || "∞"}
-
-${d10 !== null ? `${Prompts.userHeaders.d10Luck}${d10}` : ''}
+${Prompts.userHeaders.d10Luck}${d10}
 
 ${Prompts.userHeaders.historyPrefix}
 ${contextBlock || "История отсутствует"}
@@ -154,17 +152,18 @@ ${Prompts.userHeaders.actualStatesValues}
 [Воля: ${state.stats.will}, Скрытность: ${state.stats.stealth}, Влияние: ${state.stats.influence}, Разум: ${state.stats.sanity}]
 [Степень: ${CONFIG.degrees[state.degreeIndex].name}]
 [Личность: ${state.personality}]
+[Прогресс: ${state.progress}]
 
-${Prompts.userHeaders.inventory_all || '[ИНВЕНТАРЬ]:'}
+${Prompts.userHeaders.inventory_all}
 ${JSON.stringify(state.inventory, null, 2)}
 
-${Prompts.userHeaders.relations_all || '[ОТНОШЕНИЯ]:'}
+${Prompts.userHeaders.relations_all}
 ${JSON.stringify(state.relations, null, 2)}
 
-${state.skills && state.skills.length > 0 ? `${Prompts.userHeaders.skills || '[НАВЫКИ]:'}\n${JSON.stringify(state.skills, null, 2)}` : ''}
+${state.skills && state.skills.length > 0 ? `${Prompts.userHeaders.skills}\n${JSON.stringify(state.skills, null, 2)}` : ''}
 
-${Prompts.userHeaders.action_results || '[РЕЗУЛЬТАТЫ ДЕЙСТВИЙ]:'}
-${actionResultsText}
+${Prompts.userHeaders.selectedActions}
+${formatSelectedActionsForPrompt(selectedActions)}
 
 ${thoughtsRequestInstruction}
 
@@ -175,7 +174,9 @@ ${Prompts.userHeaders.reqJsonEnd}`;
             { role: "system", content: systemPromptFull },
             { role: "user", content: userPrompt }
         ],
-        model: state.settings.model
+        model: state.settings.model,
+        temperature: 0.7,
+        max_tokens: 4000
     };
 }
 

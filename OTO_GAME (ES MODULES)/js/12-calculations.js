@@ -1,71 +1,178 @@
-// Модуль 12: CALCULATIONS - Расчеты результатов (12-calculations.js)
+// Модуль 12: CALCULATIONS - Расчеты результатов (НОВАЯ ВЕРСИЯ)
 'use strict';
 
 import { CONFIG } from './1-config.js';
 import { Utils } from './2-utils.js';
 
 /**
- * Модуль для всех игровых расчетов
+ * Модуль для всех игровых расчетов (полностью переписан под новую формулу)
  */
 export const Calculations = {
+    
     /**
-     * Тир результата действия на основе d10
+     * РАСЧЕТ БАЗОВОГО ЗНАЧЕНИЯ СТАТА
+     * База = Math.ceil(stat_value / 10)
+     * @param {number} statValue - Значение стата (0-100)
+     * @returns {number} База стата (1-10)
      */
-    actionResultTiers: {
-        success: 6,      // d10 ≥ 6 = успех
-        partial: 3,      // d10 ≥ 3 = частичный успех
-        failure: 0       // d10 < 3 = провал
+    calculateStatBase(statValue) {
+        return Math.ceil(Math.max(0, Math.min(100, statValue)) / 10);
     },
     
     /**
-     * Рассчитывает результат действия на основе требований и броска d10
-     * @param {Object} choice - Объект выбора
+     * ПРОВЕРКА ТРЕБОВАНИЙ С НОВОЙ ФОРМУЛОЙ
+     * @param {Object} requirements - Требования действия
      * @param {Object} state - Текущее состояние
-     * @param {number} d10 - Результат броска d10
-     * @returns {Object} {result, delta, appliedChanges}
+     * @param {number} d10 - Результат броска d10 (1-10)
+     * @returns {Object} Результат проверки
      */
-    calculateActionResult(choice, state, d10) {
-        if (!choice || !state) {
-            console.error('❌ Неверные параметры для calculateActionResult:', { choice, state });
+    checkRequirementsWithFormula(requirements, state, d10) {
+        if (!requirements) {
             return {
-                result: 'failure',
-                delta: 'ошибка расчета',
-                appliedChanges: { stats: {}, inventory_add: [], inventory_remove: [] }
+                passed: true,
+                totalRequired: 0,
+                totalActual: 0,
+                individualResults: {},
+                failedStats: []
             };
         }
         
-        // 1. Проверка требований
-        const requirementsMet = this.checkRequirements(choice.requirements, state);
+        const results = {
+            passed: true,
+            totalRequired: 0,
+            totalActual: 0,
+            individualResults: {},
+            failedStats: []
+        };
         
-        // 2. Определение результата на основе d10
-        let result = 'failure';
-        let appliedChanges = choice.failure_changes || { stats: {}, inventory_add: [], inventory_remove: [] };
-        
-        if (requirementsMet) {
-            if (d10 >= this.actionResultTiers.success) {
-                result = 'success';
-                appliedChanges = choice.success_changes || { stats: {}, inventory_add: [], inventory_remove: [] };
-            } else if (d10 >= this.actionResultTiers.partial) {
-                result = 'partial';
-                // Для частичного успеха используем 50% от успешных изменений
-                appliedChanges = this.scaleChanges(choice.success_changes, 0.5);
+        // Проверка статов
+        if (requirements.stats && typeof requirements.stats === 'object') {
+            for (const [rawStat, requiredThreshold] of Object.entries(requirements.stats)) {
+                const statKey = Utils.normalizeStatKey(rawStat);
+                if (!statKey) {
+                    console.warn(`Неизвестная характеристика: ${rawStat}`);
+                    results.passed = false;
+                    continue;
+                }
+                
+                const currentValue = state.stats[statKey];
+                if (currentValue === undefined) {
+                    console.warn(`Характеристика ${statKey} не найдена`);
+                    results.passed = false;
+                    continue;
+                }
+                
+                // Рассчитываем по новой формуле
+                const statBase = this.calculateStatBase(currentValue);
+                const actualValue = statBase + d10;
+                const threshold = Number(requiredThreshold);
+                
+                results.individualResults[statKey] = {
+                    base: statBase,
+                    d10: d10,
+                    actual: actualValue,
+                    required: threshold,
+                    passed: actualValue >= threshold
+                };
+                
+                results.totalRequired += threshold;
+                results.totalActual += actualValue;
+                
+                if (actualValue < threshold) {
+                    results.failedStats.push(statKey);
+                    results.passed = false;
+                }
             }
         }
         
-        // 3. Форматирование дельты для отображения
-        const delta = this.formatDelta(appliedChanges);
+        // Проверка инвентаря (остается без изменений)
+        if (requirements.inventory && requirements.inventory !== null && requirements.inventory !== '') {
+            const requiredItem = String(requirements.inventory).trim();
+            if (requiredItem && !state.inventory.includes(requiredItem)) {
+                results.passed = false;
+                results.missingItem = requiredItem;
+            }
+        }
         
-        return {
-            result: result,
-            delta: delta,
-            appliedChanges: appliedChanges,
-            d10: d10,
-            requirementsMet: requirementsMet
-        };
+        return results;
     },
     
     /**
-     * Масштабирование изменений для частичного успеха
+     * ОПРЕДЕЛЕНИЕ ТИПА РЕЗУЛЬТАТА
+     * @param {Object} checkResult - Результат проверки требований
+     * @returns {string} Тип результата: 'full_success'|'partial_success'|'partial_failure'|'full_failure'
+     */
+    determineResultType(checkResult) {
+        if (!checkResult || checkResult.totalRequired === 0) {
+            return 'full_success'; // Нет требований = автоматический успех
+        }
+        
+        const allIndividualPassed = checkResult.failedStats.length === 0;
+        const totalPassed = checkResult.totalActual >= checkResult.totalRequired;
+        
+        if (allIndividualPassed && totalPassed) {
+            return 'full_success';
+        } else if (!allIndividualPassed && totalPassed) {
+            return 'partial_success';
+        } else if (allIndividualPassed && !totalPassed) {
+            return 'partial_failure';
+        } else {
+            return 'full_failure';
+        }
+    },
+    
+    /**
+     * РАСЧЕТ ИЗМЕНЕНИЙ ПО ТИПУ РЕЗУЛЬТАТА
+     * @param {Object} choice - Объект выбора с success_changes/failure_changes
+     * @param {string} resultType - Тип результата
+     * @returns {Object} Изменения для применения
+     */
+    calculateChangesByResultType(choice, resultType) {
+        const baseChanges = {
+            stats: {},
+            inventory_add: [],
+            inventory_remove: []
+        };
+        
+        let sourceChanges;
+        
+        switch (resultType) {
+            case 'full_success':
+                sourceChanges = choice.success_changes;
+                break;
+            case 'partial_success':
+                // Для частичного успеха - 50% от успешных изменений
+                sourceChanges = this.scaleChanges(choice.success_changes, 0.5);
+                break;
+            case 'partial_failure':
+                // Для частичной неудачи - 50% от неудачных изменений
+                sourceChanges = this.scaleChanges(choice.failure_changes, 0.5);
+                break;
+            case 'full_failure':
+                sourceChanges = choice.failure_changes;
+                break;
+            default:
+                sourceChanges = choice.failure_changes;
+        }
+        
+        // Копируем изменения
+        if (sourceChanges) {
+            if (sourceChanges.stats) {
+                baseChanges.stats = { ...sourceChanges.stats };
+            }
+            if (sourceChanges.inventory_add) {
+                baseChanges.inventory_add = [...sourceChanges.inventory_add];
+            }
+            if (sourceChanges.inventory_remove) {
+                baseChanges.inventory_remove = [...sourceChanges.inventory_remove];
+            }
+        }
+        
+        return baseChanges;
+    },
+    
+    /**
+     * МАСШТАБИРОВАНИЕ ИЗМЕНЕНИЙ (для частичных результатов)
      */
     scaleChanges(changes, factor) {
         if (!changes) return { stats: {}, inventory_add: [], inventory_remove: [] };
@@ -79,11 +186,16 @@ export const Calculations = {
         // Масштабируем статы
         if (changes.stats) {
             for (const [stat, value] of Object.entries(changes.stats)) {
-                scaled.stats[stat] = Math.round(Number(value) * factor);
+                const numValue = Number(value) || 0;
+                scaled.stats[stat] = Math.round(numValue * factor);
+                // Минимум ±1 для частичного результата
+                if (scaled.stats[stat] === 0 && numValue !== 0) {
+                    scaled.stats[stat] = numValue > 0 ? 1 : -1;
+                }
             }
         }
         
-        // Инвентарь: для частичного успеха только 50% шанс на добавление/удаление
+        // Инвентарь: шанс добавления/удаления по фактору
         if (changes.inventory_add && Math.random() < factor) {
             scaled.inventory_add = [...changes.inventory_add];
         }
@@ -96,45 +208,56 @@ export const Calculations = {
     },
     
     /**
-     * Проверка требований к действию
+     * ОСНОВНАЯ ФУНКЦИЯ: РАСЧЕТ РЕЗУЛЬТАТА ДЕЙСТВИЯ (НОВЫЙ ФОРМАТ)
+     * @param {Object} choice - Объект выбора
+     * @param {Object} state - Текущее состояние игры
+     * @param {number} d10 - Результат броска d10 (1-10)
+     * @returns {Object} Результат в новом формате для selectedActions
      */
-    checkRequirements(requirements, state) {
-        if (!requirements) return true;
-        
-        // Проверка статов
-        if (requirements.stats && typeof requirements.stats === 'object') {
-            for (const [rawStat, requiredValue] of Object.entries(requirements.stats)) {
-                const statKey = Utils.normalizeStatKey(rawStat);
-                if (!statKey) {
-                    console.warn(`Неизвестная характеристика в требованиях: ${rawStat}`);
-                    return false;
-                }
-                
-                const currentValue = state.stats[statKey];
-                if (currentValue === undefined) {
-                    console.warn(`Характеристика ${statKey} не найдена в состоянии`);
-                    return false;
-                }
-                
-                if (currentValue < requiredValue) {
-                    return false;
-                }
-            }
+    calculateActionResult(choice, state, d10) {
+        if (!choice || !state) {
+            console.error('❌ Неверные параметры для calculateActionResult');
+            return {
+                text: "Ошибка расчета",
+                result: "failure",
+                delta: "ошибка",
+                d10: 0,
+                appliedChanges: { stats: {}, inventory_add: [], inventory_remove: [] }
+            };
         }
         
-        // Проверка инвентаря
-        if (requirements.inventory && requirements.inventory !== null && requirements.inventory !== '') {
-            const requiredItem = String(requirements.inventory).trim();
-            if (requiredItem && !state.inventory.includes(requiredItem)) {
-                return false;
-            }
-        }
+        // 1. Проверка требований по новой формуле
+        const checkResult = this.checkRequirementsWithFormula(choice.requirements, state, d10);
         
-        return true;
+        // 2. Определение типа результата
+        const resultType = this.determineResultType(checkResult);
+        
+        // 3. Получение изменений
+        const appliedChanges = this.calculateChangesByResultType(choice, resultType);
+        
+        // 4. Форматирование дельты для отображения
+        const delta = this.formatDelta(appliedChanges);
+        
+        // 5. Форматирование результата для ИИ
+        const resultTextMap = {
+            'full_success': 'полный успех',
+            'partial_success': 'частичный успех', 
+            'partial_failure': 'частичная неудача',
+            'full_failure': 'полная неудача'
+        };
+        
+        return {
+            text: choice.text,
+            result: resultTextMap[resultType] || 'неизвестно',
+            delta: delta,
+            d10: d10,
+            appliedChanges: appliedChanges,
+            requirementsCheck: checkResult
+        };
     },
     
     /**
-     * Форматирование изменений в читаемую строку
+     * ФОРМАТИРОВАНИЕ ДЕЛЬТЫ (для отображения)
      */
     formatDelta(changes) {
         if (!changes) return '';
@@ -169,9 +292,9 @@ export const Calculations = {
     },
     
     /**
-     * Применение изменений от действия к состоянию
+     * ПРИМЕНЕНИЕ ИЗМЕНЕНИЙ К СОСТОЯНИЮ
      */
-    applyActionChanges(state, changes) {
+    applyActionChangesToState(state, changes) {
         if (!state || !changes) return state;
         
         // Применяем изменения статов
@@ -210,7 +333,20 @@ export const Calculations = {
     },
     
     /**
-     * Проверка достижения новой степени и применение бонусов
+     * ФОРМИРОВАНИЕ SELECTEDACTIONS ДЛЯ ИИ (НОВЫЙ ФОРМАТ)
+     * @param {Array} actionResults - Результаты расчетов
+     * @returns {Array} Массив объектов для selectedActions
+     */
+    formatSelectedActionsForAI(actionResults) {
+        return actionResults.map(action => ({
+            text: action.text,
+            result: action.result,
+            delta: action.delta
+        }));
+    },
+    
+    /**
+     * ПРОВЕРКА ДОСТИЖЕНИЯ НОВОЙ СТЕПЕНИ
      */
     checkAndApplyDegreeAdvancement(state) {
         const currentDegreeIndex = state.degreeIndex || 0;
@@ -255,7 +391,7 @@ export const Calculations = {
     },
     
     /**
-     * Обработка изменений инвентаря от ИИ
+     * ОБРАБОТКА ИНВЕНТАРНЫХ ИЗМЕНЕНИЙ ОТ ИИ (НОВОЕ ПОЛЕ)
      */
     processInventoryChanges(state, inventoryChanges) {
         if (!inventoryChanges || typeof inventoryChanges !== 'object') {
@@ -285,7 +421,7 @@ export const Calculations = {
     },
     
     /**
-     * Обработка изменений отношений от ИИ
+     * ОБРАБОТКА ИЗМЕНЕНИЙ ОТНОШЕНИЙ ОТ ИИ (НОВОЕ ПОЛЕ)
      */
     processRelationsChanges(state, relationsChanges) {
         if (!relationsChanges || typeof relationsChanges !== 'object') {
@@ -311,7 +447,7 @@ export const Calculations = {
     },
     
     /**
-     * Обработка добавления навыка от ИИ
+     * ОБРАБОТКА ДОБАВЛЕНИЯ НАВЫКА ОТ ИИ
      */
     processSkillAdd(state, skill) {
         if (!skill || typeof skill !== 'string') {
@@ -333,5 +469,42 @@ export const Calculations = {
         }
         
         return false;
+    },
+    
+    /**
+     * ГЕНЕРАЦИЯ D10 ДЛЯ ХОДА
+     * @returns {number} Случайное число от 1 до 10
+     */
+    generateD10() {
+        return Math.ceil(Math.random() * 10);
+    },
+    
+    /**
+     * ТЕСТОВАЯ ФУНКЦИЯ ДЛЯ ОТЛАДКИ ФОРМУЛЫ
+     */
+    testFormula() {
+        const testState = {
+            stats: {
+                will: 74,
+                stealth: 56,
+                influence: 29,
+                sanity: 100
+            }
+        };
+        
+        console.log('🧪 Тестирование новой формулы:');
+        console.log('Will 74 → база:', this.calculateStatBase(74), 'ожидается: 8');
+        console.log('Stealth 56 → база:', this.calculateStatBase(56), 'ожидается: 6');
+        console.log('Influence 29 → база:', this.calculateStatBase(29), 'ожидается: 3');
+        console.log('Sanity 100 → база:', this.calculateStatBase(100), 'ожидается: 10');
+        
+        const testRequirements = {
+            stats: { sanity: 12, stealth: 8 }
+        };
+        
+        const d10 = 5;
+        const check = this.checkRequirementsWithFormula(testRequirements, testState, d10);
+        console.log('Проверка требований (sanity≥12, stealth≥8, d10=5):', check);
+        console.log('Тип результата:', this.determineResultType(check));
     }
 };

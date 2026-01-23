@@ -27,11 +27,12 @@ function getProviderInfo(state) {
 /**
  * ОСНОВНАЯ ФУНКЦИЯ: Отправляет запрос игрового хода к LLM
  * @param {Object} updatedState - Состояние ПОСЛЕ применения изменений от действий
- * @param {string} actionResultsText - Форматированные результаты действий
+ * @param {Array} selectedActions - Массив выбранных действий в формате [{text, result, delta}]
  * @param {AbortController|null} abortController - Контроллер для возможности отмены запроса
+ * @param {number} d10 - Общий бросок удачи на ход (1-10)
  * @returns {Promise<Object>} Промис, разрешающийся в очищенный JSON-объект
  */
-async function sendAIRequest(updatedState, actionResultsText, abortController = null) {
+async function sendAIRequest(updatedState, selectedActions, abortController = null, d10) {
     const state = State.getState(); // Получаем оригинальное состояние для настроек
     const { url, apiKey, isVsegpt } = getProviderInfo(state);
     
@@ -53,7 +54,7 @@ async function sendAIRequest(updatedState, actionResultsText, abortController = 
     }
     
     // --- ЭТАП 1: ПОДГОТОВКА PAYLOAD ---
-    const requestPayload = API_Request.prepareRequestPayload(updatedState, actionResultsText, null, null);
+    const requestPayload = API_Request.prepareRequestPayload(updatedState, selectedActions, d10);
     
     // Специфические настройки для моделей/провайдеров
     if (isVsegpt && updatedState.settings.model.includes('gpt-3.5-turbo-16k')) {
@@ -66,8 +67,13 @@ async function sendAIRequest(updatedState, actionResultsText, abortController = 
     }
     
     // --- ЛОГИРОВАНИЕ: СОЗДАНИЕ ЗАПИСИ ---
+    // Преобразуем массив действий в строку для логгирования
+    const actionsDescription = Array.isArray(selectedActions) 
+        ? selectedActions.map(action => action.text).join(', ') 
+        : String(selectedActions);
+    
     const auditEntry = Audit.createEntry(
-        `Игровой ход: ${actionResultsText.substring(0, 50)}...`,
+        `Игровой ход: ${actionsDescription.substring(0, 50)}...`,
         requestPayload,
         updatedState.settings.model,
         updatedState.settings.apiProvider
@@ -109,7 +115,9 @@ async function sendAIRequest(updatedState, actionResultsText, abortController = 
         }
         
         // Возвращаем очищенные игровые данные
-        return processingResult.cleanData;
+        console.log(`💬  ПОЛУЧЕНО`);
+         console.log(processingResult);
+        return processingResult;
         
     } catch (error) {
         // Если произошла ошибка, помечаем модель как проблемную
@@ -121,16 +129,12 @@ async function sendAIRequest(updatedState, actionResultsText, abortController = 
             auditEntry.fullResponse = error.rawResponse;
         }
         
-        Audit.updateEntryError(auditEntry, error);
+        Aurdit.updateEntryError(auditEntry, error);
         
         // Пробрасываем ошибку дальше
         throw error;
     }
 }
-
-// Остальные функции (generateCustomScene, testCurrentProvider, testSelectedModel) остаются без изменений
-// но должны использовать исправленный API_Request.executeFetch
-
 
 /**
  * Генерирует начальную сцену или кастомный сюжет по запросу из UI Настроек.

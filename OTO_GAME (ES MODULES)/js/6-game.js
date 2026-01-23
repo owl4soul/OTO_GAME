@@ -1,4 +1,4 @@
-// Модуль 6: GAME - Игровая логика (js/6-game.js)
+// Модуль 6: GAME - Игровая логика (ОБНОВЛЕННАЯ ВЕРСИЯ)
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -9,7 +9,7 @@ import { Utils } from './2-utils.js';
 import { API } from './7-api-facade.js';
 import { Saveload } from './9-saveload.js';
 import { UI } from './ui.js';
-import { Calculations } from './12-calculations.js'; // ИМПОРТ НОВОГО МОДУЛЯ
+import { Calculations } from './12-calculations.js';
 
 const dom = DOM.getDOM();
 
@@ -95,42 +95,44 @@ function stopThoughtsOfHeroDisplay() {
 }
 
 /**
- * Рассчитывает результаты выбранных действий
+ * РАСЧЕТ РЕЗУЛЬТАТОВ ВЫБРАННЫХ ДЕЙСТВИЙ (НОВАЯ ВЕРСИЯ)
+ * Использует обновленную формулу из Calculations
  * @param {Array} selectedChoices - Массив выбранных объектов действий
  * @param {Object} currentState - Текущее состояние игры
- * @returns {Array} Массив результатов действий
+ * @param {number} d10 - Общий бросок удачи на ход (1-10)
+ * @returns {Object} {actionResults, selectedActions}
  */
-function calculateActionResults(selectedChoices, currentState) {
+function calculateActionResults(selectedChoices, currentState, d10) {
     if (!selectedChoices || selectedChoices.length === 0) {
-        return [];
+        return { actionResults: [], selectedActions: [] };
     }
     
     const actionResults = [];
     
-    // Для каждого выбранного действия рассчитываем результат
+    // Для каждого выбранного действия рассчитываем результат по НОВОЙ ФОРМУЛЕ
     selectedChoices.forEach(choice => {
         if (!choice || !choice.text) {
             console.warn('❌ Пустой выбор в calculateActionResults');
             return;
         }
         
-        // Генерируем d10 для этого действия
-        const d10 = Math.ceil(Math.random() * 10);
-        
-        // Рассчитываем результат
+        // Рассчитываем результат с использованием обновленного Calculations
         const result = Calculations.calculateActionResult(choice, currentState, d10);
         
         actionResults.push({
-            text: choice.text,
-            result: result.result,
+            text: result.text,
+            result: result.result, // "полный успех", "частичный успех" и т.д.
             delta: result.delta,
             d10: result.d10,
             appliedChanges: result.appliedChanges,
-            requirementsMet: result.requirementsMet
+            requirementsCheck: result.requirementsCheck
         });
     });
     
-    return actionResults;
+    // Формируем selectedActions для отправки ИИ (НОВЫЙ ФОРМАТ)
+    const selectedActions = Calculations.formatSelectedActionsForAI(actionResults);
+    
+    return { actionResults, selectedActions };
 }
 
 /**
@@ -149,7 +151,7 @@ function applyActionChangesToState(state, actionResults) {
     // Применяем изменения от каждого действия
     actionResults.forEach(action => {
         if (action.appliedChanges) {
-            Calculations.applyActionChanges(updatedState, action.appliedChanges);
+            Calculations.applyActionChangesToState(updatedState, action.appliedChanges);
         }
     });
     
@@ -157,22 +159,7 @@ function applyActionChangesToState(state, actionResults) {
 }
 
 /**
- * Форматирует результаты действий для отправки ИИ
- * @param {Array} actionResults - Результаты действий
- * @returns {string} Форматированная строка
- */
-function formatActionResultsForAI(actionResults) {
-    if (!actionResults || actionResults.length === 0) {
-        return "Действия не выбраны";
-    }
-    
-    return actionResults.map(action => 
-        `"${action.text}" → ${action.result.toUpperCase()} (d10=${action.d10}, изменения: ${action.delta})`
-    ).join('\n');
-}
-
-/**
- * Отправка хода игры
+ * Отправка хода игры (ОБНОВЛЕННАЯ ВЕРСИЯ)
  * @param {number} retries - Количество оставшихся попыток
  */
 async function submitTurn(retries = CONFIG.maxRetries) {
@@ -214,9 +201,14 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         });
     }
     
-    // Рассчитываем результаты действий
-    const actionResults = calculateActionResults(selectedChoicesData, state);
-    if (actionResults.length === 0) {
+    // ГЕНЕРИРУЕМ ОБЩИЙ D10 НА ХОД (НОВОЕ!)
+    const d10 = Calculations.generateD10();
+    console.log(`🎲 Общий бросок удачи на ход: d10 = ${d10}`);
+    
+    // Рассчитываем результаты действий по НОВОЙ ФОРМУЛЕ
+    const { actionResults, selectedActions } = calculateActionResults(selectedChoicesData, state, d10);
+    
+    if (!actionResults || actionResults.length === 0) {
         Render.showErrorAlert("Ошибка расчета", "Не удалось рассчитать результаты действий");
         return;
     }
@@ -224,9 +216,6 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     // Применяем изменения от действий к временному состоянию
     const tempState = JSON.parse(JSON.stringify(state));
     const updatedTempState = applyActionChangesToState(tempState, actionResults);
-    
-    // Форматируем результаты для ИИ
-    const actionResultsText = formatActionResultsForAI(actionResults);
     
     dom.btnSubmit.innerHTML = '<span class="spinner"></span>';
     dom.btnSubmit.disabled = true;
@@ -249,8 +238,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }, CONFIG.requestTimeout);
     
     try {
-        // Передаем обновленное состояние и результаты действий
-        const data = await API.sendAIRequest(updatedTempState, actionResultsText, activeAbortController);
+        // Передаем обновленное состояние и selectedActions в НОВОМ ФОРМАТЕ
+        const data = await API.sendAIRequest(updatedTempState, selectedActions, activeAbortController, d10);
         
         clearTimeout(timeoutId);
         activeAbortController = null;
@@ -274,7 +263,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         }
         
         // Обрабатываем ход с результатами действий
-        processTurn(data, actionResults, selectedChoicesData);
+        processTurn(data, actionResults, selectedChoicesData, d10);
         
     } catch (e) {
         clearTimeout(timeoutId);
@@ -325,25 +314,43 @@ async function submitTurn(retries = CONFIG.maxRetries) {
 }
 
 /**
- * Обработка ответа ИИ и обновление игры
+ * Обработка ответа ИИ и обновление игры (ОБНОВЛЕННАЯ ВЕРСИЯ)
  * @param {Object} data - Данные от ИИ
- * @param {Array} actionResults - Результаты действий
+ * @param {Array} actionResults - Результаты действий (рассчитанные нами)
  * @param {Array} selectedChoicesData - Исходные данные выбранных действий
+ * @param {number} d10 - Общий бросок удачи на ход
  */
-function processTurn(data, actionResults, selectedChoicesData) {
+function processTurn(data, actionResults, selectedChoicesData, d10) {
+    // Безопасная проверка actionResults
+    if (!Array.isArray(actionResults)) {
+        console.error('actionResults is not an array', actionResults);
+        Render.showErrorAlert('Ошибка обработки', 'Некорректные результаты действий');
+        return;
+    }
+    
     const state = State.getState();
     let updatesHTML = [];
     
-    // --- 1. ПРИМЕНЯЕМ ИЗМЕНЕНИЯ ОТ ДЕЙСТВИЙ К РЕАЛЬНОМУ СОСТОЯНИЮ ---
+    // --- 1. ВЫВОД ИНФОРМАЦИИ О БРОСКЕ D10 ---
+    updatesHTML.push(`
+        <div style="margin-bottom: 8px; padding: 5px; background: rgba(212, 175, 55, 0.1); border-radius: 4px; border: 1px solid #d4af37; font-size: 0.85rem;">
+            <i class="fas fa-dice-d10" style="color: #d4af37;"></i>
+            <span style="color: #fff; margin-left: 8px;">Общий бросок удачи на ход: <b style="color: #fbc531;">d10 = ${d10}</b></span>
+        </div>
+    `);
+    
+    // --- 2. ПРИМЕНЯЕМ ИЗМЕНЕНИЯ ОТ ДЕЙСТВИЙ К РЕАЛЬНОМУ СОСТОЯНИЮ ---
     actionResults.forEach(action => {
-        Calculations.applyActionChanges(state, action.appliedChanges);
+        if (action.appliedChanges) {
+            Calculations.applyActionChangesToState(state, action.appliedChanges);
+        }
         
         // Записываем в историю изменений
-        const actionDescription = `"${action.text}" → ${action.result.toUpperCase()} (d10=${action.d10})`;
+        const actionDescription = `"${action.text}" → ${action.result.toUpperCase()}`;
         if (action.delta && action.delta !== 'нет изменений') {
             updatesHTML.push(`
                 <div style="margin-bottom: 6px;">
-                    <span style="color:${action.result === 'success' ? '#4cd137' : action.result === 'partial' ? '#fbc531' : '#e84118'}; font-weight:bold;">
+                    <span style="color:${action.result.includes('успех') ? '#4cd137' : '#e84118'}; font-weight:bold;">
                         ${actionDescription}
                     </span>
                     <span style="color:#ccc; font-size:0.8em; margin-left: 8px;">
@@ -354,56 +361,9 @@ function processTurn(data, actionResults, selectedChoicesData) {
         }
     });
     
-    // --- 2. ПРИМЕНЯЕМ ИЗМЕНЕНИЯ ОТ ИИ ---
+    // --- 3. ПРИМЕНЯЕМ ИЗМЕНЕНИЯ ОТ ИИ (НОВЫЕ ПОЛЯ) ---
     
-    // Статы от ИИ
-    if (data.stat_changes && typeof data.stat_changes === 'object') {
-        console.log("📊 Статы от ИИ:", data.stat_changes);
-        
-        for (const [rawKey, changeValue] of Object.entries(data.stat_changes)) {
-            const key = Utils.normalizeStatKey(rawKey) || rawKey.toLowerCase();
-            const numValue = Number(changeValue) || 0;
-            
-            if (key && state.stats[key] !== undefined && numValue !== 0) {
-                const oldVal = state.stats[key];
-                state.stats[key] = Math.max(0, Math.min(100, oldVal + numValue));
-                
-                const russianName = Render.getRussianStatName(key);
-                const color = numValue > 0 ? '#4cd137' : '#e84118';
-                const sign = numValue > 0 ? '+' : '';
-                
-                updatesHTML.push(`
-                    <div style="margin-bottom: 6px;">
-                        <span style="color:${color}; font-weight:bold;">
-                            ${russianName}: ${sign}${numValue}
-                        </span>
-                        <span style="color:#666; font-size:0.8em;">
-                            (${oldVal}→${state.stats[key]})
-                        </span>
-                    </div>
-                `);
-            }
-        }
-    }
-    
-    // Прогресс от ИИ
-    if (data.progress_change !== undefined && data.progress_change !== 0) {
-        const oldProgress = state.progress;
-        state.progress += data.progress_change;
-        const pColor = data.progress_change > 0 ? '#fbc531' : '#e84118';
-        updatesHTML.push(`
-            <div style="margin-bottom: 6px;">
-                <span style="color:${pColor}; font-weight:bold;">
-                    ПРОГРЕСС ${data.progress_change > 0 ? '+' : ''}${data.progress_change}
-                </span>
-                <span style="color:#666; font-size:0.8em;">
-                    (${oldProgress}→${state.progress})
-                </span>
-            </div>
-        `);
-    }
-    
-    // Личность от ИИ
+    // Личность от ИИ и последствия изменения личности
     const newPersonality = data.personality || data.personality_change;
     if (newPersonality && newPersonality !== state.personality) {
         const newPersonalityStr = String(newPersonality);
@@ -421,10 +381,39 @@ function processTurn(data, actionResults, selectedChoicesData) {
                 </div>
             </div>
         `);
+        
+        // Обрабатываем последствия изменения личности
+        if (data.personality_consequences && Array.isArray(data.personality_consequences)) {
+            data.personality_consequences.forEach(consequence => {
+                if (consequence.category === 'stat' && consequence.name) {
+                    const statKey = Utils.normalizeStatKey(consequence.name);
+                    const change = parseInt(consequence.description) || 0;
+                    if (statKey && state.stats.hasOwnProperty(statKey)) {
+                        const oldValue = state.stats[statKey];
+                        state.stats[statKey] = Math.max(0, Math.min(100, oldValue + change));
+                        updatesHTML.push(`
+                            <div style="margin-left: 20px; font-size: 0.8rem; color: ${change > 0 ? '#4cd137' : '#e84118'};">
+                                <i class="fas ${change > 0 ? 'fa-arrow-up' : 'fa-arrow-down'}"></i>
+                                ${Render.getRussianStatName(statKey)}: ${change > 0 ? '+' : ''}${change}
+                            </div>
+                        `);
+                    }
+                } else if (consequence.category === 'skill' && !consequence.isRemoving) {
+                    if (Calculations.processSkillAdd(state, consequence.name)) {
+                        updatesHTML.push(`
+                            <div style="margin-left: 20px; font-size: 0.8rem; color: #9c88ff;">
+                                <i class="fas fa-scroll"></i> Новый навык: ${consequence.name}
+                            </div>
+                        `);
+                    }
+                }
+            });
+        }
     }
     
-    // Инвентарь от ИИ (теперь только изменения)
-    if (data.inventory_changes && typeof data.inventory_changes === 'object') {
+    // ИНВЕНТАРЬ ОТ ИИ - ТЕПЕРЬ ТОЛЬКО ИЗМЕНЕНИЯ (НОВОЕ ПОЛЕ)
+    if (data.inventory_changes && typeof data.inventory_changes === 'object' && 
+        data.inventory_changes !== null && !Array.isArray(data.inventory_changes)) {
         Calculations.processInventoryChanges(state, data.inventory_changes);
         
         const added = data.inventory_changes.add || [];
@@ -461,8 +450,9 @@ function processTurn(data, actionResults, selectedChoicesData) {
         }
     }
     
-    // Отношения от ИИ (теперь только изменения)
-    if (data.relations_changes && typeof data.relations_changes === 'object') {
+    // ОТНОШЕНИЯ ОТ ИИ - ТЕПЕРЬ ТОЛЬКО ИЗМЕНЕНИЯ (НОВОЕ ПОЛЕ)
+    if (data.relations_changes && typeof data.relations_changes === 'object' && 
+        data.relations_changes !== null && !Array.isArray(data.relations_changes)) {
         Calculations.processRelationsChanges(state, data.relations_changes);
         
         const relationChanges = [];
@@ -489,7 +479,7 @@ function processTurn(data, actionResults, selectedChoicesData) {
         }
     }
     
-    // Навык от ИИ
+    // НАВЫК ОТ ИИ (НОВОЕ ПОЛЕ)
     if (data.skill_add && typeof data.skill_add === 'string') {
         if (Calculations.processSkillAdd(state, data.skill_add)) {
             updatesHTML.push(`
@@ -503,6 +493,48 @@ function processTurn(data, actionResults, selectedChoicesData) {
                 </div>
             `);
         }
+    }
+    
+    // Баффы/дебаффы от ИИ
+    if (data.buffs_debuffs && Array.isArray(data.buffs_debuffs)) {
+        data.buffs_debuffs.forEach(buff => {
+            if (buff.stat && typeof buff.stat === 'string' && typeof buff.value === 'number') {
+                const statKey = Utils.normalizeStatKey(buff.stat);
+                if (statKey && state.stats.hasOwnProperty(statKey)) {
+                    const isPermanent = buff.isPermanent === true;
+                    const duration = isPermanent ? null : (parseInt(buff.duration) || 1);
+                    
+                    // Сохраняем бафф в состояние
+                    if (!state.buffs) state.buffs = [];
+                    state.buffs.push({
+                        stat: statKey,
+                        value: buff.value,
+                        isPermanent: isPermanent,
+                        duration: duration,
+                        description: buff.description || '',
+                        source: buff.source || 'ИИ'
+                    });
+                    
+                    // Применяем немедленно
+                    state.stats[statKey] = Math.max(0, Math.min(100, state.stats[statKey] + buff.value));
+                    
+                    updatesHTML.push(`
+                        <div style="margin-bottom: 8px;">
+                            <span style="color:${buff.value > 0 ? '#4cd137' : '#e84118'}; font-weight:bold;">
+                                <i class="fas ${buff.value > 0 ? 'fa-arrow-up' : 'fa-arrow-down'}"></i>
+                                ${buff.value > 0 ? 'Бафф' : 'Дебафф'}: ${Render.getRussianStatName(statKey)}
+                            </span>
+                            <div style="color:#ccc; padding-left: 25px; font-size: 0.85rem;">
+                                <div>${buff.description || ''}</div>
+                                <div style="color:#888; font-size: 0.75rem;">
+                                    ${isPermanent ? 'Постоянный' : `Длительность: ${duration} ходов`}
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                }
+            }
+        });
     }
     
     // Проверяем достижение новой степени
@@ -540,7 +572,33 @@ function processTurn(data, actionResults, selectedChoicesData) {
         Utils.vibrate(CONFIG.vibrationPatterns.success);
     }
     
-    // --- 3. ОБНОВЛЯЕМ ИСТОРИЮ И СЦЕНУ ---
+    // Обновляем баффы/дебаффы (уменьшаем длительность)
+    if (state.buffs && state.buffs.length > 0) {
+        const expiredBuffs = [];
+        state.buffs.forEach((buff, index) => {
+            if (!buff.isPermanent && buff.duration > 0) {
+                buff.duration--;
+                if (buff.duration <= 0) {
+                    // Истекает - удаляем эффект
+                    state.stats[buff.stat] = Math.max(0, Math.min(100, state.stats[buff.stat] - buff.value));
+                    expiredBuffs.push(index);
+                    
+                    updatesHTML.push(`
+                        <div style="margin-bottom: 8px; color: #888; font-size: 0.8rem;">
+                            <i class="fas fa-clock"></i> Истёк ${buff.value > 0 ? 'бафф' : 'дебафф'}: ${Render.getRussianStatName(buff.stat)}
+                        </div>
+                    `);
+                }
+            }
+        });
+        
+        // Удаляем истекшие баффы
+        if (expiredBuffs.length > 0) {
+            state.buffs = state.buffs.filter((_, index) => !expiredBuffs.includes(index));
+        }
+    }
+    
+    // --- 4. ОБНОВЛЯЕМ ИСТОРИЮ И СЦЕНУ ---
     
     // Сохраняем сводку изменений
     const plainUpdates = updatesHTML.map(u => u.replace(/<[^>]*>?/gm, '')).join(' | ');
@@ -554,15 +612,14 @@ function processTurn(data, actionResults, selectedChoicesData) {
         fullText: data.scene,
         choice: playerChoiceText,
         changes: plainUpdates,
-        d10: actionResults.map(a => a.d10).join(',')
+        d10: d10 // Сохраняем общий d10
     });
     
     // Обновляем сцену
     state.currentScene = {
         text: data.scene || "...",
         choices: data.choices || state.currentScene.choices,
-        reflection: data.reflection || "",
-        d10: actionResults.map(a => a.d10).join(',')
+        reflection: data.reflection || ""
     };
     
     // Обновляем сводку
@@ -571,6 +628,11 @@ function processTurn(data, actionResults, selectedChoicesData) {
         if (state.summary.length > 5000) {
             state.summary = state.summary.substring(state.summary.length - 5000);
         }
+    }
+    
+    // Обновляем динамическую память ИИ (кроме инвентаря и отношений)
+    if (data.aiMemory && typeof data.aiMemory === 'object') {
+        state.aiMemory = { ...state.aiMemory, ...data.aiMemory };
     }
     
     // Сбрасываем UI состояние
@@ -596,35 +658,23 @@ function processTurn(data, actionResults, selectedChoicesData) {
         degreeIndex: state.degreeIndex,
         isRitualActive: state.isRitualActive,
         ritualProgress: state.ritualProgress,
-        ritualTarget: state.ritualTarget
+        ritualTarget: state.ritualTarget,
+        buffs: state.buffs || []
     });
     
     // Увеличиваем счетчик ходов
     State.incrementTurnCount();
     
-    // --- 4. РЕНДЕРИМ ОБНОВЛЕННЫЙ ИНТЕРФЕЙС ---
+    // --- 5. РЕНДЕРИМ ОБНОВЛЕННЫЙ ИНТЕРФЕЙС ---
     Render.renderAll();
     
-    // --- 5. ОТОБРАЖАЕМ ИЗМЕНЕНИЯ ЗА ХОД ---
+    // --- 6. ОТОБРАЖАЕМ ИЗМЕНЕНИЯ ЗА ХОД ---
     if (updatesHTML.length > 0) {
-        // Создаем HTML для результата бросков d10
-        const d10Results = actionResults.map(a => a.d10).join(', ');
-        let d10Block = '';
-        if (d10Results) {
-            d10Block = `
-                <div style="margin-bottom: 8px; padding: 5px; background: rgba(255, 215, 0, 0.1); border-radius: 4px; border: 1px solid #d4af37; font-size: 0.85rem; display: flex; align-items: center; gap: 8px;">
-                    <i class="fas fa-dice-d10" style="color: #d4af37;"></i>
-                    <span style="color: #fff;">Результаты бросков d10: <b style="color: #fbc531;">${d10Results}</b></span>
-                </div>
-            `;
-        }
-        
         // Формируем полный HTML изменений
         const updatesContent = `
             <div style="color: #d4af37; font-family: 'Roboto Mono', monospace; font-size: 0.9rem; font-weight: bold; margin-bottom: 10px; letter-spacing: 1px;">
                 <i class="fas fa-clipboard-list"></i> ИЗМЕНЕНИЯ ЗА ХОД:
             </div>
-            ${d10Block}
             <div style="border-top: 1px solid #333; padding-top: 12px; font-size: 0.85rem; line-height: 1.5;">
                 ${updatesHTML.join('')}
             </div>
@@ -874,6 +924,56 @@ function handleFreeModeToggle(e) {
     Saveload.saveState();
 }
 
+/**
+ * ТЕСТОВАЯ ФУНКЦИЯ: Проверка новой формулы расчета
+ */
+function testNewFormula() {
+    console.log("🧪 Запуск теста новой формулы расчета...");
+    
+    const testState = {
+        stats: {
+            will: 74,      // база = 8
+            stealth: 56,   // база = 6  
+            influence: 29, // база = 3
+            sanity: 100    // база = 10
+        },
+        inventory: ["Книга Закона", "Ритуальный кинжал"]
+    };
+    
+    const testChoice = {
+        text: "Тестовое действие",
+        requirements: {
+            stats: { sanity: 12, stealth: 8 },
+            inventory: "Книга Закона"
+        },
+        success_changes: {
+            stats: { sanity: 3, stealth: 2 },
+            inventory_add: ["Документы"],
+            inventory_remove: []
+        },
+        failure_changes: {
+            stats: { sanity: -2, stealth: -1 },
+            inventory_add: [],
+            inventory_remove: ["Книга Закона"]
+        }
+    };
+    
+    // Тестируем с разными d10
+    for (let d10 = 1; d10 <= 10; d10++) {
+        console.log(`\n--- Тест с d10 = ${d10} ---`);
+        const result = Calculations.calculateActionResult(testChoice, testState, d10);
+        console.log(`Результат: ${result.result}`);
+        console.log(`Дельта: ${result.delta}`);
+        console.log(`Проверка требований:`, result.requirementsCheck);
+    }
+    
+    // Запускаем встроенный тест Calculations
+    Calculations.testFormula();
+}
+
+// Добавляем тестовую функцию в глобальную область видимости для отладки
+window.testNewFormula = testNewFormula;
+
 // Публичный интерфейс модуля
 export const Game = {
     toggleChoice,
@@ -881,5 +981,6 @@ export const Game = {
     continueGame,
     restartGame,
     handleClear,
-    handleFreeModeToggle
+    handleFreeModeToggle,
+    testNewFormula
 };

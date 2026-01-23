@@ -5,8 +5,9 @@ import { CONFIG, initialScene, aiModels } from './1-config.js';
 import { Utils } from './2-utils.js';
 import { Saveload } from './9-saveload.js';
 
-// Начальное состояние игры
-let state = {
+
+// Определяем дефолтные значения
+const DEFAULT_STATE = {
     // Игровые характеристики
     stats: { ...CONFIG.startStats },
     progress: 0,
@@ -19,21 +20,19 @@ let state = {
     // История и выборы
     history: [],
     selectedChoices: [],
-    // Краткая выжимка из последних сюжетгых ходов, обновляется каждый ход
     summary: "",
     
-    // Динамическая память ИИ (Неструктурированные данные), также отправляется и сохраняется
+    // Динамическая память ИИ
     aiMemory: {},
     
-    // Хранение HTML-строки последних изменений за ход для восстановления после перезагрузки
+    // Хранение HTML-строки последних изменений за ход
     lastTurnUpdates: "",
     inventory: [],
     relations: {},
-      // Навыки героя
     skills: [],
+    
     // Флаги состояния Ритуала
     isRitualActive: false,
-    // Прогресс Ритуала
     ritualProgress: 0,
     ritualTarget: null,
     
@@ -42,56 +41,242 @@ let state = {
     freeModeText: '',
     
     // Счетчики
-    turnCount: parseInt(localStorage.getItem('oto_turn_count') || '0'),
-    
-    // Мысли героя
-    thoughtsOfHero: JSON.parse(localStorage.getItem('oto_thoughts_of_hero') || '[]'),
-    
-        // Навыки героя
-    skills: [],
-    
-    // Прогресс ритуала
-    ritualProgress: 0,
-    ritualTarget: null,
+    turnCount: 0,
+    thoughtsOfHero: [],
     
     // Настройки приложения
     settings: {
-        apiProvider: localStorage.getItem('oto_provider') || 'openrouter',
-        apiKeyOpenrouter: localStorage.getItem('oto_key_openrouter') || '',
-        apiKeyVsegpt: localStorage.getItem('oto_key_vsegpt') || '',
-        model: localStorage.getItem('oto_model') || 'openai/gpt-3.5-turbo-16k',
+        apiProvider: 'openrouter',
+        apiKeyOpenrouter: '',
+        apiKeyVsegpt: '',
+        model: 'openai/gpt-3.5-turbo-16k',
         scale: CONFIG.scaleSteps[CONFIG.defaultScaleIndex],
         scaleIndex: CONFIG.defaultScaleIndex
     },
     
-    // === UI PREFERENCES: Настройки интерфейса ===
-    // Хранит размеры секций и состояние свернутости для восстановления между сессиями
-    ui: JSON.parse(localStorage.getItem('oto_ui_pref')) || {
-        hTop: 50, // Высота верхней секции (%)
-        hMid: 30, // Высота средней секции (%)
-        hBot: 20, // Высота нижней секции (%)
-        wBotLeft: 50, // Ширина левой колонки в нижней секции (%)
-        isCollapsed: false, // Свернута ли нижняя секция
-        hBotBeforeCollapse: 20, // Хранит высоту нижней секции перед сворачиванием (% или дефолтные 20)
-        isAutoCollapsed: false // !ВАЖНО: Флаг для отслеживания клавиатуры
+    // UI PREFERENCES
+    ui: {
+        hTop: 50,
+        hMid: 30,
+        hBot: 20,
+        wBotLeft: 50,
+        isCollapsed: false,
+        hBotBeforeCollapse: 20,
+        isAutoCollapsed: false
     },
     
     // Аудит-логи
-    auditLog: JSON.parse(localStorage.getItem('oto_audit_log') || '[]'),
+    auditLog: [],
     
     // Статусы моделей
-    models: JSON.parse(localStorage.getItem('oto_models_status') || JSON.stringify(aiModels)),
+    models: [...aiModels],
     
     // Метаданные
-    gameId: localStorage.getItem('oto_game_id') || Utils.generateUniqueId(),
-    lastSaveTime: localStorage.getItem('oto_last_save_time') || new Date().toISOString(),
+    gameId: Utils.generateUniqueId(),
+    lastSaveTime: new Date().toISOString(),
     
-    // Активный запрос (для отмены)
+    // Активный запрос
     pendingRequest: null
 };
 
+// Начинаем с дефолтного состояния
+let state = { ...DEFAULT_STATE };
+
 // Применяем масштаб при загрузке скрипта
 document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
+
+// Вызываем инициализацию при загрузке модуля
+initializeState();
+
+// Функция инициализации состояния (вызывается отдельно)
+function initializeState() {
+    try {
+        console.log('🔍 Инициализация состояния...');
+        
+        // 1. Сначала сбрасываем к дефолту
+        state = { ...DEFAULT_STATE };
+        
+        // 2. Пытаемся загрузить из localStorage
+        const savedState = localStorage.getItem('oto_v3_state');
+        
+        if (savedState) {
+            console.log('')
+            try {
+                const parsed = JSON.parse(savedState);
+                
+                // Безопасно мержим сохраненные данные с дефолтными
+                if (parsed && typeof parsed === 'object') {
+                    // Для каждого поля проверяем наличие в сохраненных данных
+                    for (const [key, defaultValue] of Object.entries(DEFAULT_STATE)) {
+                        if (parsed[key] !== undefined) {
+                            // Особые обработки для разных типов данных
+                            if (key === 'stats' && typeof parsed[key] === 'object') {
+                                state.stats = { ...defaultValue, ...parsed[key] };
+                            } else if (key === 'inventory' && Array.isArray(parsed[key])) {
+                                state.inventory = [...parsed[key]];
+                            } else if (key === 'relations' && typeof parsed[key] === 'object') {
+                                state.relations = { ...parsed[key] };
+                            } else if (key === 'skills' && Array.isArray(parsed[key])) {
+                                state.skills = [...parsed[key]];
+                            } else if (key === 'settings' && typeof parsed[key] === 'object') {
+                                state.settings = { ...defaultValue, ...parsed[key] };
+                            } else {
+                                state[key] = parsed[key];
+                            }
+                        }
+                    }
+                    console.log('✅ Состояние загружено из localStorage');
+                }
+            } catch (parseError) {
+                console.error('❌ Ошибка парсинга сохраненного состояния:', parseError);
+                // Используем дефолтные значения
+                state = { ...DEFAULT_STATE };
+                state.gameId = Utils.generateUniqueId();
+            }
+        } else {
+            console.log('🆕 Первый запуск, используем дефолтное состояние');
+            state = { ...DEFAULT_STATE };
+            state.gameId = Utils.generateUniqueId();
+        }
+        
+        // 3. Загружаем UI настройки отдельно
+        try {
+            const savedUI = localStorage.getItem('oto_ui_pref');
+            if (savedUI) {
+                const parsedUI = JSON.parse(savedUI);
+                if (parsedUI && typeof parsedUI === 'object') {
+                    state.ui = { ...state.ui, ...parsedUI };
+                }
+            }
+        } catch (uiError) {
+            console.error('Ошибка загрузки UI настроек:', uiError);
+        }
+        
+        // 4. Загружаем отдельные поля из localStorage
+        try {
+            const savedAudit = localStorage.getItem('oto_audit_log');
+            if (savedAudit) {
+                const parsedAudit = JSON.parse(savedAudit);
+                if (Array.isArray(parsedAudit)) {
+                    state.auditLog = parsedAudit;
+                }
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки аудит-лога:', e);
+            state.auditLog = [];
+        }
+        
+        try {
+            const savedModels = localStorage.getItem('oto_models_status');
+            if (savedModels) {
+                const parsedModels = JSON.parse(savedModels);
+                if (Array.isArray(parsedModels)) {
+                    state.models = parsedModels;
+                }
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки моделей:', e);
+            state.models = [...aiModels];
+        }
+        
+        // 5. Загружаем масштаб
+        try {
+            const savedScale = localStorage.getItem('oto_scale');
+            if (savedScale) {
+                const scale = parseFloat(savedScale);
+                if (!isNaN(scale)) {
+                    state.settings.scale = scale;
+                }
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки масштаба:', e);
+        }
+        
+        try {
+            const savedScaleIndex = localStorage.getItem('oto_scale_index');
+            if (savedScaleIndex) {
+                const scaleIndex = parseInt(savedScaleIndex);
+                if (!isNaN(scaleIndex)) {
+                    state.settings.scaleIndex = scaleIndex;
+                }
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки индекса масштаба:', e);
+        }
+        
+        // 6. Загружаем счетчик ходов
+        try {
+            const savedTurnCount = localStorage.getItem('oto_turn_count');
+            if (savedTurnCount) {
+                const turnCount = parseInt(savedTurnCount);
+                if (!isNaN(turnCount)) {
+                    state.turnCount = turnCount;
+                }
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки счетчика ходов:', e);
+        }
+        
+        // 7. Загружаем фразы героя
+        try {
+            const savedThoughts = localStorage.getItem('oto_thoughts_of_hero');
+            if (savedThoughts) {
+                const parsedThoughts = JSON.parse(savedThoughts);
+                if (Array.isArray(parsedThoughts)) {
+                    state.thoughtsOfHero = parsedThoughts;
+                }
+            }
+        } catch (e) {
+            state.thoughtsOfHero = [];
+        }
+        
+        // 8. Синхронизируем степень
+        syncDegree();
+        
+        console.log('✅ Состояние полностью инициализировано');
+        console.log('   Game ID:', state.gameId);
+        console.log('   Прогресс:', state.progress);
+        console.log('   Степень:', CONFIG.degrees[state.degreeIndex]?.name);
+        
+    } catch (error) {
+        console.error('❌ Критическая ошибка инициализации состояния:', error);
+        // Восстанавливаемся к дефолтным значениям
+        state = { ...DEFAULT_STATE };
+        state.gameId = Utils.generateUniqueId();
+        state.models = [...aiModels];
+    }
+}
+
+/**
+ * Защитная инициализация состояния (вызывается при первом getState)
+ */
+function safeInitialize() {
+    if (typeof state === 'undefined' || state === null) {
+        console.warn('⚠️ State is undefined, forcing reinitialization');
+        initializeState();
+    }
+    
+    // Дополнительная валидация критических полей
+    if (!state.stats || typeof state.stats !== 'object') {
+        console.warn('⚠️ stats is corrupted, resetting to defaults');
+        state.stats = { ...CONFIG.startStats };
+    }
+    
+    // Проверка остальных обязательных полей
+    const requiredFields = ['progress', 'degreeIndex', 'personality', 'currentScene'];
+    requiredFields.forEach(field => {
+        if (state[field] === undefined) {
+            console.warn(`⚠️ ${field} is undefined, resetting`);
+            if (field === 'currentScene') {
+                state[field] = { ...initialScene };
+            } else if (field === 'progress' || field === 'degreeIndex') {
+                state[field] = 0;
+            } else if (field === 'personality') {
+                state[field] = 'Молодой Минервал...';
+            }
+        }
+    });
+}
 
 /**
  * Синхронизация текущей степени с прогрессом
@@ -117,6 +302,39 @@ function syncDegree() {
     } else {
         state.degreeIndex = newIndex;
     }
+    
+    // Обновляем баффы при каждом обновлении состояния
+    updateBuffs();
+}
+
+/**
+ * Обновление баффов/дебаффов
+ */
+function updateBuffs() {
+    if (!state.buffs || state.buffs.length === 0) return;
+    
+    const now = new Date();
+    const activeBuffs = [];
+    
+    state.buffs.forEach(buff => {
+        // Если бафф постоянный, оставляем
+        if (buff.isPermanent) {
+            activeBuffs.push(buff);
+            return;
+        }
+        
+        // Проверяем срок действия
+        const createdAt = new Date(buff.createdAt);
+        const diffHours = (now - createdAt) / (1000 * 60 * 60);
+        
+        if (diffHours < buff.duration) {
+            activeBuffs.push(buff);
+        } else {
+            console.log(`⌛ Бафф "${buff.name}" истёк`);
+        }
+    });
+    
+    state.buffs = activeBuffs;
 }
 
 // Функция для добавления навыка:
@@ -149,7 +367,6 @@ function applyParsedChanges(parsedData) {
         state.personality = parsedData.personality;
     }
     
-    
     if (parsedData.inventory_all && Array.isArray(parsedData.inventory_all)) {
         state.inventory = [...new Set(parsedData.inventory_all)];
         console.log("📦 Инвентарь обновлен:", state.inventory);
@@ -160,9 +377,12 @@ function applyParsedChanges(parsedData) {
         console.log("🤝 Отношения обновлены:", state.relations);
     }
     
-    
     if (parsedData.thoughtsOfHero && Array.isArray(parsedData.thoughtsOfHero)) {
         addHeroPhrases(parsedData.thoughtsOfHero);
+    }
+    
+    if (parsedData.buffs && Array.isArray(parsedData.buffs)) {
+        state.buffs = parsedData.buffs;
     }
     
     state.currentScene = {
@@ -225,6 +445,8 @@ function resetGameProgress() {
         state.thoughtsOfHero = [];
         state.summary = ""; // Сброс сводки
         state.aiMemory = {}; // Сброс памяти ИИ
+        state.skills = []; // Сброс навыков
+        state.buffs = []; // Сброс баффов
         state.gameId = Utils.generateUniqueId();
         state.lastSaveTime = new Date().toISOString();
         
@@ -236,6 +458,7 @@ function resetGameProgress() {
         localStorage.setItem('oto_last_save_time', state.lastSaveTime);
         localStorage.setItem('oto_turn_count', '0');
         localStorage.removeItem('oto_thoughts_of_hero');
+        localStorage.removeItem('oto_skills');
         
         location.reload();
     }
@@ -250,7 +473,6 @@ function resetFullGame() {
         location.reload();
     }
 }
-
 
 /**
  * Сохраняет настройки UI (вызывать при изменениях лейаута)
@@ -281,6 +503,8 @@ function exportFullState() {
             selectedChoices: [...state.selectedChoices],
             inventory: [...state.inventory],
             relations: { ...state.relations },
+            skills: [...state.skills],
+            buffs: [...state.buffs],
             freeMode: state.freeMode,
             freeModeText: state.freeModeText,
             turnCount: state.turnCount,
@@ -334,6 +558,8 @@ function importFullState(importData) {
         state.relations = importData.gameState.relations || {};
         state.summary = importData.gameState.summary || ""; // Импорт сводки
         state.aiMemory = importData.gameState.aiMemory || {}; // Импорт динамической памяти
+        state.skills = importData.gameState.skills || state.skills;
+        state.buffs = importData.gameState.buffs || state.buffs;
         state.freeMode = importData.gameState.freeMode || state.freeMode;
         state.freeModeText = importData.gameState.freeModeText || state.freeModeText;
         state.turnCount = importData.gameState.turnCount || state.turnCount;
@@ -584,15 +810,32 @@ function needsHeroPhrases() {
 // Публичный интерфейс модуля
 export const State = {
     // Получение и установка состояния
-    getState: () => state,
-    setState: (newState) => {
-        state = { ...state, ...newState };
-        // Если обновили UI, сохраняем настройки интерфейса отдельно
-        if (newState.ui) saveUiState();
-        
-        // Сохраняем изменения в localStorage
-        Saveload.saveState();
-    },
+     // Получение и установка состояния
+ getState: () => {
+    // Защитная инициализация при каждом вызове
+    if (!state || typeof state !== 'object') {
+        console.error('❌ State is corrupted! Reinitializing...');
+        initializeState();
+    }
+    
+    // Дополнительная валидация
+    safeInitialize();
+    
+    return state;
+},
+     
+     setState: (newState) => {
+         if (!state) {
+             console.error('⚠️ Cannot setState on undefined state');
+             initializeState();
+         }
+         state = { ...state, ...newState };
+         // Если обновили UI, сохраняем настройки интерфейса отдельно
+         if (newState.ui) saveUiState();
+         
+         // Сохраняем изменения в localStorage
+         Saveload.saveState();
+     },
     
     // === Управление UI (Getters/Setters для UI) ===
     getHBotBeforeCollapse: () => state.ui.hBotBeforeCollapse,
@@ -605,6 +848,7 @@ export const State = {
     
     // Основные функции
     syncDegree,
+    updateBuffs,
     updateStat: (key, value) => {
         const normalizedKey = Utils.normalizeStatKey(key);
         if (normalizedKey && state.stats[normalizedKey] !== undefined) {
@@ -612,7 +856,6 @@ export const State = {
         }
     },
     
-
     // Новые методы для навыков
     addSkill,
     getSkills: () => state.skills,
@@ -620,8 +863,17 @@ export const State = {
         state.skills = [];
         localStorage.removeItem('oto_skills');
     },
-
-
+    
+    // Методы для баффов
+    getBuffs: () => state.buffs || [],
+    addBuff: (buff) => {
+        if (!state.buffs) state.buffs = [];
+        state.buffs.push(buff);
+    },
+    clearBuffs: () => {
+        state.buffs = [];
+    },
+    
     // Сброс и рестарт игры
     resetGameProgress,
     resetFullGame,
