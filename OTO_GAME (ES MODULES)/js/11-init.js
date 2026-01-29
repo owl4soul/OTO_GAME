@@ -14,6 +14,8 @@ import { UI, Logger } from './ui.js';
 
 const dom = DOM.getDOM();
 
+
+
 /**
  * ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ ПРИЛОЖЕНИЯ
  */
@@ -28,11 +30,15 @@ function init() {
             return;
         }
         
-        // 2. СНАЧАЛА инициализируем State (загружаем из localStorage)
-        State.getState(); // Этот вызов гарантирует инициализацию
+        // 2. Проверяем, что состояние корректно инициализировано
+        const state = State.getState();
+        if (!state || !state.gameState || !state.gameState.currentScene) {
+            throw new Error('Состояние игры не инициализировано корректно');
+        }
+        
         Logger.success('STATE', "Состояние инициализировано");
         
-        // 3. ТЕПЕРЬ загружаем настройки интерфейса
+        // 3. Загружаем настройки интерфейса
         Saveload.loadState();
         Logger.success('STATE', "Настройки загружены");
         
@@ -57,7 +63,7 @@ function init() {
     } catch (e) {
         Logger.error('FATAL', "Критическая ошибка инициализации", e);
         
-        // Показываем детализированную ошибку пользователю
+        // Детализированная ошибка
         const errorDetails = `
 Ошибка запуска игры:
 
@@ -67,11 +73,49 @@ Stack trace:
 ${e.stack || 'Нет стека'}
 
 Рекомендуемые действия:
-1. Очистите localStorage в DevTools (Application → Storage → Local Storage)
-2. Перезагрузите страницу (Ctrl+F5)
-3. Если ошибка повторяется, сообщите разработчику
+1. Нажмите "Сбросить всю игру" в настройках
+2. Очистите localStorage в DevTools (Application → Storage → Local Storage)
+3. Перезагрузите страницу (Ctrl+F5)
 `;
-        Render.showErrorAlert('Ошибка инициализации', e.message, errorDetails);
+
+        // Показываем ошибку с кнопкой принудительного сброса
+        const errorModal = document.createElement('div');
+        errorModal.innerHTML = `
+            <div class="modal active">
+                <div class="modal-overlay"></div>
+                <div class="modal-content" style="max-width: 600px;">
+                    <div class="modal-header error">
+                        <h2><i class="fas fa-exclamation-triangle"></i> Критическая ошибка инициализации</h2>
+                    </div>
+                    <div class="modal-body">
+                        <h3>${e.message}</h3>
+                        <p>Игра не может быть запущена из-за критической ошибки.</p>
+                        <pre style="background: #1a1a1a; padding: 10px; border-radius: 5px; overflow: auto; max-height: 200px; font-size: 0.8rem;">${errorDetails}</pre>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="forceResetBtn" class="btn btn-danger" style="margin-right: 10px;">
+                            <i class="fas fa-bomb"></i> Принудительный сброс игры
+                        </button>
+                        <button id="reloadBtn" class="btn btn-secondary">
+                            <i class="fas fa-redo"></i> Перезагрузить страницу
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(errorModal);
+        
+        // Обработчики для кнопок
+        document.getElementById('forceResetBtn').onclick = () => {
+            if (confirm('ВНИМАНИЕ! Это удалит ВСЕ сохранения и настройки. Продолжить?')) {
+                Saveload.forceResetToInitial();
+            }
+        };
+        
+        document.getElementById('reloadBtn').onclick = () => {
+            location.reload();
+        };
     }
 }
 

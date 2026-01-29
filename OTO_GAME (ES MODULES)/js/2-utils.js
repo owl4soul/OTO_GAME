@@ -54,78 +54,15 @@ function repairTruncatedJSON(text) {
 }
 
 /**
- * Извлекает объекты choices из текста массива (новый формат)
- * Знаем структуру: text, requirements{stats{}, inventory}, success_changes, failure_changes
- * @param {string} choicesText - Текст массива choices
- * @returns {Array} Массив объектов choice
- */
-function extractChoiceObjects(choicesText) {
-    const choiceObjects = [];
-    let currentObject = '';
-    let braceDepth = 0;
-    let inString = false;
-    let escapeNext = false;
-    
-    for (let i = 0; i < choicesText.length; i++) {
-        const char = choicesText[i];
-        
-        if (escapeNext) {
-            currentObject += char;
-            escapeNext = false;
-            continue;
-        }
-        
-        if (char === '\\') {
-            currentObject += char;
-            escapeNext = true;
-            continue;
-        }
-        
-        if (char === '"') {
-            inString = !inString;
-        }
-        
-        if (!inString) {
-            if (char === '{') {
-                if (braceDepth === 0) {
-                    currentObject = '';
-                }
-                braceDepth++;
-            } else if (char === '}') {
-                braceDepth--;
-                if (braceDepth === 0) {
-                    currentObject += char;
-                    try {
-                        const parsedObject = JSON.parse(currentObject);
-                        // Валидируем структуру объекта choice
-                        if (parsedObject.text && typeof parsedObject.text === 'string') {
-                            choiceObjects.push(parsedObject);
-                        }
-                    } catch (e) {
-                        console.warn('Не удалось распарсить объект choice:', currentObject.substring(0, 100));
-                    }
-                    currentObject = '';
-                    continue;
-                }
-            } else if (char === ',' && braceDepth === 0) {
-                // Разделитель между объектами - пропускаем
-                continue;
-            }
-        }
-        
-        if (braceDepth > 0) {
-            currentObject += char;
-        }
-    }
-    
-    return choiceObjects;
-}
-
-/**
  * Надежный парсинг JSON из ответа ИИ
- * Специально для нового формата с requirements, success_changes, failure_changes
+ * Специально для нового формата с requirements, success_rewards, fail_penalties
  * @param {string} rawContent - Сырой текст ответа
  * @returns {Object} Распарсенный JSON объект
+ */
+// В 2-utils.js замени функцию robustJsonParse:
+
+/**
+ * Надежный парсинг JSON из ответа ИИ (ФОРМАТ 4.1)
  */
 function robustJsonParse(rawContent) {
     if (!rawContent) {
@@ -145,62 +82,64 @@ function robustJsonParse(rawContent) {
         console.warn('Стандартный JSON.parse не удался, переходим к агрессивному парсингу:', e.message);
     }
     
-    // Извлекаем основные поля через regex
-    const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    const shortSummaryMatch = text.match(/"short_summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    
-    const fallback = {
-        scene: sceneMatch ? sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : "Сцена не сгенерирована",
-        short_summary: shortSummaryMatch ? shortSummaryMatch[1].replace(/\\"/g, '"') : "",
+    // Агрессивный парсинг для ФОРМАТА 4.1
+    const result = {
+        design_notes: "",
+        scene: "",
+        reflection: "",
+        typology: "",
         choices: [],
-        stat_changes: {},
-        progress_change: 0,
-        thoughtsOfHero: []
+        events: [],
+        aiMemory: {},
+        thoughts: [],
+        summary: ""
     };
     
-    const personalityMatch = text.match(/"personality"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (personalityMatch) {
-        fallback.personality = personalityMatch[1].replace(/\\"/g, '"');
-    } else {
-        fallback.personality = null;
+    // Извлекаем основные поля через regex для ФОРМАТА 4.1
+    const designNotesMatch = text.match(/"design_notes"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (designNotesMatch) {
+        result.design_notes = designNotesMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
     }
     
-    const inventoryAllMatch = text.match(/"inventory_all"\s*:\s*(\[.*?\])/s);
-    if (inventoryAllMatch) {
-        try {
-            fallback.inventory_all = JSON.parse(inventoryAllMatch[1]);
-        } catch (e) {
-            fallback.inventory_all = [];
-        }
+    const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (sceneMatch) {
+        result.scene = sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
     } else {
-        fallback.inventory_all = [];
+        result.scene = "Сцена не сгенерирована";
     }
     
-    const relationsAllMatch = text.match(/"relations_all"\s*:\s*(\{.*?\})/s);
-    if (relationsAllMatch) {
-        try {
-            fallback.relations_all = JSON.parse(relationsAllMatch[1]);
-        } catch (e) {
-            fallback.relations_all = {};
-        }
-    } else {
-        fallback.relations_all = {};
+    const reflectionMatch = text.match(/"reflection"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (reflectionMatch) {
+        result.reflection = reflectionMatch[1].replace(/\\"/g, '"');
     }
     
-    const thoughtsMatch = text.match(/"thoughtsOfHero"\s*:\s*\[(.*?)\]/s);
+    const typologyMatch = text.match(/"typology"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (typologyMatch) {
+        result.typology = typologyMatch[1].replace(/\\"/g, '"');
+    }
+    
+    const summaryMatch = text.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (summaryMatch) {
+        result.summary = summaryMatch[1].replace(/\\"/g, '"');
+    }
+    
+    // Парсинг thoughts
+    const thoughtsMatch = text.match(/"thoughts"\s*:\s*\[(.*?)\]/s);
     if (thoughtsMatch) {
         try {
-            fallback.thoughtsOfHero = JSON.parse(`[${thoughtsMatch[1]}]`);
+            result.thoughts = JSON.parse(`[${thoughtsMatch[1]}]`);
         } catch (e) {
-            fallback.thoughtsOfHero = thoughtsMatch[1].split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+            // Ручной парсинг массива строк
+            const thoughtsText = thoughtsMatch[1];
+            const thoughtRegex = /"((?:[^"\\]|\\.)*)"/g;
+            let match;
+            while ((match = thoughtRegex.exec(thoughtsText)) !== null) {
+                result.thoughts.push(match[1].replace(/\\"/g, '"'));
+            }
         }
-    } else {
-        fallback.thoughtsOfHero = [];
     }
     
-    // Специальный парсинг для массива choices в новом формате
-    // Агрессивный парсинг для нового формата
-    console.warn('⚠️ Агрессивный парсинг для нового формата choices...');
+    // Парсинг choices (новый формат)
     const choicesStartMatch = text.match(/"choices"\s*:\s*\[/);
     if (choicesStartMatch) {
         const startIdx = choicesStartMatch.index + choicesStartMatch[0].length;
@@ -244,126 +183,30 @@ function robustJsonParse(rawContent) {
         }
         
         // Парсим объекты choices из извлеченного текста
-        const choiceObjects = extractChoiceObjects(choicesText);
-        fallback.choices = choiceObjects;
-    }
-    
-    // Парсим stat_changes
-    const statChangesMatch = text.match(/"stat_changes"\s*:\s*(\{[^}]*\})/);
-    if (statChangesMatch) {
         try {
-            fallback.stat_changes = JSON.parse(statChangesMatch[1]);
+            result.choices = JSON.parse(`[${choicesText}]`);
         } catch (e) {
-            // Ручной парсинг stat_changes
-            const statRegex = /"(\w+)"\s*:\s*(-?\d+)/g;
-            let match;
-            while ((match = statRegex.exec(statChangesMatch[1])) !== null) {
-                fallback.stat_changes[match[1]] = parseInt(match[2]);
-            }
+            console.warn('Не удалось распарсить choices:', e.message);
+            // Создаем дефолтные choices
+            result.choices = [
+                {
+                    text: "Продолжить...",
+                    difficulty_level: 5,
+                    requirements: [],
+                    success_rewards: [],
+                    fail_penalties: []
+                }
+            ];
         }
     }
     
-    return validateAndFixStructure(fallback);
+    return result;
 }
 
-
-/**
- * Проверяет структуру и добавляет дефолтные значения (Safety Layer)
- * Только новый формат: requirements, success_changes, failure_changes
- * @param {Object} data - Распарсенный объект
- * @returns {Object} - Валидный игровой объект
- */
-function validateAndFixStructure(data) {
-    if (typeof data !== 'object' || data === null) {
-        throw new Error('Результат парсинга не является объектом');
-    }
-    
-    // 1. Гарантируем обязательные текстовые поля
-    data.scene = data.scene || "Сцена не сгенерирована (Ошибка данных).";
-    data.short_summary = data.short_summary || "";
-    
-    // 2. Пробрасываем поля изменений, если они есть
-    // Если ИИ решил изменить личность, сохраняем это, иначе null
-    data.personality_change = data.personality_change || null;
-    
-    // 3. Инвентарь
-    if (data.inventory_all) {
-        if (!Array.isArray(data.inventory_all)) {
-            data.inventory_all = [];
-        }
-    } else {
-        data.inventory_all = [];
-    }
-    
-    // Отношенич
-    if (data.relations_all) {
-        if (typeof data.relations_all !== 'object') {
-            data.relations_all = {};
-        }
-    } else {
-        data.relations_all = {};
-    }
-    
-    // Личность
-    if (!data.personality) {
-        data.personality = null;
-    }
-    
-    // Мысли
-    if (data.thoughtsOfHero) {
-        if (!Array.isArray(data.thoughtsOfHero)) {
-            data.thoughtsOfHero = [data.thoughtsOfHero.toString()];
-        }
-    } else {
-        data.thoughtsOfHero = [];
-    }
-    
-    // 4. Валидация выборов (choices)
-    if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
-        data.choices = [{
-            text: "Продолжить...",
-            requirements: {},
-            success_changes: {},
-            failure_changes: {}
-        }];
-    } else {
-        data.choices = data.choices.map(choice => {
-            // Создаем безопасную копию объекта выбора
-            const safeChoice = {
-                text: (typeof choice === 'string') ? choice : (choice.text || "Действие"),
-                requirements: choice.requirements || {},
-                success_changes: choice.success_changes || {},
-                failure_changes: choice.failure_changes || {}
-            };
-            
-            // Гарантируем вложенную структуру для рендера
-            if (!safeChoice.requirements.stats) safeChoice.requirements.stats = {};
-            // Inventory в требованиях может быть строкой или null
-            
-            if (!safeChoice.success_changes.stats) safeChoice.success_changes.stats = {};
-            if (!safeChoice.success_changes.inventory_add) safeChoice.success_changes.inventory_add = [];
-            if (!safeChoice.success_changes.inventory_remove) safeChoice.success_changes.inventory_remove = [];
-            
-            if (!safeChoice.failure_changes.stats) safeChoice.failure_changes.stats = {};
-            if (!safeChoice.failure_changes.inventory_add) safeChoice.failure_changes.inventory_add = [];
-            if (!safeChoice.failure_changes.inventory_remove) safeChoice.failure_changes.inventory_remove = [];
-            
-            return safeChoice;
-        });
-    }
-    
-    data.stat_changes = data.stat_changes || {};
-    data.progress_change = data.progress_change || 0;
-    
-    // Исправление мыслей героя (иногда ИИ возвращает строку вместо массива)
-    if (data.thoughtsOfHero && !Array.isArray(data.thoughtsOfHero)) {
-        data.thoughtsOfHero = [String(data.thoughtsOfHero)];
-    } else if (!data.thoughtsOfHero) {
-        data.thoughtsOfHero = [];
-    }
-    
-    return data;
-}
+// Удалите старые функции, которые больше не нужны:
+// - extractChoiceObjects
+// - validateAndFixStructure (старая версия)
+// Вместо них используйте validateAndNormalizeResponse из 7-2-api-response.js
 
 /**
  * Безопасный парсинг ответа ИИ
@@ -397,12 +240,12 @@ function safeParseAIResponse(text) {
                     stats: {},
                     inventory: null
                 },
-                success_changes: {
+                success_rewards: {
                     stats: {},
                     inventory_add: [],
                     inventory_remove: []
                 },
-                failure_changes: {
+                fail_penalties: {
                     stats: {},
                     inventory_add: [],
                     inventory_remove: []
@@ -683,10 +526,49 @@ function parseHeroPhrases(text) {
     }
 }
 
+/**
+ * Декодирует Unicode escape-последовательности в читаемые символы
+ * @param {string} text - Текст с escape-последовательностями
+ * @returns {string} Декодированный текст
+ */
+function decodeUnicodeEscapes(text) {
+    if (!text || typeof text !== 'string') return text;
+    
+    return text.replace(/\\u[\dA-F]{4}/gi, function(match) {
+        try {
+            return String.fromCharCode(parseInt(match.replace(/\\u/g, ''), 16));
+        } catch (e) {
+            return match;
+        }
+    });
+}
+
+/**
+ * Красиво форматирует JSON с декодированием Unicode
+ * @param {string} jsonString - JSON строка
+ * @returns {string} Форматированная и декодированная строка
+ */
+function formatJsonWithUnicode(jsonString) {
+    if (!jsonString) return '';
+    
+    try {
+        // Сначала декодируем Unicode escapes
+        const decoded = decodeUnicodeEscapes(jsonString);
+        
+        // Пытаемся распарсить JSON
+        const obj = JSON.parse(decoded);
+        
+        // Форматируем с красивыми отступами
+        return JSON.stringify(obj, null, 2);
+    } catch (e) {
+        // Если не JSON, возвращаем декодированный текст
+        return decodeUnicodeEscapes(jsonString);
+    }
+}
+
 // Публичный интерфейс модуля
 export const Utils = {
     repairTruncatedJSON,
-    validateAndFixStructure,
     robustJsonParse,
     getStatusEmoji,
     formatErrorDetails,
@@ -700,5 +582,7 @@ export const Utils = {
     saveFileWithFolderPicker,
     vibrate,
     parseHeroPhrases,
-    safeParseAIResponse
+    safeParseAIResponse,
+    decodeUnicodeEscapes,
+    formatJsonWithUnicode
 };

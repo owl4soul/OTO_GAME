@@ -1,4 +1,4 @@
-// Модуль 12: UI - Контроллер интерфейса (js/ui.js)
+// Модуль 12: UI - Контроллер интерфейса (ФОРМАТ 4.1)
 'use strict';
 
 import { State } from './3-state.js';
@@ -8,15 +8,15 @@ import { CONFIG } from './1-config.js';
 import { Utils } from './2-utils.js';
 
 // === КОНСТАНТЫ И НАСТРОЙКИ ===
-const MIN_PCT = 10.0; // Минимальная допустимая высота секции (%)
-const HEADER_PX = 44; // Высота заголовка Bot (px), должна совпадать с CSS --h-row
-const PRECISION = 10000; // Точность для округления float (4 знака)
+const MIN_PCT = 10.0;
+const HEADER_PX = 44;
+const PRECISION = 10000;
 
-// Флаг для троттлинга RAF (оптимизация ресайза)
+// Флаг для троттлинга RAF
 let ticking = false;
 
 // =============================================================================
-// 1. LOGGER UTILITY (Утилита логирования)
+// 1. LOGGER UTILITY
 // =============================================================================
 export const Logger = {
     _s: {
@@ -33,55 +33,32 @@ export const Logger = {
 };
 
 // =============================================================================
-// 2. MATH & LOGIC CORE (Ядро математических расчетов)
+// 2. MATH & LOGIC CORE
 // =============================================================================
 
-/**
- * Получение высоты вьюпорта с приоритетом VisualViewport
- * Критично для корректной работы с виртуальной клавиатурой на мобильных.
- */
 function getViewportHeight() {
-    // Проверка на валидность visualViewport (защита от багов старых браузеров)
     if (window.visualViewport && window.visualViewport.height > 10) {
         return window.visualViewport.height;
     }
     return window.innerHeight;
 }
 
-/**
- * Безопасное округление float до PRECISION
- */
 function round(num) {
     return Math.round(num * PRECISION) / PRECISION;
 }
 
-/**
- * Алгоритм "Smart Debit" (Умное списание)
- * Распределяет "Дефицит" (amountNeeded) между двумя секциями (val1, val2).
- * 
- * Приоритеты:
- * 1. Сначала забираем "жирок" (излишки сверх MIN_PCT).
- * 2. Если жирка не хватает, добираем у "богатого".
- * 3. В случае Force Majeure (оба истощены) — режем "тело" секции, но не уводим в минус.
- */
 function distributeDebit(amountNeeded, val1, val2) {
-    // 1. Считаем излишки (Surplus) - то, что выше 10%
     const surplus1 = Math.max(0, val1 - MIN_PCT);
     const surplus2 = Math.max(0, val2 - MIN_PCT);
     
-    let take1 = 0,
-        take2 = 0;
+    let take1 = 0, take2 = 0;
     const halfNeed = amountNeeded / 2;
     
-    // 2. Пытаемся покрыть долг за счет излишков (поровну)
-    // Если у секции хватает излишка на половину долга — берем половину.
-    // Если нет — забираем весь излишек.
     if (surplus1 >= halfNeed) take1 = halfNeed;
     else take1 = surplus1;
     if (surplus2 >= halfNeed) take2 = halfNeed;
     else take2 = surplus2;
     
-    // 3. Если из-за нехватки у одной мы не добрали сумму, пытаемся добрать у "богатого" соседа
     const remainingNeed = amountNeeded - (take1 + take2);
     if (remainingNeed > 0.0001) {
         if (surplus1 > take1) {
@@ -93,22 +70,16 @@ function distributeDebit(amountNeeded, val1, val2) {
         }
     }
     
-    // 4. Force Majeure: Излишки кончились, но долг остался (экстремально маленький экран).
-    // Приходится уменьшать секции ниже MIN_PCT, чтобы соблюсти 100% высоты экрана.
     let finalNeed = amountNeeded - (take1 + take2);
     if (finalNeed > 0.0001) {
-        // Сколько физически осталось у секций ПОСЛЕ изъятия излишков
         let rem1 = val1 - take1;
         let rem2 = val2 - take2;
         
-        // Сначала забираем у того, у кого больше абсолютного значения
         if (rem1 >= rem2) take1 += Math.min(rem1, finalNeed);
         else take2 += Math.min(rem2, finalNeed);
         
-        // Если все еще должны (очень редкий случай), добираем у второго
         finalNeed = amountNeeded - (take1 + take2);
         if (finalNeed > 0.0001) {
-            // Обновляем остатки
             rem1 = val1 - take1;
             rem2 = val2 - take2;
             if (rem1 > 0) take1 += Math.min(rem1, finalNeed);
@@ -119,33 +90,22 @@ function distributeDebit(amountNeeded, val1, val2) {
     return { take1, take2 };
 }
 
-/**
- * Нормализация суммы до 100%.
- * Устраняет дрейф плавающей запятой (напр. 99.9999% -> 100%) и гарантирует отсутствие пустых пикселей.
- * 
- * @param {boolean} isBotFixed - Если true, Bot не участвует в коррекции (он "священен").
- */
 function normalizeHeights(top, mid, bot, isBotFixed) {
     const sum = top + mid + bot;
     const diff = 100.0 - sum;
     
-    // Если погрешность ничтожна, не трогаем
     if (Math.abs(diff) < 0.001) return { top, mid, bot };
     
     if (isBotFixed) {
-        // Bot фиксирован. Корректируем Top или Mid.
-        // Добавляем/отнимаем у большего, чтобы минимизировать визуальный эффект скачка.
         if (top >= mid) top += diff;
         else mid += diff;
     } else {
-        // Иначе корректируем самый большой элемент из всех трех.
         const max = Math.max(top, mid, bot);
         if (max === top) top += diff;
         else if (max === mid) mid += diff;
         else bot += diff;
     }
     
-    // Финальная защита от отрицательных значений и округление
     return {
         top: Math.max(0, round(top)),
         mid: Math.max(0, round(mid)),
@@ -153,12 +113,8 @@ function normalizeHeights(top, mid, bot, isBotFixed) {
     };
 }
 
-/**
- * Основная функция пересчета высот (Action Dispatcher).
- * Управляет логикой Collapse, Expand и Sync.
- */
 function redistributeHeights(action) {
-    const state = State.getState(); // Получаем объект данных
+    const state = State.getState();
     const ui = state.ui;
     const vh = getViewportHeight();
     const currentHeaderPct = (HEADER_PX / vh) * 100;
@@ -168,7 +124,6 @@ function redistributeHeights(action) {
     let bot = ui.hBot;
     
     if (action === 'collapse') {
-        // ИСПРАВЛЕНО: Используем State (модуль) вместо state (данные)
         if (bot > currentHeaderPct + 2) {
             State.setHBotBeforeCollapse(bot);
         } else if (!State.getHBotBeforeCollapse()) {
@@ -185,7 +140,6 @@ function redistributeHeights(action) {
         }
     }
     else if (action === 'expand') {
-        // ИСПРАВЛЕНО: Используем State (модуль)
         let targetBot = State.getHBotBeforeCollapse() || 20;
         
         if (targetBot < currentHeaderPct + 1) targetBot = 20;
@@ -224,9 +178,6 @@ function redistributeHeights(action) {
     State.saveUiState();
 }
 
-/**
- * Применение CSS переменных в DOM
- */
 function applyCssVars(top, mid, bot) {
     const root = document.documentElement;
     root.style.setProperty('--h-top', top);
@@ -234,55 +185,36 @@ function applyCssVars(top, mid, bot) {
     root.style.setProperty('--h-bot', bot);
 }
 
-
 // =============================================================================
-// 3. UI CONTROLLER (Контроллер и события)
+// 3. UI CONTROLLER
 // =============================================================================
 
 function init() {
     Logger.info('UI', 'Инициализация подсистемы интерфейса...');
     const dom = DOM.getDOM();
     
-    // 1. Восстановление лейаута при старте
     restoreLayout();
-    
-    // 2. Инициализация ресайзеров (Drag & Drop)
     initResizers();
     
-    // 3. Слушатель клика по хедеру для сворачивания
     if (dom.botHeader) {
         dom.botHeader.addEventListener('click', () => toggleBottomCollapse(null, false));
     }
     
-    // 4. Слушатель Viewport (Клавиатура / Поворот)
-    // Используем visualViewport если доступен (современные браузеры)
     if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', handleViewportResize);
     } else {
         window.addEventListener('resize', handleViewportResize);
     }
-    
-    // 5. Обработка фокуса поля ввода (превентивное сворачивание)
-    if (dom.freeInputText) {
-        dom.freeInputText.addEventListener('focus', () => {
-            // Здесь можно добавить логику, но основную работу делает handleViewportResize
-        });
-    }
 }
 
-/**
- * Восстановление состояния при загрузке страницы
- */
 function restoreLayout() {
     const ui = State.getState().ui;
-    // Безопасная инициализация vh
     const vh = getViewportHeight();
     document.documentElement.style.setProperty('--vh', `${vh}px`);
     
     if (ui.isCollapsed) {
         DOM.getDOM().secBot.classList.add('collapsed');
         if (DOM.getDOM().collapseIcon) DOM.getDOM().collapseIcon.innerHTML = '<i class="fas fa-chevron-up"></i>';
-        // Обязательно синхронизируем (SYNC), т.к. размер экрана мог измениться с прошлого раза
         redistributeHeights('sync');
     } else {
         DOM.getDOM().secBot.classList.remove('collapsed');
@@ -291,57 +223,40 @@ function restoreLayout() {
     }
 }
 
-/**
- * Переключатель состояния нижней панели (Свернуть/Развернуть)
- * @param {boolean|null} forceState - null (toggle) | true (collapse) | false (expand)
- * @param {boolean} isAuto - вызов системой (клавиатура) или пользователем
- */
 function toggleBottomCollapse(forceState = null, isAuto = false) {
-    const ui = State.getState().ui;
-    const currentState = ui.isCollapsed;
+    const state = State.getState();
+    const currentState = state.ui.isCollapsed;
     const newState = (forceState !== null) ? forceState : !currentState;
     
     if (isAuto) {
-        // --- АВТОМАТИКА (КЛАВИАТУРА) ---
         if (newState === true) {
-            // КЛАВИАТУРА ОТКРЫЛАСЬ
-            if (ui.isCollapsed) {
-                // Уже свернуто пользователем. 
-                // Не меняем логическое состояние, просто синхронизируем размер хедера.
-                ui.isAutoCollapsed = false;
+            if (state.ui.isCollapsed) {
+                state.ui.isAutoCollapsed = false;
                 redistributeHeights('sync');
             } else {
-                // Было развернуто -> Сворачиваем автоматически.
-                ui.isAutoCollapsed = true;
-                ui.isCollapsed = true;
+                state.ui.isAutoCollapsed = true;
+                state.ui.isCollapsed = true;
                 redistributeHeights('collapse');
             }
         } else {
-            // КЛАВИАТУРА ЗАКРЫЛАСЬ
-            if (ui.isAutoCollapsed) {
-                // Было свернуто системой -> Разворачиваем обратно.
-                ui.isAutoCollapsed = false;
-                ui.isCollapsed = false;
+            if (state.ui.isAutoCollapsed) {
+                state.ui.isAutoCollapsed = false;
+                state.ui.isCollapsed = false;
                 redistributeHeights('expand');
             } else {
-                // Было свернуто пользователем -> Оставляем свернутым.
-                // Но синхронизируем размер (хедер в % стал меньше).
                 redistributeHeights('sync');
             }
         }
     } else {
-        // --- РУЧНОЕ УПРАВЛЕНИЕ ---
-        // Любое ручное действие сбрасывает авто-флаг
-        ui.isAutoCollapsed = false;
-        ui.isCollapsed = newState;
+        state.ui.isAutoCollapsed = false;
+        state.ui.isCollapsed = newState;
         
         if (newState) redistributeHeights('collapse');
         else redistributeHeights('expand');
     }
     
-    // Обновляем UI (классы и иконки)
     const dom = DOM.getDOM();
-    if (ui.isCollapsed) {
+    if (state.ui.isCollapsed) {
         dom.secBot.classList.add('collapsed');
         if (dom.collapseIcon) dom.collapseIcon.innerHTML = '<i class="fas fa-chevron-up"></i>';
     } else {
@@ -350,17 +265,12 @@ function toggleBottomCollapse(forceState = null, isAuto = false) {
     }
 }
 
-/**
- * Обработчик изменения размеров вьюпорта
- * Использует requestAnimationFrame для плавности при анимации клавиатуры
- */
 function handleViewportResize() {
     if (!ticking) {
         window.requestAnimationFrame(() => {
             const vh = getViewportHeight();
             document.documentElement.style.setProperty('--vh', `${vh}px`);
             
-            // Детекция клавиатуры: если высота < 75% от полного экрана
             const screenH = window.screen.height > 0 ? window.screen.height : window.innerHeight;
             const isKeyboardOpen = vh < (screenH * 0.75);
             
@@ -374,15 +284,13 @@ function handleViewportResize() {
 }
 
 // =============================================================================
-// 4. RESIZERS (Логика перетаскивания границ)
+// 4. RESIZERS
 // =============================================================================
 
 function initResizers() {
     const dom = DOM.getDOM();
-    // Настраиваем горизонтальные ресайзеры
     setupDrag(dom.resizerTop, 'top');
-    setupDrag(dom.resizerBot, 'mid'); // mid - это граница между Mid и Bot
-    // Настраиваем вертикальный ресайзер
+    setupDrag(dom.resizerBot, 'mid');
     setupVerticalDrag(dom.resizerBotVert);
 }
 
@@ -393,14 +301,12 @@ function setupDrag(el, mode) {
     
     el.onpointerdown = (e) => {
         e.preventDefault();
-        const ui = State.getState().ui;
-        // Блокируем перетаскивание нижнего ресайзера, если низ свернут
-        if (mode === 'mid' && ui.isCollapsed) return;
+        const state = State.getState();
+        if (mode === 'mid' && state.ui.isCollapsed) return;
         
         el.setPointerCapture(e.pointerId);
         if (Utils.vibrate) Utils.vibrate(50);
         
-        // Отключаем CSS анимацию для мгновенного отклика
         const dom = DOM.getDOM();
         dom.secTop.classList.add('no-anim');
         dom.secMid.classList.add('no-anim');
@@ -411,8 +317,8 @@ function setupDrag(el, mode) {
         startY = e.clientY;
         containerH = dom.mainContainer ? dom.mainContainer.clientHeight : window.innerHeight;
         
-        startH1 = (mode === 'top') ? ui.hTop : ui.hMid;
-        startH2 = (mode === 'top') ? ui.hMid : ui.hBot;
+        startH1 = (mode === 'top') ? state.ui.hTop : state.ui.hMid;
+        startH2 = (mode === 'top') ? state.ui.hMid : state.ui.hBot;
     };
     
     el.onpointermove = (e) => {
@@ -420,28 +326,25 @@ function setupDrag(el, mode) {
         if (!el.classList.contains('active')) return;
         
         const deltaPx = e.clientY - startY;
-        if (!isDragging && Math.abs(deltaPx) < 10) return; // Порог для отсеивания случайных тапов
+        if (!isDragging && Math.abs(deltaPx) < 10) return;
         isDragging = true;
         
         const deltaPerc = (deltaPx / containerH) * 100;
         let newH1 = startH1 + deltaPerc;
         let newH2 = startH2 - deltaPerc;
         
-        // Лимиты минимальной высоты
         if (newH1 < MIN_PCT || newH2 < MIN_PCT) return;
         
-        const ui = State.getState().ui;
-        // Обновляем State напрямую
+        const state = State.getState();
         if (mode === 'top') {
-            ui.hTop = newH1;
-            ui.hMid = newH2;
+            state.ui.hTop = newH1;
+            state.ui.hMid = newH2;
         } else {
-            ui.hMid = newH1;
-            ui.hBot = newH2;
+            state.ui.hMid = newH1;
+            state.ui.hBot = newH2;
         }
         
-        // Нормализуем и применяем (Bot не фиксирован при ручном драге)
-        const norm = normalizeHeights(ui.hTop, ui.hMid, ui.hBot, false);
+        const norm = normalizeHeights(state.ui.hTop, state.ui.hMid, state.ui.hBot, false);
         applyCssVars(norm.top, norm.mid, norm.bot);
     };
     
@@ -452,17 +355,15 @@ function setupDrag(el, mode) {
         if (Utils.vibrate) Utils.vibrate(30);
         
         const dom = DOM.getDOM();
-        // Включаем анимацию обратно
         dom.secTop.classList.remove('no-anim');
         dom.secMid.classList.remove('no-anim');
         dom.secBot.classList.remove('no-anim');
         
-        // Финальная нормализация и сохранение
-        const ui = State.getState().ui;
-        const norm = normalizeHeights(ui.hTop, ui.hMid, ui.hBot, false);
-        ui.hTop = norm.top;
-        ui.hMid = norm.mid;
-        ui.hBot = norm.bot;
+        const state = State.getState();
+        const norm = normalizeHeights(state.ui.hTop, state.ui.hMid, state.ui.hBot, false);
+        state.ui.hTop = norm.top;
+        state.ui.hMid = norm.mid;
+        state.ui.hBot = norm.bot;
         State.saveUiState();
     };
 }
@@ -478,9 +379,9 @@ function setupVerticalDrag(el) {
         el.setPointerCapture(e.pointerId);
         if (Utils.vibrate) Utils.vibrate(50);
         
-        const ui = State.getState().ui;
+        const state = State.getState();
         startX = e.clientX;
-        startW = ui.wBotLeft;
+        startW = state.ui.wBotLeft;
         el.classList.add('active');
         isDragging = false;
     };
@@ -497,14 +398,15 @@ function setupVerticalDrag(el) {
         const deltaPerc = (deltaPx / containerW) * 100;
         let newW = startW + deltaPerc;
         
-        if (newW < 20 || newW > 80) return; // Лимиты ширины
+        if (newW < 20 || newW > 80) return;
         
         const paneLeft = dom.bottomArea.querySelector('.pane-left');
         const paneRight = dom.bottomArea.querySelector('.pane-right');
         if (paneLeft) paneLeft.style.flex = `0 0 ${newW}%`;
         if (paneRight) paneRight.style.flex = `0 0 ${100 - newW}%`;
         
-        State.getState().ui.wBotLeft = newW;
+        const state = State.getState();
+        state.ui.wBotLeft = newW;
     };
     
     el.onpointerup = (e) => {
@@ -517,16 +419,17 @@ function setupVerticalDrag(el) {
 }
 
 // =============================================================================
-// 5. SETTINGS & HELPERS (Вспомогательный функционал)
+// 5. SETTINGS & HELPERS
 // =============================================================================
 
 function setFreeModeUI(isFreeMode) {
-    const ui = State.getState().ui;
+    const state = State.getState();
     const dom = DOM.getDOM();
+    
     State.setState({ freeMode: isFreeMode });
     
     if (isFreeMode) {
-        ui._tempSavedState = ui.isCollapsed;
+        state.ui._tempSavedState = state.ui.isCollapsed;
         if (dom.choicesList) dom.choicesList.style.display = 'none';
         if (dom.freeInputWrapper) dom.freeInputWrapper.style.display = 'flex';
         if (dom.modeText) dom.modeText.textContent = "Свободный ввод";
@@ -539,19 +442,13 @@ function setFreeModeUI(isFreeMode) {
         if (dom.modeIcon) dom.modeIcon.innerHTML = '<i class="fas fa-list-ul"></i>';
         if (dom.freeInputText) dom.freeInputText.blur();
         
-        if (typeof ui._tempSavedState !== 'undefined') {
-            toggleBottomCollapse(ui._tempSavedState);
-            delete ui._tempSavedState;
+        if (typeof state.ui._tempSavedState !== 'undefined') {
+            toggleBottomCollapse(state.ui._tempSavedState);
+            delete state.ui._tempSavedState;
         }
     }
 }
 
-// === ФУНКЦИИ УПРАВЛЕНИЯ КНОПКАМИ ИГРЫ ===
-
-/**
- * Проверяет состояние игры и блокирует/разблокирует кнопку "Отправить".
- * Централизованная логика валидации ввода.
- */
 function checkSubmitButtonState() {
     const state = State.getState();
     const dom = DOM.getDOM();
@@ -561,39 +458,29 @@ function checkSubmitButtonState() {
     let shouldEnable = false;
     
     if (state.freeMode) {
-        // Режим Свободный ввод: Нужен непустой текст
-        // Проверяем и поле ввода (актуальное значение), и стейт (на всякий случай)
         const text = dom.freeInputText ? dom.freeInputText.value.trim() : '';
         shouldEnable = text.length > 0;
         
-        // Обновляем счетчик текста
         if (dom.choicesCounter) {
             dom.choicesCounter.textContent = shouldEnable ? '✓/∞' : '0/∞';
         }
     } else {
-        // Режим Вариантов: Нужно выбрать хотя бы один вариант
-        shouldEnable = state.selectedChoices && state.selectedChoices.length > 0;
+        // Используем gameState.selectedActions вместо старого selectedChoices
+        const selectedActions = state.gameState.selectedActions || [];
+        shouldEnable = selectedActions.length > 0;
         
-        // Обновляем счетчик вариантов
         if (dom.choicesCounter) {
             const max = CONFIG.maxChoices || 3;
-            const current = state.selectedChoices ? state.selectedChoices.length : 0;
+            const current = selectedActions.length;
             dom.choicesCounter.textContent = `${current}/${max}`;
         }
     }
     
-    // Применяем состояние
     dom.btnSubmit.disabled = !shouldEnable;
-    
-    // Визуальная прозрачность для наглядности (опционально)
     dom.btnSubmit.style.opacity = shouldEnable ? '1' : '0.5';
     dom.btnSubmit.style.cursor = shouldEnable ? 'pointer' : 'not-allowed';
 }
 
-/**
- * Проверяет состояние и блокирует/разблокирует кнопку "Очистить".
- * (НОВАЯ ФУНКЦИЯ)
- */
 function checkClearButtonState() {
     const state = State.getState();
     const dom = DOM.getDOM();
@@ -602,12 +489,11 @@ function checkClearButtonState() {
     let shouldEnable = false;
     
     if (state.freeMode) {
-        // Активна, если есть текст
         const text = dom.freeInputText ? dom.freeInputText.value : '';
         shouldEnable = text.length > 0;
     } else {
-        // Активна, если выбраны варианты
-        shouldEnable = state.selectedChoices && state.selectedChoices.length > 0;
+        const selectedActions = state.gameState.selectedActions || [];
+        shouldEnable = selectedActions.length > 0;
     }
     
     dom.btnClear.disabled = !shouldEnable;
@@ -615,16 +501,10 @@ function checkClearButtonState() {
     dom.btnClear.style.cursor = shouldEnable ? 'pointer' : 'not-allowed';
 }
 
-/**
- * Обновляет состояние всех кнопок действий (Submit и Clear).
- * Вызывать эту функцию при любых изменениях ввода.
- * (НОВАЯ ФУНКЦИЯ-ОБЕРТКА)
- */
 function updateActionButtons() {
     checkSubmitButtonState();
     checkClearButtonState();
 }
-
 
 function scaleUp() {
     const idx = State.getScaleIndex();

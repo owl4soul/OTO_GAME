@@ -123,7 +123,7 @@ export const Calculations = {
     
     /**
      * РАСЧЕТ ИЗМЕНЕНИЙ ПО ТИПУ РЕЗУЛЬТАТА
-     * @param {Object} choice - Объект выбора с success_changes/failure_changes
+     * @param {Object} choice - Объект выбора с success_rewards/fail_penalties
      * @param {string} resultType - Тип результата
      * @returns {Object} Изменения для применения
      */
@@ -138,21 +138,21 @@ export const Calculations = {
         
         switch (resultType) {
             case 'full_success':
-                sourceChanges = choice.success_changes;
+                sourceChanges = choice.success_rewards;
                 break;
             case 'partial_success':
                 // Для частичного успеха - 50% от успешных изменений
-                sourceChanges = this.scaleChanges(choice.success_changes, 0.5);
+                sourceChanges = this.scaleChanges(choice.success_rewards, 0.5);
                 break;
             case 'partial_failure':
                 // Для частичной неудачи - 50% от неудачных изменений
-                sourceChanges = this.scaleChanges(choice.failure_changes, 0.5);
+                sourceChanges = this.scaleChanges(choice.fail_penalties, 0.5);
                 break;
             case 'full_failure':
-                sourceChanges = choice.failure_changes;
+                sourceChanges = choice.fail_penalties;
                 break;
             default:
-                sourceChanges = choice.failure_changes;
+                sourceChanges = choice.fail_penalties;
         }
         
         // Копируем изменения

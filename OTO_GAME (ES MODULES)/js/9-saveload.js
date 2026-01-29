@@ -1,169 +1,72 @@
-// Модуль 9: SAVELOAD - Сохранение/загрузка данных (9-saveload.js)
+// Модуль 9: SAVELOAD - Сохранение/загрузка данных (ФОРМАТ 4.1)
 'use strict';
 
-import { CONFIG, aiModels } from './1-config.js';
 import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
 
 /**
- * Сохранение состояния игры в localStorage
+ * Сохранение состояния игры в localStorage (ФОРМАТ 4.1)
  */
 function saveState() {
     const state = State.getState();
     state.lastSaveTime = new Date().toISOString();
     
-    // Собираем данные для сохранения
+    // Сохраняем все состояние в формате 4.1
     const saveData = {
-        stats: state.stats,
-        progress: state.progress,
-        degreeIndex: state.degreeIndex,
-        personality: state.personality,
-        isRitualActive: state.isRitualActive,
-    skills: state.skills,
-    ritualProgress: state.ritualProgress || 0,
-    ritualTarget: state.ritualTarget || null,
-        currentScene: state.currentScene,
-        history: state.history,
-        summary: state.summary,
-        selectedChoices: state.selectedChoices,
-        freeMode: state.freeMode,
-        freeModeText: state.freeModeText,
-        turnCount: state.turnCount,
-        thoughtsOfHero: state.thoughtsOfHero,
-        settings: state.settings,
+        version: '4.1.0',
         gameId: state.gameId,
         lastSaveTime: state.lastSaveTime,
-        // Сохранение памяти (инвентарь) и изменений за ход
-        aiMemory: state.aiMemory,
-        inventory: state.inventory,
-        relations: state.relations,
-        lastTurnUpdates: state.lastTurnUpdates
+        turnCount: state.turnCount,
+        heroState: [...state.heroState],
+        gameState: { ...state.gameState },
+        ui: { ...state.ui },
+        settings: { ...state.settings },
+        auditLog: [...state.auditLog],
+        models: [...state.models],
+        isRitualActive: state.isRitualActive,
+        ritualProgress: state.ritualProgress,
+        ritualTarget: state.ritualTarget,
+        freeMode: state.freeMode,
+        freeModeText: state.freeModeText,
+        lastTurnUpdates: state.lastTurnUpdates,
+        thoughtsOfHero: [...state.thoughtsOfHero],
+        pendingRequest: null // Не сохраняем активные запросы
     };
     
-    // Сохраняем все в localStorage
-localStorage.setItem('oto_skills', JSON.stringify(state.skills));
-    localStorage.setItem('oto_v3_state', JSON.stringify(saveData));
-    localStorage.setItem('oto_audit_log', JSON.stringify(state.auditLog));
-    localStorage.setItem('oto_models_status', JSON.stringify(state.models));
-    localStorage.setItem('oto_game_id', state.gameId);
-    localStorage.setItem('oto_last_save_time', state.lastSaveTime);
-    localStorage.setItem('oto_scale', state.settings.scale.toString());
-    localStorage.setItem('oto_scale_index', state.settings.scaleIndex.toString());
-    localStorage.setItem('oto_turn_count', state.turnCount.toString());
-    localStorage.setItem('oto_thoughts_of_hero', JSON.stringify(state.thoughtsOfHero));
+    // Основное сохранение в формате 4.1
+    localStorage.setItem('oto_v4_state', JSON.stringify(saveData));
     
-    console.log('Игра сохранена в localStorage');
+    console.log('✅ Игра сохранена в localStorage (формат 4.1)');
 }
 
 /**
- * Загрузка состояния игры из localStorage
+ * Загрузка состояния игры из localStorage (ФОРМАТ 4.1)
+ * Возвращает текущее состояние (уже загруженное в State)
  */
 function loadState() {
-    const saved = localStorage.getItem('oto_v3_state');
-    if (saved) {
-        try {
-            const p = JSON.parse(saved);
-            const state = State.getState();
-            
-            // Восстанавливаем состояние игры
-            state.stats = p.stats || state.stats;
-            state.progress = p.progress || state.progress;
-            state.degreeIndex = p.degreeIndex || state.degreeIndex;
-            state.personality = p.personality || state.personality;
-            state.isRitualActive = p.isRitualActive || false;
-            state.currentScene = p.currentScene || state.currentScene;
-            state.history = p.history || state.history;
-            state.inventory = p.inventory || state.inventory;
-            state.relations = p.relations || state.relations;
-            state.skills = p.skills || state.relations || [],
-state.ritualProgress = p.ritualProgress || state.ritualProgress || 0;
-state.ritualTarget = p.ritualTarget || state.ritualTarget || null;
+    console.log('📥 Загрузка состояния...');
+    return State.getState();
+}
 
-            state.selectedChoices = p.selectedChoices || state.selectedChoices;
-            state.freeMode = p.freeMode || state.freeMode;
-            state.freeModeText = p.freeModeText || state.freeModeText;
-            state.turnCount = p.turnCount || state.turnCount;
-            state.thoughtsOfHero = p.thoughtsOfHero || state.thoughtsOfHero;
-            state.settings = p.settings || state.settings;
-            state.gameId = p.gameId || state.gameId;
-            state.lastSaveTime = p.lastSaveTime || state.lastSaveTime;
-            
-            // Восстановление памяти (Инвентарь) и Лога изменений
-            // Если в сохранении нет aiMemory, инициализируем пустым объектом
-            state.aiMemory = p.aiMemory || state.aiMemory;
-            
-            // Восстанавливаем строку изменений за ход
-            state.lastTurnUpdates = p.lastTurnUpdates || state.lastTurnUpdates;
-            
-            // Загружаем аудит-логи
-            const savedAudit = localStorage.getItem('oto_audit_log');
-            if (savedAudit) {
-                try {
-                    state.auditLog = JSON.parse(savedAudit);
-                } catch (e) {
-                    console.error('Ошибка загрузки аудит-лога:', e);
-                    state.auditLog = [];
-                }
-            }
-            
-            // Загружаем статусы моделей
-            const savedModels = localStorage.getItem('oto_models_status');
-            if (savedModels) {
-                try {
-                    state.models = JSON.parse(savedModels);
-                    console.log('Модели загружены из localStorage');
-                } catch (e) {
-                    console.error('Ошибка загрузки моделей из localStorage:', e);
-                    state.models = aiModels;
-                    console.log('Модели загружены из кода');
-                }
-                if (savedModels.ength !== aiModels.length) {
-                    console.log('Модели загружены из кода');
-                    state.models = aiModels;
-                }
-            } else {
-                state.models = aiModels;
-                console.log('Модели загружены из кода');
-            }
-            
-            // Загружаем масштаб
-            const savedScale = localStorage.getItem('oto_scale');
-            if (savedScale) {
-                state.settings.scale = parseFloat(savedScale) || CONFIG.scaleSteps[CONFIG.defaultScaleIndex];
-            } else {
-                state.settings.scale = CONFIG.scaleSteps[CONFIG.defaultScaleIndex];
-            }
-            
-            const savedScaleIndex = localStorage.getItem('oto_scale_index');
-            if (savedScaleIndex) {
-                state.settings.scaleIndex = parseInt(savedScaleIndex) || CONFIG.defaultScaleIndex;
-            } else {
-                state.settings.scaleIndex = CONFIG.defaultScaleIndex;
-            }
-            
-            // Загружаем счетчик ходов
-            const savedTurnCount = localStorage.getItem('oto_turn_count');
-            if (savedTurnCount) {
-                state.turnCount = parseInt(savedTurnCount) || 0;
-            }
-            
-            // Загружаем фразы героя
-            const savedThoughtsOfHero = localStorage.getItem('oto_thoughts_of_hero');
-            if (savedThoughtsOfHero) {
-                try {
-                    state.thoughtsOfHero = JSON.parse(savedThoughtsOfHero);
-                } catch (e) {
-                    console.error('Ошибка загрузки списка фраз героя:', e);
-                    state.thoughtsOfHero = [];
-                }
-            }
-            
-            State.setState(state);
-            console.log('Игра загружена из localStorage');
-        } catch (e) {
-            console.error('Ошибка загрузки состояния:', e);
-            localStorage.removeItem('oto_v3_state');
-        }
+/**
+ * Принудительный сброс к начальному состоянию
+ */
+function forceResetToInitial() {
+    console.warn('⚠️ Принудительный сброс к начальному состоянию');
+    
+    try {
+        // Полностью очищаем localStorage
+        localStorage.clear();
+        
+        // Перезагружаем страницу
+        setTimeout(() => {
+            location.reload();
+        }, 500);
+        
+        return { success: true, message: 'Игра сброшена к начальному состоянию' };
+    } catch (error) {
+        console.error('❌ Ошибка при принудительном сбросе:', error);
+        return { success: false, error: error.message };
     }
 }
 
@@ -398,5 +301,6 @@ export const Saveload = {
     loadGameFromFile,
     exportAllDataToFile,
     importAllDataFromFile,
-    downloadAuditLogToFile
+    downloadAuditLogToFile,
+    forceResetToInitial
 };

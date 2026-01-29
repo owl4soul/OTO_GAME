@@ -1,14 +1,12 @@
-// Модуль 7.2: API RESPONSE - Парсинг и Обработка ответов (ПОЛНОСТЬЮ ПЕРЕПИСАН)
+// Модуль 7.2: API RESPONSE - Парсинг и Обработка ответов (ФОРМАТ 4.1)
 'use strict';
 
 import { CONFIG } from './1-config.js';
 import { Utils } from './2-utils.js';
-
-// Импортируем промпты
 import { PROMPTS } from './prompts.js';
 
 /**
- * Валидация и нормализация нового формата ответа
+ * Валидация и нормализация нового формата ответа (ФОРМАТ 4.1)
  */
 function validateAndNormalizeResponse(parsedData) {
     if (!parsedData || typeof parsedData !== 'object') {
@@ -16,148 +14,122 @@ function validateAndNormalizeResponse(parsedData) {
     }
     
     const result = {
+        design_notes: "",
         scene: "",
+        reflection: "",
+        typology: "",
         choices: [],
-        short_summary: "",
-        personality_change: null,
-        thoughtsOfHero: [],
-        inventory_changes: { add: [], remove: [] },
-        relations_changes: {},
-        skill_add: null,
-        start_ritual: false,
-        end_ritual: false,
-        ritual_completed: false,
-        // Динамические поля для aiMemory
-        _dynamic: {}
+        events: [],
+        aiMemory: {},
+        thoughts: [],
+        summary: ""
     };
     
-    // 1. Обязательные поля
+    // 1. Опциональные мета-поля
+    if (parsedData.design_notes && typeof parsedData.design_notes === 'string') {
+        result.design_notes = parsedData.design_notes;
+    }
+    
+    // 2. Обязательные поля
     if (!parsedData.scene || typeof parsedData.scene !== 'string') {
         throw new Error('Отсутствует или неверное поле "scene"');
     }
     result.scene = parsedData.scene;
     
+    // 3. Отражение и типология
+    if (parsedData.reflection && typeof parsedData.reflection === 'string') {
+        result.reflection = parsedData.reflection;
+    }
+    
+    if (parsedData.typology && typeof parsedData.typology === 'string') {
+        result.typology = parsedData.typology;
+    }
+    
+    // 4. ВАЖНО: Проверяем choices - должно быть 5-10 элементов
     if (!parsedData.choices || !Array.isArray(parsedData.choices)) {
         throw new Error('Отсутствует или неверное поле "choices"');
     }
     
-    // 2. Нормализация choices
+    // Нормализация choices (ФОРМАТ 4.1)
     result.choices = parsedData.choices.map(choice => {
-        if (typeof choice === 'string') {
+        if (typeof choice !== 'object' || choice === null) {
+            console.warn('⚠️ Некорректный choice, заменяем дефолтным');
             return {
-                text: choice,
-                requirements: { stats: {}, inventory: null },
-                success_changes: { stats: {}, inventory_add: [], inventory_remove: [] },
-                failure_changes: { stats: {}, inventory_add: [], inventory_remove: [] }
+                text: "Действие",
+                difficulty_level: 5,
+                requirements: [],
+                success_rewards: [],
+                fail_penalties: []
             };
         }
         
         return {
             text: choice.text || "Действие",
-            requirements: choice.requirements || { stats: {}, inventory: null },
-            success_changes: choice.success_changes || { stats: {}, inventory_add: [], inventory_remove: [] },
-            failure_changes: choice.failure_changes || { stats: {}, inventory_add: [], inventory_remove: [] }
+            difficulty_level: typeof choice.difficulty_level === 'number' 
+                ? Math.max(1, Math.min(10, choice.difficulty_level)) 
+                : 5,
+            requirements: Array.isArray(choice.requirements) 
+                ? choice.requirements.filter(req => typeof req === 'string' && req.includes(':'))
+                : [],
+            success_rewards: Array.isArray(choice.success_rewards) 
+                ? choice.success_rewards.filter(op => op && op.operation && op.id)
+                : [],
+            fail_penalties: Array.isArray(choice.fail_penalties) 
+                ? choice.fail_penalties.filter(op => op && op.operation && op.id)
+                : []
         };
     });
     
-    // 3. Опциональные поля
-    if (parsedData.short_summary && typeof parsedData.short_summary === 'string') {
-        result.short_summary = parsedData.short_summary;
+    // Проверяем количество choices
+    if (result.choices.length < 5 || result.choices.length > 10) {
+        console.warn(`⚠️ Неправильное количество choices: ${result.choices.length} (должно быть 5-10)`);
     }
     
-    // 4. Изменение личности с последствиями
-    if (parsedData.personality_change && typeof parsedData.personality_change === 'object') {
-        result.personality_change = {
-            description: parsedData.personality_change.description || "",
-            consequences: Array.isArray(parsedData.personality_change.consequences) ?
-                parsedData.personality_change.consequences : []
-        };
+    // 5. События (0-3 элемента)
+    if (parsedData.events && Array.isArray(parsedData.events)) {
+        result.events = parsedData.events.map(event => ({
+            type: event.type || "world_event",
+            description: event.description || "",
+            effects: Array.isArray(event.effects) 
+                ? event.effects.filter(op => op && op.operation && op.id)
+                : [],
+            reason: event.reason || ""
+        })).slice(0, 3); // Ограничиваем 3 событиями
     }
     
-    if (parsedData.thoughtsOfHero && Array.isArray(parsedData.thoughtsOfHero)) {
-        result.thoughtsOfHero = parsedData.thoughtsOfHero.filter(thought =>
-            typeof thought === 'string' && thought.length > 0
-        );
+    // 6. Память ИИ
+    if (parsedData.aiMemory && typeof parsedData.aiMemory === 'object') {
+        result.aiMemory = parsedData.aiMemory;
     }
     
-    // 5. НОВЫЕ ПОЛЯ: inventory_changes
-    if (parsedData.inventory_changes && typeof parsedData.inventory_changes === 'object') {
-        if (parsedData.inventory_changes.add && Array.isArray(parsedData.inventory_changes.add)) {
-            result.inventory_changes.add = parsedData.inventory_changes.add.filter(item =>
-                typeof item === 'string' && item.length > 0
-            );
-        }
-        if (parsedData.inventory_changes.remove && Array.isArray(parsedData.inventory_changes.remove)) {
-            result.inventory_changes.remove = parsedData.inventory_changes.remove.filter(item =>
-                typeof item === 'string' && item.length > 0
-            );
-        }
+    // 7. Мысли героя (минимум 10)
+    if (parsedData.thoughts && Array.isArray(parsedData.thoughts)) {
+        result.thoughts = parsedData.thoughts
+            .filter(thought => typeof thought === 'string' && thought.length > 0)
+            .slice(0, 20); // Ограничиваем 20 мыслями
     }
     
-    // 6. НОВЫЕ ПОЛЯ: relations_changes
-    if (parsedData.relations_changes && typeof parsedData.relations_changes === 'object') {
-        for (const [npc, change] of Object.entries(parsedData.relations_changes)) {
-            if (typeof npc === 'string' && npc.length > 0) {
-                const numChange = Number(change);
-                if (!isNaN(numChange)) {
-                    result.relations_changes[npc] = numChange;
-                }
-            }
-        }
-    }
-    
-    // 7. НОВЫЕ ПОЛЯ: skill_add
-    if (parsedData.skill_add && typeof parsedData.skill_add === 'string') {
-        result.skill_add = parsedData.skill_add.trim();
-    }
-    
-    // 8. Флаги ритуалов
-    if (typeof parsedData.start_ritual === 'boolean') {
-        result.start_ritual = parsedData.start_ritual;
-    }
-    if (typeof parsedData.end_ritual === 'boolean') {
-        result.end_ritual = parsedData.end_ritual;
-    }
-    if (typeof parsedData.ritual_completed === 'boolean') {
-        result.ritual_completed = parsedData.ritual_completed;
-    }
-    
-    // 9. Динамические поля для aiMemory (все остальные поля кроме ожидаемых)
-    const expectedFields = [
-        "scene", "choices", "short_summary", "personality_change", "thoughtsOfHero",
-        "inventory_changes", "relations_changes", "skill_add", "start_ritual",
-        "end_ritual", "ritual_completed"
-    ];
-    
-    for (const [key, value] of Object.entries(parsedData)) {
-        if (!expectedFields.includes(key)) {
-            result._dynamic[key] = value;
-        }
+    // 8. Сводка
+    if (parsedData.summary && typeof parsedData.summary === 'string') {
+        result.summary = parsedData.summary;
+    } else {
+        // Генерируем краткую сводку из сцены
+        result.summary = parsedData.scene
+            .replace(/<[^>]*>/g, ' ') // Удаляем HTML теги
+            .substring(0, 200)
+            .trim() + '...';
     }
     
     return result;
 }
 
 /**
- * Основная функция обработки текстового ответа от ИИ
+ * Основная функция обработки текстового ответа от ИИ (ФОРМАТ 4.1)
  */
 function processAIResponse(rawText) {
     if (!rawText || typeof rawText !== 'string') {
         console.error('❌ Пустой или неверный rawText в processAIResponse');
-        return {
-            scene: "Ошибка: ИИ не вернул текст сцены.",
-            choices: [{
-                text: "Продолжить...",
-                requirements: { stats: {}, inventory: null },
-                success_changes: { stats: {}, inventory_add: [], inventory_remove: [] },
-                failure_changes: { stats: {}, inventory_add: [], inventory_remove: [] }
-            }],
-            short_summary: "Ошибка парсинга",
-            inventory_changes: { add: [], remove: [] },
-            relations_changes: {},
-            _dynamic: {},
-            rawText: rawText || ''
-        };
+        return createFallbackResponse("Ошибка: ИИ не вернул текст сцены.");
     }
     
     // 1. Очистка Markdown и лишних символов
@@ -178,56 +150,84 @@ function processAIResponse(rawText) {
             parsedData = Utils.robustJsonParse(cleanText);
         } catch (robustError) {
             console.error("❌ Оба метода парсинга JSON провалились:", robustError);
-            
-            // Создаем минимальный валидный объект
-            parsedData = {
-                scene: "ИИ вернул некорректный JSON. Сцена не сгенерирована.",
-                choices: ["Продолжить..."],
-                short_summary: "Ошибка формата"
-            };
+            return createFallbackResponse("ИИ вернул некорректный JSON. Сцена не сгенерирована.");
         }
     }
     
-    // 3. Валидация и нормализация
+    // 3. Валидация и нормализация (ФОРМАТ 4.1)
     try {
         return validateAndNormalizeResponse(parsedData);
         
     } catch (validationError) {
         console.error('❌ Ошибка валидации ответа ИИ:', validationError);
-        
-        // Возвращаем безопасный объект
-        return {
-            scene: "Ошибка валидации данных от ИИ. " + validationError.message,
-            choices: [{
-                text: "Продолжить...",
-                requirements: { stats: {}, inventory: null },
-                success_changes: { stats: {}, inventory_add: [], inventory_remove: [] },
-                failure_changes: { stats: {}, inventory_add: [], inventory_remove: [] }
-            }],
-            short_summary: "Ошибка валидации",
-            inventory_changes: { add: [], remove: [] },
-            relations_changes: {},
-            _dynamic: {},
-            rawText: rawText
-        };
+        return createFallbackResponse(`Ошибка валидации данных от ИИ: ${validationError.message}`);
     }
 }
 
 /**
- * Устойчивый запрос к API LLM с механизмом "Авто-Ремонта" JSON
+ * Создание fallback-ответа (ФОРМАТ 4.1)
+ */
+function createFallbackResponse(errorMessage) {
+    return {
+        design_notes: "Ошибка парсинга ответа ИИ",
+        scene: errorMessage,
+        reflection: "Что-то пошло не так...",
+        typology: "Ошибка системы",
+        choices: [
+            {
+                text: "Попробовать снова",
+                difficulty_level: 5,
+                requirements: [],
+                success_rewards: [],
+                fail_penalties: []
+            },
+            {
+                text: "Вернуться к предыдущей сцене",
+                difficulty_level: 3,
+                requirements: [],
+                success_rewards: [],
+                fail_penalties: []
+            }
+        ],
+        events: [],
+        aiMemory: {},
+        thoughts: [
+            "Что-то пошло не так...",
+            "Система дала сбой",
+            "Нужно попробовать ещё раз",
+            "Возможно, это временная ошибка",
+            "Лучше перезагрузить страницу"
+        ],
+        summary: "Ошибка парсинга ответа ИИ"
+    };
+}
+
+/**
+ * Устойчивый запрос к API LLM с механизмом "Авто-Ремонта" JSON (ФОРМАТ 4.1)
  */
 async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiRequestModule, abortCtrl) {
+    let rawResponseText = '';
+    
     try {
         // Шаг 1: Выполняем базовый сетевой запрос
-        const rawApiResponse = await apiRequestModule.executeFetch(url, headers, payload, abortCtrl);
+        rawResponseText = await apiRequestModule.executeFetchRaw(url, headers, payload, abortCtrl);
         
-        // Шаг 2: Извлекаем основной контент
-        const contentFromAI = rawApiResponse.choices?.[0]?.message?.content;
+        // Шаг 2: Парсим ответ для извлечения контента
+        let parsedResponse;
+        try {
+            parsedResponse = JSON.parse(rawResponseText);
+        } catch (parseError) {
+            console.error("❌ Не удалось распарсить ответ API:", parseError);
+            throw new Error(`Невалидный JSON в ответе: ${parseError.message}`);
+        }
+        
+        // Шаг 3: Извлекаем основной контент
+        const contentFromAI = parsedResponse.choices?.[0]?.message?.content;
         if (!contentFromAI) {
             throw new Error("Received empty content string from AI provider");
         }
         
-        // Шаг 3: Пытаемся обработать полученный контент как JSON
+        // Шаг 4: Обрабатываем контент (ФОРМАТ 4.1)
         const processedData = processAIResponse(contentFromAI);
         
         // Проверяем, что у нас есть хотя бы сцена
@@ -235,7 +235,11 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
             throw new Error("AI returned empty scene");
         }
         
-        return processedData;
+        // Возвращаем и сырой текст, и обработанные данные
+        return {
+            rawResponseText,
+            processedData
+        };
         
     } catch (error) {
         // Если есть попытки ремонта
@@ -246,7 +250,7 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
             const newPayloadForRepair = JSON.parse(JSON.stringify(payload));
             newPayloadForRepair.messages.push({
                 role: "user",
-                content: PROMPTS.technical.jsonRepair
+                content: PROMPTS.injections.jsonRepair
             });
             
             // Рекурсивный вызов
@@ -261,7 +265,7 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
         } else {
             // Попытки исчерпаны
             const finalError = new Error(`CRITICAL: AI failed to produce valid JSON after ${CONFIG.autoRepairAttempts} repair attempts.`);
-            finalError.rawResponse = contentFromAI?.substring(0, 500) + '...' || 'No response';
+            finalError.rawResponse = rawResponseText?.substring(0, 500) + '...' || 'No response';
             throw finalError;
         }
     }

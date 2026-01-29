@@ -8,8 +8,7 @@ import { API_Response } from './7-2-api-response.js';
 import { Render } from './5-render.js';
 import { DOM } from './4-dom.js';
 import { Audit } from './8-audit.js';
-
-const Prompts = CONFIG.prompts;
+import { PROMPTS } from './prompts.js';
 
 /**
  * Вспомогательная функция для получения специфической информации о текущем API-провайдере
@@ -78,13 +77,15 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
         updatedState.settings.model,
         updatedState.settings.apiProvider
     );
+    auditEntry.d10 = d10; // Сохраняем бросок кубика в запись
     
     // --- ЭТАП 2: ВЫПОЛНЕНИЕ ЗАПРОСА И ОБРАБОТКА ОТВЕТА ---
     try {
         const startTime = Date.now();
         
         // Вызов robustFetchWithRepair с правильными аргументами
-        const processingResult = await API_Response.robustFetchWithRepair(
+        // Теперь он возвращает и сырой текст, и обработанные данные
+        const { rawResponseText, processedData } = await API_Response.robustFetchWithRepair(
             url,
             headers,
             requestPayload,
@@ -96,15 +97,16 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
         const responseTime = Date.now() - startTime;
         
         // --- ЭТАП 3: ОБНОВЛЕНИЕ ДИНАМИЧЕСКОЙ ПАМЯТИ ---
-        if (processingResult.memoryUpdate && Object.keys(processingResult.memoryUpdate).length > 0) {
+        if (processedData.memoryUpdate && Object.keys(processedData.memoryUpdate).length > 0) {
             const currentState = State.getState();
-            currentState.aiMemory = { ...currentState.aiMemory, ...processingResult.memoryUpdate };
+            currentState.aiMemory = { ...currentState.aiMemory, ...processedData.memoryUpdate };
             State.setState({ aiMemory: currentState.aiMemory });
-            console.log("🧠 AI Memory updated:", Object.keys(processingResult.memoryUpdate));
+            console.log("🧠 AI Memory updated:", Object.keys(processedData.memoryUpdate));
         }
         
         // --- ЛОГИРОВАНИЕ: УСПЕХ ---
-        Audit.updateEntrySuccess(auditEntry, processingResult.rawText);
+        // Передаем СЫРОЙ текст ответа (до парсинга)
+        Audit.updateEntrySuccess(auditEntry, rawResponseText);
         
         // Обновление статистики модели
         const modelInState = state.models.find(model => model.id === state.settings.model);
@@ -116,8 +118,8 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
         
         // Возвращаем очищенные игровые данные
         console.log(`💬  ПОЛУЧЕНО`);
-         console.log(processingResult);
-        return processingResult;
+        console.log(processedData);
+        return processedData;
         
     } catch (error) {
         // Если произошла ошибка, помечаем модель как проблемную
@@ -129,7 +131,7 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
             auditEntry.fullResponse = error.rawResponse;
         }
         
-        Aurdit.updateEntryError(auditEntry, error);
+        Audit.updateEntryError(auditEntry, error);
         
         // Пробрасываем ошибку дальше
         throw error;
@@ -157,7 +159,7 @@ async function generateCustomScene(promptText) {
     const requestBody = {
         model: state.settings.model,
         messages: [
-            { role: "system", content: Prompts.system.scenarioWriter },
+            { role: "system", content: PROMPTS.system.scenarioWriter },
             { role: "user", content: promptText }
         ],
         max_tokens: 10000,
@@ -168,18 +170,25 @@ async function generateCustomScene(promptText) {
     const auditEntry = Audit.createEntry("Генерация Сюжета", requestBody, state.settings.model, state.settings.apiProvider);
     
     try {
-        const rawApiResponse = await API_Request.executeFetch(url, headers, requestBody);
-        const content = rawApiResponse.choices[0].message.content;
+        // Получаем сырой ответ
+        const rawResponseText = await API_Request.executeFetchRaw(url, headers, requestBody);
+        let content;
+        
+        try {
+            // Парсим для извлечения контента
+            const parsed = JSON.parse(rawResponseText);
+            content = parsed.choices?.[0]?.message?.content || "";
+        } catch (parseError) {
+            console.warn("Не удалось распарсить ответ при генерации сцены:", parseError);
+            content = rawResponseText;
+        }
         
         // Логируем успех (Сырой текст)
-        Audit.updateEntrySuccess(auditEntry, content);
+        Audit.updateEntrySuccess(auditEntry, rawResponseText);
         
         return content;
     } catch (error) {
         // Логируем ошибку
-        // Здесь rawResponse может не быть, так как executeFetch кидает ошибку до чтения контента при сбоях сети
-        // Но если мы бы обрабатывали ответ как в sendAIRequest, было бы так же.
-        // Сейчас достаточно просто залогировать саму ошибку.
         Audit.updateEntryError(auditEntry, error);
         throw error;
     }
@@ -226,7 +235,7 @@ async function testCurrentProvider() {
     
     const testBody = {
         model: isSelectedVsegpt ? 'openai/gpt-3.5-turbo-16k' : 'gpt-3.5-turbo',
-        messages: [{ role: "user", content: Prompts.technical.testMessage }],
+        messages: [{ role: "user", content: PROMPTS.testProvider }],
         max_tokens: 10
     };
     
@@ -234,10 +243,11 @@ async function testCurrentProvider() {
     const auditEntry = Audit.createEntry("Тест Провайдера", testBody, testBody.model, selectedProvider);
     
     try {
-        const result = await API_Request.executeFetch(apiTestUrl, testHeaders, testBody);
+        // Получаем сырой ответ
+        const rawResponseText = await API_Request.executeFetchRaw(apiTestUrl, testHeaders, testBody);
         
         // Лог успеха
-        Audit.updateEntrySuccess(auditEntry, result);
+        Audit.updateEntrySuccess(auditEntry, rawResponseText);
         
         if (Render) Render.showSuccessAlert("Connection Successful", `API Key for ${selectedProvider} is valid and connection works!`);
         
@@ -295,7 +305,7 @@ async function testSelectedModel() {
     
     const testBody = {
         model: modelToTestId,
-        messages: [{ role: "user", content: Prompts.technical.testSelf }],
+        messages: [{ role: "user", content: PROMPTS.testModel }],
         max_tokens: 100
     };
     
@@ -304,11 +314,19 @@ async function testSelectedModel() {
     
     try {
         const startTime = Date.now();
-        const result = await API_Request.executeFetch(apiTestUrl, testHeaders, testBody);
+        // Получаем сырой ответ
+        const rawResponseText = await API_Request.executeFetchRaw(apiTestUrl, testHeaders, testBody);
         const duration = Date.now() - startTime;
         
+        let result;
+        try {
+            result = JSON.parse(rawResponseText);
+        } catch (e) {
+            throw new Error(`Невалидный JSON: ${e.message}`);
+        }
+        
         // Лог успеха
-        Audit.updateEntrySuccess(auditEntry, result);
+        Audit.updateEntrySuccess(auditEntry, rawResponseText);
         
         const modelResponseText = result.choices?.[0]?.message?.content || "No text output received from model.";
         const modelInState = currentState.models.find(model => model.id === modelToTestId);

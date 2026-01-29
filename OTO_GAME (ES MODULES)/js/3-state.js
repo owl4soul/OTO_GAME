@@ -1,911 +1,851 @@
-// Модуль 3: STATE - Управление состоянием игры (js/3-state.js)
+// Модуль 3: STATE - Управление состоянием игры (ФОРМАТ 4.1 - УНИФИЦИРОВАННАЯ СИСТЕМА GAME_ITEM)
 'use strict';
 
-import { CONFIG, initialScene, aiModels } from './1-config.js';
+import { CONFIG, aiModels } from './1-config.js';
 import { Utils } from './2-utils.js';
 import { Saveload } from './9-saveload.js';
+import { PROMPTS } from './prompts.js';
 
+// ========================
+// КОНСТАНТЫ И ДЕФОЛТНЫЕ ЗНАЧЕНИЯ
+// ========================
 
-// Определяем дефолтные значения
+// Дефолтное состояние героя как массив GAME_ITEM
+const DEFAULT_HERO_STATE = [
+  // Обязательные статы (все 0-100)
+  { "id": "stat:will", "value": 50 },
+  { "id": "stat:sanity", "value": 50 },
+  { "id": "stat:stealth", "value": 50 },
+  { "id": "stat:influence", "value": 50 },
+  
+  // Прогресс и посвящение
+  { "id": "progress:oto", "value": 0 },
+  { "id": "initiation_degree:oto_0", "value": "0° — Минервал (кандидат)" },
+  
+  // Личность
+  {
+    "id": "personality:hero",
+    "value": "Молодой Минервал, полный идеалов, но не испытанный тьмой. Ищет знание и силу в запрещённых учениях."
+  }
+];
+
+// Дефолтное состояние игры (новая структура)
 const DEFAULT_STATE = {
-    // Игровые характеристики
-    stats: { ...CONFIG.startStats },
-    progress: 0,
-    degreeIndex: 0,
-    personality: 'Молодой Минервал, ещё не присягнувший в верности Ордену, полный идеалов, но ещё не испытанный тьмой.',
-    
-    // Текущая сцена
-    currentScene: { ...initialScene },
-    
-    // История и выборы
-    history: [],
-    selectedChoices: [],
+  version: '4.1.0',
+  gameId: Utils.generateUniqueId(),
+  lastSaveTime: new Date().toISOString(),
+  turnCount: 0,
+  
+  // Состояние героя (УНИФИЦИРОВАННАЯ СИСТЕМА GAME_ITEM)
+  heroState: [...DEFAULT_HERO_STATE],
+  
+  // Состояние игры
+  gameState: {
     summary: "",
-    
-    // Динамическая память ИИ
+    history: [],
     aiMemory: {},
-    
-    // Хранение HTML-строки последних изменений за ход
-    lastTurnUpdates: "",
-    inventory: [],
-    relations: {},
-    skills: [],
-    
-    // Флаги состояния Ритуала
-    isRitualActive: false,
-    ritualProgress: 0,
-    ritualTarget: null,
-    
-    // Режимы ввода
-    freeMode: false,
-    freeModeText: '',
-    
-    // Счетчики
-    turnCount: 0,
-    thoughtsOfHero: [],
-    
-    // Настройки приложения
-    settings: {
-        apiProvider: 'openrouter',
-        apiKeyOpenrouter: '',
-        apiKeyVsegpt: '',
-        model: 'openai/gpt-3.5-turbo-16k',
-        scale: CONFIG.scaleSteps[CONFIG.defaultScaleIndex],
-        scaleIndex: CONFIG.defaultScaleIndex
-    },
-    
-    // UI PREFERENCES
-    ui: {
-        hTop: 50,
-        hMid: 30,
-        hBot: 20,
-        wBotLeft: 50,
-        isCollapsed: false,
-        hBotBeforeCollapse: 20,
-        isAutoCollapsed: false
-    },
-    
-    // Аудит-логи
-    auditLog: [],
-    
-    // Статусы моделей
-    models: [...aiModels],
-    
-    // Метаданные
-    gameId: Utils.generateUniqueId(),
-    lastSaveTime: new Date().toISOString(),
-    
-    // Активный запрос
-    pendingRequest: null
+    currentScene: { ...PROMPTS.initialGameState },
+    selectedActions: [],
+  },
+  
+  // UI и настройки
+  ui: {
+    hTop: 50,
+    hMid: 30,
+    hBot: 20,
+    wBotLeft: 50,
+    isCollapsed: false,
+    hBotBeforeCollapse: 20,
+    isAutoCollapsed: false
+  },
+  
+  // Настройки приложения
+  settings: {
+    apiProvider: 'openrouter',
+    apiKeyOpenrouter: '',
+    apiKeyVsegpt: '',
+    model: 'openai/gpt-3.5-turbo-16k',
+    scale: CONFIG.scaleSteps[CONFIG.defaultScaleIndex],
+    scaleIndex: CONFIG.defaultScaleIndex
+  },
+  
+  // Логи и аудит
+  auditLog: [],
+  
+  // Статусы моделей
+  models: [...aiModels],
+  
+  // Флаги состояния
+  isRitualActive: false,
+  ritualProgress: 0,
+  ritualTarget: null,
+  
+  // Режимы ввода
+  freeMode: false,
+  freeModeText: '',
+  
+  // Хранение HTML-строки последних изменений за ход
+  lastTurnUpdates: "",
+  
+  // Мысли героя
+  thoughtsOfHero: [],
+  
+  // Активный запрос
+  pendingRequest: null
 };
 
-// Начинаем с дефолтного состояния
-let state = { ...DEFAULT_STATE };
+// Глобальная переменная состояния
+let state = null;
 
-// Применяем масштаб при загрузке скрипта
-document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
+// ========================
+// ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЯ
+// ========================
 
-// Вызываем инициализацию при загрузке модуля
-initializeState();
-
-// Функция инициализации состояния (вызывается отдельно)
+/**
+ * Инициализация состояния игры
+ */
 function initializeState() {
-    try {
-        console.log('🔍 Инициализация состояния...');
+  try {
+    console.log('🔍 Инициализация состояния (формат 4.1)...');
+    
+    // 1. Начинаем с дефолтного состояния
+    state = { ...DEFAULT_STATE };
+    
+    // 2. Пытаемся загрузить из localStorage
+    const savedState = localStorage.getItem('oto_v4_state');
+    
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
         
-        // 1. Сначала сбрасываем к дефолту
-        state = { ...DEFAULT_STATE };
-        
-        // 2. Пытаемся загрузить из localStorage
-        const savedState = localStorage.getItem('oto_v3_state');
-        
-        if (savedState) {
-            console.log('')
-            try {
-                const parsed = JSON.parse(savedState);
-                
-                // Безопасно мержим сохраненные данные с дефолтными
-                if (parsed && typeof parsed === 'object') {
-                    // Для каждого поля проверяем наличие в сохраненных данных
-                    for (const [key, defaultValue] of Object.entries(DEFAULT_STATE)) {
-                        if (parsed[key] !== undefined) {
-                            // Особые обработки для разных типов данных
-                            if (key === 'stats' && typeof parsed[key] === 'object') {
-                                state.stats = { ...defaultValue, ...parsed[key] };
-                            } else if (key === 'inventory' && Array.isArray(parsed[key])) {
-                                state.inventory = [...parsed[key]];
-                            } else if (key === 'relations' && typeof parsed[key] === 'object') {
-                                state.relations = { ...parsed[key] };
-                            } else if (key === 'skills' && Array.isArray(parsed[key])) {
-                                state.skills = [...parsed[key]];
-                            } else if (key === 'settings' && typeof parsed[key] === 'object') {
-                                state.settings = { ...defaultValue, ...parsed[key] };
-                            } else {
-                                state[key] = parsed[key];
-                            }
-                        }
-                    }
-                    console.log('✅ Состояние загружено из localStorage');
-                }
-            } catch (parseError) {
-                console.error('❌ Ошибка парсинга сохраненного состояния:', parseError);
-                // Используем дефолтные значения
-                state = { ...DEFAULT_STATE };
-                state.gameId = Utils.generateUniqueId();
-            }
-        } else {
-            console.log('🆕 Первый запуск, используем дефолтное состояние');
-            state = { ...DEFAULT_STATE };
-            state.gameId = Utils.generateUniqueId();
+        // Проверяем версию состояния
+        if (parsed.version !== '4.1.0') {
+          console.error('❌ Неподдерживаемая версия состояния:', parsed.version);
+          throw new Error(`Неподдерживаемая версия состояния: ${parsed.version}. Требуется версия 4.1.0`);
         }
         
-        // 3. Загружаем UI настройки отдельно
-        try {
-            const savedUI = localStorage.getItem('oto_ui_pref');
-            if (savedUI) {
-                const parsedUI = JSON.parse(savedUI);
-                if (parsedUI && typeof parsedUI === 'object') {
-                    state.ui = { ...state.ui, ...parsedUI };
-                }
+        // Безопасно мержим сохраненные данные с дефолтными
+        for (const [key, defaultValue] of Object.entries(DEFAULT_STATE)) {
+          if (parsed[key] !== undefined) {
+            // Особые обработки для разных типов данных
+            if (key === 'heroState' && Array.isArray(parsed[key])) {
+              state.heroState = parsed[key];
+            } else if (key === 'gameState' && typeof parsed[key] === 'object') {
+              state.gameState = { ...defaultValue.gameState, ...parsed[key] };
+            } else if (key === 'ui' && typeof parsed[key] === 'object') {
+              state.ui = { ...defaultValue.ui, ...parsed[key] };
+            } else if (key === 'settings' && typeof parsed[key] === 'object') {
+              state.settings = { ...defaultValue.settings, ...parsed[key] };
+            } else {
+              state[key] = parsed[key];
             }
-        } catch (uiError) {
-            console.error('Ошибка загрузки UI настроек:', uiError);
+          }
         }
         
-        // 4. Загружаем отдельные поля из localStorage
-        try {
-            const savedAudit = localStorage.getItem('oto_audit_log');
-            if (savedAudit) {
-                const parsedAudit = JSON.parse(savedAudit);
-                if (Array.isArray(parsedAudit)) {
-                    state.auditLog = parsedAudit;
-                }
-            }
-        } catch (e) {
-            console.error('Ошибка загрузки аудит-лога:', e);
-            state.auditLog = [];
+        // Гарантируем наличие текущей сцены
+        if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
+          console.warn('⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
+          
+          state.gameState.currentScene = PROMPTS.initialGameState;
         }
         
-        try {
-            const savedModels = localStorage.getItem('oto_models_status');
-            if (savedModels) {
-                const parsedModels = JSON.parse(savedModels);
-                if (Array.isArray(parsedModels)) {
-                    state.models = parsedModels;
-                }
-            }
-        } catch (e) {
-            console.error('Ошибка загрузки моделей:', e);
-            state.models = [...aiModels];
-        }
+        console.log('✅ Состояние загружено из localStorage (формат 4.1)');
         
-        // 5. Загружаем масштаб
-        try {
-            const savedScale = localStorage.getItem('oto_scale');
-            if (savedScale) {
-                const scale = parseFloat(savedScale);
-                if (!isNaN(scale)) {
-                    state.settings.scale = scale;
-                }
-            }
-        } catch (e) {
-            console.error('Ошибка загрузки масштаба:', e);
-        }
-        
-        try {
-            const savedScaleIndex = localStorage.getItem('oto_scale_index');
-            if (savedScaleIndex) {
-                const scaleIndex = parseInt(savedScaleIndex);
-                if (!isNaN(scaleIndex)) {
-                    state.settings.scaleIndex = scaleIndex;
-                }
-            }
-        } catch (e) {
-            console.error('Ошибка загрузки индекса масштаба:', e);
-        }
-        
-        // 6. Загружаем счетчик ходов
-        try {
-            const savedTurnCount = localStorage.getItem('oto_turn_count');
-            if (savedTurnCount) {
-                const turnCount = parseInt(savedTurnCount);
-                if (!isNaN(turnCount)) {
-                    state.turnCount = turnCount;
-                }
-            }
-        } catch (e) {
-            console.error('Ошибка загрузки счетчика ходов:', e);
-        }
-        
-        // 7. Загружаем фразы героя
-        try {
-            const savedThoughts = localStorage.getItem('oto_thoughts_of_hero');
-            if (savedThoughts) {
-                const parsedThoughts = JSON.parse(savedThoughts);
-                if (Array.isArray(parsedThoughts)) {
-                    state.thoughtsOfHero = parsedThoughts;
-                }
-            }
-        } catch (e) {
-            state.thoughtsOfHero = [];
-        }
-        
-        // 8. Синхронизируем степень
-        syncDegree();
-        
-        console.log('✅ Состояние полностью инициализировано');
-        console.log('   Game ID:', state.gameId);
-        console.log('   Прогресс:', state.progress);
-        console.log('   Степень:', CONFIG.degrees[state.degreeIndex]?.name);
-        
-    } catch (error) {
-        console.error('❌ Критическая ошибка инициализации состояния:', error);
-        // Восстанавливаемся к дефолтным значениям
+      } catch (parseError) {
+        console.error('❌ Ошибка парсинга сохраненного состояния:', parseError);
+        // При ошибке парсинга используем дефолтное состояние
         state = { ...DEFAULT_STATE };
         state.gameId = Utils.generateUniqueId();
-        state.models = [...aiModels];
+      }
+    } else {
+      console.log('🆕 Первый запуск, используем дефолтное состояние');
+      state = { ...DEFAULT_STATE };
+      state.gameId = Utils.generateUniqueId();
     }
+    
+    // 3. Проверяем смерть героя
+    checkHeroDeath();
+    
+    // 4. Синхронизируем степень
+    syncDegree();
+    
+    // 5. Применяем масштаб
+    document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
+    document.documentElement.style.fontSize = `${state.settings.scale * 16}px`;
+    
+    console.log('✅ Состояние полностью инициализировано (формат 4.1)');
+    console.log('   Game ID:', state.gameId);
+    console.log('   Turn Count:', state.turnCount);
+    console.log('   Hero Items:', state.heroState.length);
+    console.log('   Current Scene:', state.gameState.currentScene ? 'Есть' : 'Нет');
+    
+  } catch (error) {
+    console.error('❌ Критическая ошибка инициализации состояния:', error);
+    // Аварийное восстановление: полный сброс к дефолту
+    state = { ...DEFAULT_STATE };
+    state.gameId = Utils.generateUniqueId();
+    state.models = [...aiModels];
+    
+    // Пытаемся сохранить аварийное состояние
+    try {
+      localStorage.setItem('oto_v4_state', JSON.stringify(state));
+    } catch (saveError) {
+      console.error('❌ Не удалось сохранить аварийное состояние:', saveError);
+    }
+  }
 }
 
 /**
- * Защитная инициализация состояния (вызывается при первом getState)
+ * Проверка смерти героя (любой стат = 0)
  */
-function safeInitialize() {
-    if (typeof state === 'undefined' || state === null) {
-        console.warn('⚠️ State is undefined, forcing reinitialization');
-        initializeState();
-    }
-    
-    // Дополнительная валидация критических полей
-    if (!state.stats || typeof state.stats !== 'object') {
-        console.warn('⚠️ stats is corrupted, resetting to defaults');
-        state.stats = { ...CONFIG.startStats };
-    }
-    
-    // Проверка остальных обязательных полей
-    const requiredFields = ['progress', 'degreeIndex', 'personality', 'currentScene'];
-    requiredFields.forEach(field => {
-        if (state[field] === undefined) {
-            console.warn(`⚠️ ${field} is undefined, resetting`);
-            if (field === 'currentScene') {
-                state[field] = { ...initialScene };
-            } else if (field === 'progress' || field === 'degreeIndex') {
-                state[field] = 0;
-            } else if (field === 'personality') {
-                state[field] = 'Молодой Минервал...';
-            }
-        }
-    });
+function checkHeroDeath() {
+  const stats = state.heroState.filter(item => item.id.startsWith('stat:'));
+  const deadStats = stats.filter(stat => stat.value <= 0);
+  
+  if (deadStats.length > 0) {
+    console.warn('☠️ Герой мертв! Статы достигли 0:', deadStats.map(s => s.id));
+  }
 }
 
 /**
- * Синхронизация текущей степени с прогрессом
+ * Синхронизация степени посвящения с прогрессом
  */
 function syncDegree() {
-    let newIndex = 0;
-    CONFIG.degrees.forEach((d, i) => {
-        if (state.progress >= d.threshold) newIndex = i;
+  const progressItem = state.heroState.find(item => item.id === 'progress:oto');
+  const progress = progressItem ? progressItem.value : 0;
+  
+  let newDegreeIndex = 0;
+  CONFIG.degrees.forEach((d, i) => {
+    if (progress >= d.threshold) newDegreeIndex = i;
+  });
+  
+  // Получаем текущую степень
+  const currentDegreeItem = state.heroState.find(item => item.id.startsWith('initiation_degree:'));
+  const currentDegreeIndex = currentDegreeItem ?
+    parseInt(currentDegreeItem.id.split('_').pop()) || 0 : 0;
+  
+  // Если степень повысилась
+  if (newDegreeIndex > currentDegreeIndex) {
+    // Обновляем степень
+    const newDegreeId = `initiation_degree:oto_${newDegreeIndex}`;
+    const newDegreeValue = CONFIG.degrees[newDegreeIndex].name;
+    
+    // Удаляем старую степень и добавляем новую
+    state.heroState = state.heroState.filter(item => !item.id.startsWith('initiation_degree:'));
+    state.heroState.push({
+      id: newDegreeId,
+      value: newDegreeValue
     });
     
-    // Добавляем проверку на повышение степени:
-    // Если степень повысилась
-    if (newIndex > state.degreeIndex) {
-        state.degreeIndex = newIndex;
-        // Бонус за новую степень (+1 ко всем статам)
-        Object.keys(state.stats).forEach(stat => {
-            state.stats[stat] = Math.min(100, state.stats[stat] + 1);
-        });
-        // Активируем ритуал
-        state.isRitualActive = true;
-        state.ritualProgress = 0;
-        state.ritualTarget = CONFIG.degrees[newIndex].lvl;
-    } else {
-        state.degreeIndex = newIndex;
-    }
+    // Бонус за новую степень (+1 ко всем статам)
+    state.heroState = state.heroState.map(item => {
+      if (item.id.startsWith('stat:')) {
+        return { ...item, value: Math.min(100, item.value + 1) };
+      }
+      return item;
+    });
     
-    // Обновляем баффы при каждом обновлении состояния
-    updateBuffs();
+    // Активируем ритуал
+    state.isRitualActive = true;
+    state.ritualProgress = 0;
+    state.ritualTarget = newDegreeIndex;
+    
+    console.log(`🎓 Повышение степени: ${currentDegreeIndex} → ${newDegreeIndex}`);
+  }
+}
+
+// ========================
+// ОПЕРАЦИИ НАД GAME_ITEM
+// ========================
+
+/**
+ * Применение операции ADD к состоянию героя
+ */
+function applyAddOperation(operation) {
+  const { id, value, duration, description } = operation;
+  
+  // Проверяем, существует ли уже такой game_item
+  const exists = state.heroState.some(item => item.id === id);
+  if (exists) {
+    console.warn(`⚠️ Game item ${id} уже существует, операция ADD пропущена`);
+    return false;
+  }
+  
+  // Создаем новый game_item
+  const newItem = { id, value };
+  
+  // Добавляем дополнительные поля в зависимости от типа
+  if (duration !== undefined) {
+    newItem.duration = duration;
+  }
+  
+  if (description !== undefined) {
+    newItem.description = description;
+  }
+  
+  state.heroState.push(newItem);
+  return true;
 }
 
 /**
- * Обновление баффов/дебаффов
+ * Применение операции REMOVE к состоянию героя
  */
-function updateBuffs() {
-    if (!state.buffs || state.buffs.length === 0) return;
-    
-    const now = new Date();
-    const activeBuffs = [];
-    
-    state.buffs.forEach(buff => {
-        // Если бафф постоянный, оставляем
-        if (buff.isPermanent) {
-            activeBuffs.push(buff);
-            return;
-        }
-        
-        // Проверяем срок действия
-        const createdAt = new Date(buff.createdAt);
-        const diffHours = (now - createdAt) / (1000 * 60 * 60);
-        
-        if (diffHours < buff.duration) {
-            activeBuffs.push(buff);
-        } else {
-            console.log(`⌛ Бафф "${buff.name}" истёк`);
-        }
-    });
-    
-    state.buffs = activeBuffs;
+function applyRemoveOperation(operation) {
+  const { id } = operation;
+  
+  const initialLength = state.heroState.length;
+  state.heroState = state.heroState.filter(item => item.id !== id);
+  
+  const removed = initialLength > state.heroState.length;
+  if (removed) {
+    console.log(`🗑️ Удален game_item: ${id}`);
+  }
+  
+  return removed;
 }
 
-// Функция для добавления навыка:
-function addSkill(skill) {
-    if (skill && typeof skill === 'string' && !state.skills.includes(skill)) {
-        state.skills.push(skill);
-        localStorage.setItem('oto_skills', JSON.stringify(state.skills));
-        return true;
-    }
+/**
+ * Применение операции SET к состоянию героя
+ */
+function applySetOperation(operation) {
+  const { id, value, description } = operation;
+  
+  const itemIndex = state.heroState.findIndex(item => item.id === id);
+  if (itemIndex === -1) {
+    console.warn(`⚠️ Game item ${id} не найден для операции SET`);
     return false;
+  }
+  
+  // Обновляем значение
+  state.heroState[itemIndex].value = value;
+  
+  // Обновляем описание, если предоставлено
+  if (description !== undefined) {
+    state.heroState[itemIndex].description = description;
+  }
+  
+  return true;
 }
 
-function applyParsedChanges(parsedData) {
-    if (parsedData.stat_changes && typeof parsedData.stat_changes === 'object') {
-        Object.entries(parsedData.stat_changes).forEach(([key, value]) => {
-            const normKey = Utils.normalizeStatKey(key);
-            if (normKey && state.stats.hasOwnProperty(normKey)) {
-                state.stats[normKey] += parseInt(value, 10) || 0;
-                state.stats[normKey] = Math.max(0, Math.min(100, state.stats[normKey]));
-            }
-        });
-    }
-    
-    if (typeof parsedData.progress_change === 'number') {
-        state.progress += parsedData.progress_change;
-        syncDegree();
-    }
-    
-    if (parsedData.personality && typeof parsedData.personality === 'string') {
-        state.personality = parsedData.personality;
-    }
-    
-    if (parsedData.inventory_all && Array.isArray(parsedData.inventory_all)) {
-        state.inventory = [...new Set(parsedData.inventory_all)];
-        console.log("📦 Инвентарь обновлен:", state.inventory);
-    }
-    
-    if (parsedData.relations_all && typeof parsedData.relations_all === 'object') {
-        state.relations = { ...state.relations, ...parsedData.relations_all };
-        console.log("🤝 Отношения обновлены:", state.relations);
-    }
-    
-    if (parsedData.thoughtsOfHero && Array.isArray(parsedData.thoughtsOfHero)) {
-        addHeroPhrases(parsedData.thoughtsOfHero);
-    }
-    
-    if (parsedData.buffs && Array.isArray(parsedData.buffs)) {
-        state.buffs = parsedData.buffs;
-    }
-    
-    state.currentScene = {
-        text: parsedData.scene,
-        choices: parsedData.choices || state.currentScene.choices
-    };
-    state.summary = parsedData.short_summary || state.summary;
-    state.history.push({
-        fullText: parsedData.scene,
-        summary: parsedData.short_summary
-    });
-    if (state.history.length > CONFIG.historyContext) {
-        state.history = state.history.slice(-CONFIG.historyContext);
-    }
-    
-    localStorage.setItem('oto_v3_state', JSON.stringify(state));
+/**
+ * Применение операции MODIFY к состоянию героя
+ */
+function applyModifyOperation(operation) {
+  const { id, delta } = operation;
+  
+  const itemIndex = state.heroState.findIndex(item => item.id === id);
+  if (itemIndex === -1) {
+    console.warn(`⚠️ Game item ${id} не найден для операции MODIFY`);
+    return false;
+  }
+  
+  const item = state.heroState[itemIndex];
+  
+  // Проверяем, что значение числовое
+  if (typeof item.value !== 'number') {
+    console.warn(`⚠️ Game item ${id} имеет нечисловое значение для операции MODIFY`);
+    return false;
+  }
+  
+  // Применяем дельту с ограничениями
+  const newValue = item.value + delta;
+  
+  // Для статов ограничиваем 0-100
+  if (item.id.startsWith('stat:')) {
+    item.value = Math.max(0, Math.min(100, newValue));
+  }
+  // Для отношений ограничиваем -100 до 100
+  else if (item.id.startsWith('relations:')) {
+    item.value = Math.max(-100, Math.min(100, newValue));
+  }
+  // Для прогресса ограничиваем 0-100
+  else if (item.id.startsWith('progress:')) {
+    item.value = Math.max(0, Math.min(100, newValue));
+  }
+  // Для остальных просто применяем
+  else {
+    item.value = newValue;
+  }
+  
+  return true;
 }
 
-function applyChoiceChanges(changes) {
-    if (changes.stats && typeof changes.stats === 'object') {
-        Object.entries(changes.stats).forEach(([key, value]) => {
-            const normKey = Utils.normalizeStatKey(key);
-            if (normKey && state.stats.hasOwnProperty(normKey)) {
-                state.stats[normKey] += parseInt(value, 10) || 0;
-                state.stats[normKey] = Math.max(0, Math.min(100, state.stats[normKey]));
-            }
-        });
+/**
+ * Применение массива операций к состоянию героя
+ */
+function applyOperations(operations) {
+  if (!Array.isArray(operations)) return [];
+  
+  const results = [];
+  
+  operations.forEach(op => {
+    try {
+      let success = false;
+      
+      switch (op.operation) {
+        case 'ADD':
+          success = applyAddOperation(op);
+          break;
+        case 'REMOVE':
+          success = applyRemoveOperation(op);
+          break;
+        case 'SET':
+          success = applySetOperation(op);
+          break;
+        case 'MODIFY':
+          success = applyModifyOperation(op);
+          break;
+        default:
+          console.warn(`⚠️ Неизвестная операция: ${op.operation}`);
+      }
+      
+      results.push({
+        operation: op.operation,
+        id: op.id,
+        success,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      console.error(`❌ Ошибка применения операции ${JSON.stringify(op)}:`, error);
+      results.push({
+        operation: op.operation,
+        id: op.id,
+        success: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
     }
-    
-    if (changes.inventory_add && Array.isArray(changes.inventory_add)) {
-        state.inventory = [...new Set([...state.inventory, ...changes.inventory_add])];
-    }
-    if (changes.inventory_remove && Array.isArray(changes.inventory_remove)) {
-        state.inventory = state.inventory.filter(item => !changes.inventory_remove.includes(item));
-    }
-    
-    localStorage.setItem('oto_v3_state', JSON.stringify(state));
+  });
+  
+  // Проверяем смерть героя после применения операций
+  checkHeroDeath();
+  
+  // Сохраняем состояние
+  Saveload.saveState();
+  
+  return results;
 }
+
+/**
+ * Получение game_item по ID
+ */
+function getGameItem(id) {
+  return state.heroState.find(item => item.id === id);
+}
+
+/**
+ * Получение всех game_items определенного типа
+ */
+function getGameItemsByType(typePrefix) {
+  return state.heroState.filter(item => item.id.startsWith(typePrefix));
+}
+
+/**
+ * Проверка наличия game_item
+ */
+function hasGameItem(id) {
+  return state.heroState.some(item => item.id === id);
+}
+
+/**
+ * Получение значения game_item
+ */
+function getGameItemValue(id) {
+  const item = getGameItem(id);
+  return item ? item.value : null;
+}
+
+// ========================
+// СБРОС И ПЕРЕЗАПУСК
+// ========================
 
 /**
  * Сброс только игрового прогресса (без настроек)
- * @returns {Object} Новое состояние
  */
 function resetGameProgress() {
-    if (confirm("[SOFT RESET] Сбросить прогресс текущей игры? Игра начнётся заново.")) {
-        state.stats = { ...CONFIG.startStats };
-        state.progress = 0;
-        state.degreeIndex = 0;
-        state.personality = 'Молодой Минервал, ещё не присягнувший в верности Ордену, полный идеалов, но ещё не испытанный тьмой.';
-        state.isRitualActive = false;
-        state.currentScene = { ...initialScene };
-        state.history = [];
-        state.selectedChoices = [];
-        state.lastTurnUpdates = "";
-        state.inventory = [];
-        state.relations = {};
-        state.freeMode = false;
-        state.freeModeText = '';
-        state.turnCount = 0; // Сброс счетчика ходов
-        state.thoughtsOfHero = [];
-        state.summary = ""; // Сброс сводки
-        state.aiMemory = {}; // Сброс памяти ИИ
-        state.skills = []; // Сброс навыков
-        state.buffs = []; // Сброс баффов
-        state.gameId = Utils.generateUniqueId();
-        state.lastSaveTime = new Date().toISOString();
-        
-        syncDegree();
-        
-        // Сохраняем в localStorage
-        localStorage.setItem('oto_v3_state', JSON.stringify(state));
-        localStorage.setItem('oto_game_id', state.gameId);
-        localStorage.setItem('oto_last_save_time', state.lastSaveTime);
-        localStorage.setItem('oto_turn_count', '0');
-        localStorage.removeItem('oto_thoughts_of_hero');
-        localStorage.removeItem('oto_skills');
-        
-        location.reload();
-    }
+  if (confirm("[SOFT RESET] Сбросить прогресс текущей игры?")) {
+    // Создаем новое состояние с сохранением настроек
+    const currentSettings = state.settings;
+    const currentUI = state.ui;
+    const currentModels = state.models;
+    const currentAuditLog = state.auditLog;
+    
+    // Сбрасываем heroState к дефолтному
+    state.heroState = [...DEFAULT_HERO_STATE];
+    
+    // Сбрасываем gameState к начальной сцене
+    state.gameState = {
+      summary: "",
+      history: [],
+      aiMemory: {},
+      currentScene: { ...PROMPTS.initialGameState.scene },
+      selectedActions: [],
+    };
+    
+    // Сохраняем настройки
+    state.settings = currentSettings;
+    state.ui = currentUI;
+    state.models = currentModels;
+    state.auditLog = currentAuditLog;
+    
+    // Сбрасываем счетчики и флаги
+    state.turnCount = 0;
+    state.isRitualActive = false;
+    state.ritualProgress = 0;
+    state.ritualTarget = null;
+    state.freeMode = false;
+    state.freeModeText = '';
+    state.lastTurnUpdates = "";
+    state.thoughtsOfHero = [];
+    state.gameId = Utils.generateUniqueId();
+    state.lastSaveTime = new Date().toISOString();
+    
+    // Синхронизируем степень
+    syncDegree();
+    
+    // Сохраняем
+    Saveload.saveState();
+    
+    // Перезагружаем страницу для полного обновления UI
+    setTimeout(() => {
+      location.reload();
+    }, 100);
+  }
 }
 
 /**
  * Полный сброс игры (включая настройки)
  */
 function resetFullGame() {
-    if (confirm("[HARD RESET] Сбросить ВСЮ игру, включая настройки? ВСЕ данные будут удалены.")) {
-        localStorage.clear();
-        location.reload();
-    }
+  if (confirm("[HARD RESET] Сбросить ВСЮ игру, включая настройки?")) {
+    // Полностью очищаем localStorage
+    localStorage.clear();
+    
+    // Принудительно сбрасываем состояние в памяти
+    state = null;
+    
+    // Перезагружаем страницу
+    setTimeout(() => {
+      location.reload();
+    }, 100);
+  }
 }
 
-/**
- * Сохраняет настройки UI (вызывать при изменениях лейаута)
- */
-function saveUiState() {
-    localStorage.setItem('oto_ui_pref', JSON.stringify(state.ui));
-}
+// ========================
+// ЭКСПОРТ/ИМПОРТ
+// ========================
 
 /**
  * Экспорт полного состояния игры
- * @returns {Object} Данные для экспорта
  */
 function exportFullState() {
-    const exportData = {
-        version: CONFIG.stateVersion,
-        gameId: state.gameId,
-        exportTime: new Date().toISOString(),
-        gameState: {
-            stats: { ...state.stats },
-            progress: state.progress,
-            degreeIndex: state.degreeIndex,
-            personality: state.personality,
-            isRitualActive: state.isRitualActive,
-            currentScene: { ...state.currentScene },
-            history: [...state.history],
-            summary: state.summary, // Экспорт сводки
-            aiMemory: { ...state.aiMemory }, // Экспорт динамической памяти
-            selectedChoices: [...state.selectedChoices],
-            inventory: [...state.inventory],
-            relations: { ...state.relations },
-            skills: [...state.skills],
-            buffs: [...state.buffs],
-            freeMode: state.freeMode,
-            freeModeText: state.freeModeText,
-            turnCount: state.turnCount,
-            thoughtsOfHero: [...state.thoughtsOfHero]
-        },
-        settings: { ...state.settings },
-        auditLog: [...state.auditLog],
-        models: [...state.models],
-        metadata: {
-            lastSaveTime: state.lastSaveTime,
-            totalPlayTime: calculateTotalPlayTime(),
-            totalChoices: state.history.length,
-            highestDegree: CONFIG.degrees[state.degreeIndex].name
-        }
-    };
-    
-    return exportData;
+  const exportData = {
+    version: '4.1.0',
+    gameId: state.gameId,
+    exportTime: new Date().toISOString(),
+    heroState: [...state.heroState],
+    gameState: { ...state.gameState },
+    settings: { ...state.settings },
+    auditLog: [...state.auditLog],
+    models: [...state.models],
+    metadata: {
+      turnCount: state.turnCount,
+      lastSaveTime: state.lastSaveTime,
+      totalPlayTime: calculateTotalPlayTime(),
+      totalChoices: state.gameState.history.length
+    }
+  };
+  
+  return exportData;
 }
 
 /**
  * Импорт полного состояния игры
- * @param {Object} importData - Данные для импорта
- * @returns {boolean} Успех импорта
  */
 function importFullState(importData) {
-    if (!importData || typeof importData !== 'object') {
-        throw new Error('Некорректные данные импорта');
+  if (!importData || typeof importData !== 'object') {
+    throw new Error('Некорректные данные импорта');
+  }
+  
+  // Проверяем версию
+  if (importData.version !== '4.1.0') {
+    throw new Error(`Неподдерживаемая версия импорта: ${importData.version}. Требуется версия 4.1.0`);
+  }
+  
+  // Импортируем heroState
+  if (Array.isArray(importData.heroState)) {
+    state.heroState = importData.heroState;
+  }
+  
+  // Импортируем gameState
+  if (importData.gameState && typeof importData.gameState === 'object') {
+    state.gameState = { ...state.gameState, ...importData.gameState };
+  }
+  
+  // Импортируем настройки (кроме API ключей)
+  if (importData.settings && typeof importData.settings === 'object') {
+    const currentApiKeys = {
+      apiKeyOpenrouter: state.settings.apiKeyOpenrouter,
+      apiKeyVsegpt: state.settings.apiKeyVsegpt
+    };
+    
+    state.settings = { ...state.settings, ...importData.settings };
+    state.settings.apiKeyOpenrouter = currentApiKeys.apiKeyOpenrouter;
+    state.settings.apiKeyVsegpt = currentApiKeys.apiKeyVsegpt;
+  }
+  
+  // Импортируем метаданные
+  if (importData.gameId) state.gameId = importData.gameId;
+  if (importData.exportTime) state.lastSaveTime = importData.exportTime;
+  
+  // Синхронизируем степень
+  syncDegree();
+  
+  // Сохраняем
+  Saveload.saveState();
+  
+  return true;
+}
+
+/**
+ * Экспорт всех данных приложения (без API ключей)
+ */
+function exportAllAppData() {
+  const exportData = {
+    version: '4.1.0',
+    exportTime: new Date().toISOString(),
+    appData: {
+      settings: {
+        apiProvider: state.settings.apiProvider,
+        model: state.settings.model,
+        scale: state.settings.scale,
+        scaleIndex: state.settings.scaleIndex
+      },
+      models: [...state.models],
+      auditLog: [...state.auditLog],
+      metadata: {
+        gameId: state.gameId,
+        lastSaveTime: state.lastSaveTime,
+        totalPlayTime: calculateTotalPlayTime()
+      }
     }
+  };
+  
+  return exportData;
+}
+
+/**
+ * Импорт всех данных приложения
+ */
+function importAllAppData(importData) {
+  if (!importData || typeof importData !== 'object') {
+    throw new Error('Некорректные данные импорта');
+  }
+  
+  if (importData.version !== '4.1.0') {
+    throw new Error(`Неподдерживаемая версия импорта: ${importData.version}. Требуется версия 4.1.0`);
+  }
+  
+  if (!importData.appData) {
+    throw new Error('Отсутствуют данные приложения');
+  }
+  
+  // Импортируем настройки (кроме API ключей)
+  if (importData.appData.settings) {
+    const currentApiKeys = {
+      apiKeyOpenrouter: state.settings.apiKeyOpenrouter,
+      apiKeyVsegpt: state.settings.apiKeyVsegpt
+    };
     
-    // Поддержка версий (для плавного обновления сохранений)
-    if (importData.version !== CONFIG.stateVersion && importData.version !== '1.1' && importData.version !== '1.2') {
-        // Предупреждение, но пробуем загрузить, если версии близки. В идеале тут миграционная логика.
-        console.warn(`Миграция версии состояния: Импорт ${importData.version} в Текущую ${CONFIG.stateVersion}`);
-    }
+    state.settings.apiProvider = importData.appData.settings.apiProvider || state.settings.apiProvider;
+    state.settings.model = importData.appData.settings.model || state.settings.model;
+    state.settings.scale = importData.appData.settings.scale || state.settings.scale;
+    state.settings.scaleIndex = importData.appData.settings.scaleIndex || state.settings.scaleIndex;
     
-    // Сохраняем оригинальный gameId или создаем новый
-    state.gameId = importData.gameId || Utils.generateUniqueId();
-    state.lastSaveTime = importData.exportTime || new Date().toISOString();
-    
-    // Импортируем состояние игры
-    if (importData.gameState) {
-        state.stats = importData.gameState.stats || state.stats;
-        state.progress = importData.gameState.progress || state.progress;
-        state.degreeIndex = importData.gameState.degreeIndex || state.degreeIndex;
-        state.personality = importData.gameState.personality || state.personality;
-        state.isRitualActive = importData.gameState.isRitualActive || false;
-        state.currentScene = importData.gameState.currentScene || state.currentScene;
-        state.history = importData.gameState.history || state.history;
-        state.selectedChoices = importData.gameState.selectedChoices || state.selectedChoices;
-        state.inventory = importData.gameState.inventory || state.inventory;
-        state.relations = importData.gameState.relations || {};
-        state.summary = importData.gameState.summary || ""; // Импорт сводки
-        state.aiMemory = importData.gameState.aiMemory || {}; // Импорт динамической памяти
-        state.skills = importData.gameState.skills || state.skills;
-        state.buffs = importData.gameState.buffs || state.buffs;
-        state.freeMode = importData.gameState.freeMode || state.freeMode;
-        state.freeModeText = importData.gameState.freeModeText || state.freeModeText;
-        state.turnCount = importData.gameState.turnCount || state.turnCount;
-        state.thoughtsOfHero = importData.gameState.thoughtsOfHero || state.thoughtsOfHero;
-    }
-    
-    // Импортируем настройки
-    if (importData.settings) {
-        // Не импортируем API ключи из файла (они локальны)
-        const currentApiKeyOpenrouter = state.settings.apiKeyOpenrouter;
-        const currentApiKeyVsegpt = state.settings.apiKeyVsegpt;
-        
-        state.settings = importData.settings;
-        state.settings.apiKeyOpenrouter = currentApiKeyOpenrouter;
-        state.settings.apiKeyVsegpt = currentApiKeyVsegpt;
-    }
-    
-    // Импортируем аудит-логи
-    if (importData.auditLog) {
-        state.auditLog = importData.auditLog;
-    }
-    
-    // Импортируем модели
-    if (importData.models) {
-        state.models = importData.models;
-    }
-    
-    // Синхронизируем степень
-    syncDegree();
-    
-    return true;
+    state.settings.apiKeyOpenrouter = currentApiKeys.apiKeyOpenrouter;
+    state.settings.apiKeyVsegpt = currentApiKeys.apiKeyVsegpt;
+  }
+  
+  // Импортируем модели
+  if (importData.appData.models) {
+    state.models = importData.appData.models;
+  }
+  
+  // Импортируем аудит-логи
+  if (importData.appData.auditLog) {
+    state.auditLog = importData.appData.auditLog;
+  }
+  
+  // Импортируем метаданные
+  if (importData.appData.metadata) {
+    state.gameId = importData.appData.metadata.gameId || state.gameId;
+    state.lastSaveTime = importData.appData.metadata.lastSaveTime || state.lastSaveTime;
+  }
+  
+  return true;
 }
 
 /**
  * Расчет общего времени игры
- * @returns {number} Время в секундах
  */
 function calculateTotalPlayTime() {
-    const startTime = localStorage.getItem('oto_first_play_time');
-    if (!startTime) return 0;
-    
-    const start = new Date(startTime);
-    const now = new Date();
-    const diffMs = now - start;
-    
-    return Math.floor(diffMs / 1000); // Возвращаем в секундах
+  const startTime = localStorage.getItem('oto_first_play_time');
+  if (!startTime) return 0;
+  
+  const start = new Date(startTime);
+  const now = new Date();
+  return Math.floor((now - start) / 1000);
 }
 
-// Сохранение времени первого запуска (если его еще нет)
+// Сохранение времени первого запуска
 if (!localStorage.getItem('oto_first_play_time')) {
-    localStorage.setItem('oto_first_play_time', new Date().toISOString());
+  localStorage.setItem('oto_first_play_time', new Date().toISOString());
 }
 
-/**
- * Добавление записи в аудит-лог
- * @param {Object} entry - Запись аудита
- */
-function addAuditLogEntry(entry) {
-    // Добавляем московское время
-    entry.timestamp = Utils.formatMoscowTime(new Date());
-    state.auditLog.unshift(entry);
-    // Сохраняем только последние 100 записей (ограничиваем объем лога)
-    if (state.auditLog.length > 100) {
-        state.auditLog = state.auditLog.slice(0, 100);
+// ========================
+// ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ МЫСЛЯМИ ГЕРОЯ
+// ========================
+
+function getHeroPhrase() {
+  if (state.thoughtsOfHero.length > 0) {
+    return state.thoughtsOfHero.shift();
+  }
+  return null;
+}
+
+function addHeroPhrases(phrases) {
+  if (Array.isArray(phrases)) {
+    state.thoughtsOfHero = state.thoughtsOfHero.concat(phrases);
+    localStorage.setItem('oto_thoughts_of_hero', JSON.stringify(state.thoughtsOfHero));
+  }
+}
+
+function getHeroPhrasesCount() {
+  return state.thoughtsOfHero.length;
+}
+
+function clearHeroPhrases() {
+  state.thoughtsOfHero = [];
+  localStorage.removeItem('oto_thoughts_of_hero');
+}
+
+function needsHeroPhrases() {
+  return state.thoughtsOfHero.length === 0;
+}
+
+// ========================
+// ПУБЛИЧНЫЙ ИНТЕРФЕЙС
+// ========================
+
+// Вызываем инициализацию при загрузке модуля
+initializeState();
+
+export const State = {
+  // Получение и установка состояния
+  getState: () => {
+    if (!state || typeof state !== 'object') {
+      console.error('❌ State is corrupted! Reinitializing...');
+      initializeState();
     }
-}
-
-/**
- * Обновление масштаба интерфейса
- * @param {number} newScaleIndex - Новый индекс масштаба
- * @returns {number} Новый масштаб
- */
-function updateScale(newScaleIndex) {
+    return state;
+  },
+  
+  setState: (newState) => {
+    if (!state) {
+      console.error('⚠️ Cannot setState on undefined state');
+      initializeState();
+    }
+    state = { ...state, ...newState };
+    
+    // Сохраняем изменения в localStorage
+    Saveload.saveState();
+  },
+  
+  // UI функции
+  getHBotBeforeCollapse: () => state.ui.hBotBeforeCollapse,
+  setHBotBeforeCollapse: (value) => {
+    state.ui.hBotBeforeCollapse = value;
+    localStorage.setItem('oto_ui_pref', JSON.stringify(state.ui));
+  },
+  saveUiState: () => {
+    localStorage.setItem('oto_ui_pref', JSON.stringify(state.ui));
+  },
+  
+  // Операции с game_items
+  applyOperations,
+  getGameItem,
+  getGameItemsByType,
+  hasGameItem,
+  getGameItemValue,
+  
+  // Синхронизация
+  syncDegree,
+  
+  // Сброс и рестарт
+  resetGameProgress,
+  resetFullGame,
+  
+  // Экспорт/импорт
+  exportFullState,
+  importFullState,
+  exportAllAppData,
+  importAllAppData,
+  
+  // Мысли героя
+  getHeroPhrase,
+  addHeroPhrases,
+  getHeroPhrasesCount,
+  clearHeroPhrases,
+  needsHeroPhrases,
+  
+  // Управление запросами
+  setPendingRequest: (controller) => { state.pendingRequest = controller; },
+  clearPendingRequest: () => { state.pendingRequest = null; },
+  getPendingRequest: () => state.pendingRequest,
+  
+  // Счетчик ходов
+  incrementTurnCount: () => {
+    state.turnCount++;
+    localStorage.setItem('oto_turn_count', state.turnCount.toString());
+    return state.turnCount;
+  },
+  getTurnCount: () => state.turnCount,
+  
+  // Масштабирование UI
+  updateScale: (newScaleIndex) => {
     newScaleIndex = Math.max(0, Math.min(CONFIG.scaleSteps.length - 1, newScaleIndex));
     
     state.settings.scaleIndex = newScaleIndex;
     state.settings.scale = CONFIG.scaleSteps[newScaleIndex];
     
-    // Применяем масштаб к корневому элементу HTML и базовому размеру шрифта
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
-    document.documentElement.style.fontSize = `${state.settings.scale * 16}px`; // Пересчет для базового 16px
+    document.documentElement.style.fontSize = `${state.settings.scale * 16}px`;
     
     localStorage.setItem('oto_scale', state.settings.scale.toString());
     localStorage.setItem('oto_scale_index', newScaleIndex.toString());
     return state.settings.scale;
-}
-
-/**
- * Подсчет статистики моделей для заголовка (4 значка)
- */
-function getModelStats() {
-    // Если модели еще не загружены, берем дефолт
-    const models = state.models || [];
+  },
+  getScaleIndex: () => state.settings.scaleIndex,
+  
+  // Аудит и логирование
+  addAuditLogEntry: (entry) => {
+    entry.timestamp = Utils.formatMoscowTime(new Date());
+    state.auditLog.unshift(entry);
     
+    if (state.auditLog.length > 100) {
+      state.auditLog = state.auditLog.slice(0, 100);
+    }
+  },
+  
+  // Статистика моделей
+  getModelStats: () => {
+    const models = state.models || [];
     const total = models.length;
     const success = models.filter(m => m.status === 'success').length;
     const error = models.filter(m => m.status === 'error').length;
-    // Все, что не успех и не ошибка — считается "не проверено" (untested/pending)
     const untested = total - success - error;
     
     return { total, success, error, untested };
-}
-
-/**
- * Экспорт всех данных приложения (настроек, логов, без API ключей)
- * @returns {Object} Данные для экспорта
- */
-function exportAllAppData() {
-    const exportData = {
-        version: CONFIG.stateVersion,
-        exportTime: new Date().toISOString(),
-        appData: {
-            settings: {
-                apiProvider: state.settings.apiProvider,
-                model: state.settings.model,
-                scale: state.settings.scale,
-                scaleIndex: state.settings.scaleIndex
-            },
-            models: [...state.models],
-            auditLog: [...state.auditLog],
-            metadata: {
-                gameId: state.gameId,
-                lastSaveTime: state.lastSaveTime,
-                totalPlayTime: calculateTotalPlayTime()
-            }
-        }
-    };
-    
-    return exportData;
-}
-
-/**
- * Импорт всех данных приложения
- * @param {Object} importData - Данные для импорта
- * @returns {boolean} Успех импорта
- */
-function importAllAppData(importData) {
-    if (!importData || typeof importData !== 'object') {
-        throw new Error('Некорректные данные импорта');
-    }
-    
-    if (importData.version !== CONFIG.stateVersion && importData.version !== '1.1' && importData.version !== '1.2') {
-        console.warn(`Миграция версии данных: ${importData.version} в Текущую ${CONFIG.stateVersion}`);
-    }
-    
-    if (!importData.appData) {
-        throw new Error('Отсутствуют данные приложения');
-    }
-    
-    // Импортируем настройки (кроме API ключей - они чувствительны и остаются локальными)
-    if (importData.appData.settings) {
-        const currentApiKeyOpenrouter = state.settings.apiKeyOpenrouter;
-        const currentApiKeyVsegpt = state.settings.apiKeyVsegpt;
-        
-        state.settings.apiProvider = importData.appData.settings.apiProvider || state.settings.apiProvider;
-        state.settings.model = importData.appData.settings.model || state.settings.model;
-        state.settings.scale = importData.appData.settings.scale || state.settings.scale;
-        state.settings.scaleIndex = importData.appData.settings.scaleIndex || state.settings.scaleIndex;
-        
-        state.settings.apiKeyOpenrouter = currentApiKeyOpenrouter;
-        state.settings.apiKeyVsegpt = currentApiKeyVsegpt;
-    }
-    
-    // Импортируем модели
-    if (importData.appData.models) {
-        state.models = importData.appData.models;
-    }
-    
-    // Импортируем аудит-логи
-    if (importData.appData.auditLog) {
-        state.auditLog = importData.appData.auditLog;
-    }
-    
-    // Импортируем метаданные
-    if (importData.appData.metadata) {
-        state.gameId = importData.appData.metadata.gameId || state.gameId;
-        state.lastSaveTime = importData.appData.metadata.lastSaveTime || state.lastSaveTime;
-    }
-    
-    return true;
-}
-
-/**
- * Увеличение счетчика ходов
- * @returns {number} Новое значение счетчика
- */
-function incrementTurnCount() {
-    state.turnCount++;
-    localStorage.setItem('oto_turn_count', state.turnCount.toString());
-    return state.turnCount;
-}
-
-/**
- * Получение текущего значения счетчика ходов
- * @returns {number} Значение счетчика
- */
-function getTurnCount() {
-    return state.turnCount;
-}
-
-/**
- * Получение фразы героя из списка
- * @returns {string|null} Фраза героя или null
- */
-function getHeroPhrase() {
-    if (state.thoughtsOfHero.length > 0) {
-        return state.thoughtsOfHero.shift(); // Берем и удаляем первую фразу из начала массива
-    }
-    return null;
-}
-
-/**
- * Добавление фраз героя в список
- * @param {Array<string>} phrases - Массив фраз для добавления
- */
-function addHeroPhrases(phrases) {
-    if (Array.isArray(phrases)) {
-        state.thoughtsOfHero = state.thoughtsOfHero.concat(phrases);
-        // Сохраняем обновленный список фраз в localStorage
-        localStorage.setItem('oto_thoughts_of_hero', JSON.stringify(state.thoughtsOfHero));
-    }
-}
-
-/**
- * Получение количества доступных фраз героя
- * @returns {number} Количество фраз
- */
-function getHeroPhrasesCount() {
-    return state.thoughtsOfHero.length;
-}
-
-/**
- * Очистка списка фраз героя
- */
-function clearHeroPhrases() {
-    state.thoughtsOfHero = [];
-    localStorage.removeItem('oto_thoughts_of_hero');
-}
-
-/**
- * Проверка необходимости запроса новых фраз героя (если список пуст)
- * @returns {boolean} true если список пуст
- */
-function needsHeroPhrases() {
-    return state.thoughtsOfHero.length === 0;
-}
-
-// Публичный интерфейс модуля
-export const State = {
-    // Получение и установка состояния
-     // Получение и установка состояния
- getState: () => {
-    // Защитная инициализация при каждом вызове
-    if (!state || typeof state !== 'object') {
-        console.error('❌ State is corrupted! Reinitializing...');
-        initializeState();
-    }
-    
-    // Дополнительная валидация
-    safeInitialize();
-    
-    return state;
-},
-     
-     setState: (newState) => {
-         if (!state) {
-             console.error('⚠️ Cannot setState on undefined state');
-             initializeState();
-         }
-         state = { ...state, ...newState };
-         // Если обновили UI, сохраняем настройки интерфейса отдельно
-         if (newState.ui) saveUiState();
-         
-         // Сохраняем изменения в localStorage
-         Saveload.saveState();
-     },
-    
-    // === Управление UI (Getters/Setters для UI) ===
-    getHBotBeforeCollapse: () => state.ui.hBotBeforeCollapse,
-    
-    setHBotBeforeCollapse: (value) => {
-        state.ui.hBotBeforeCollapse = value;
-        // Можно сразу сохранить, чтобы не потерять при перезагрузке
-        saveUiState();
-    },
-    
-    // Основные функции
-    syncDegree,
-    updateBuffs,
-    updateStat: (key, value) => {
-        const normalizedKey = Utils.normalizeStatKey(key);
-        if (normalizedKey && state.stats[normalizedKey] !== undefined) {
-            state.stats[normalizedKey] = Math.max(0, Math.min(100, value));
-        }
-    },
-    
-    // Новые методы для навыков
-    addSkill,
-    getSkills: () => state.skills,
-    clearSkills: () => {
-        state.skills = [];
-        localStorage.removeItem('oto_skills');
-    },
-    
-    // Методы для баффов
-    getBuffs: () => state.buffs || [],
-    addBuff: (buff) => {
-        if (!state.buffs) state.buffs = [];
-        state.buffs.push(buff);
-    },
-    clearBuffs: () => {
-        state.buffs = [];
-    },
-    
-    // Сброс и рестарт игры
-    resetGameProgress,
-    resetFullGame,
-    saveUiState,
-    
-    // Функции экспорта/импорта состояния
-    exportFullState,
-    importFullState,
-    exportAllAppData,
-    importAllAppData,
-    
-    // Функции аудита и логирования
-    addAuditLogEntry,
-    getModelStats,
-    
-    // Управление активными запросами
-    setPendingRequest: (controller) => { state.pendingRequest = controller; },
-    clearPendingRequest: () => { state.pendingRequest = null; },
-    getPendingRequest: () => state.pendingRequest,
-    
-    // Функции масштабирования UI
-    updateScale,
-    getScaleIndex: () => state.settings.scaleIndex,
-    
-    // Функции для счетчика ходов
-    incrementTurnCount,
-    getTurnCount,
-    
-    // Функции для управления фразами героя
-    getHeroPhrase,
-    addHeroPhrases,
-    getHeroPhrasesCount,
-    clearHeroPhrases,
-    needsHeroPhrases
+  }
 };

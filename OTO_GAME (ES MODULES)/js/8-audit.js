@@ -44,19 +44,18 @@ function createEntry(requestType, requestPayload, model, provider) {
 /**
  * Обновляет запись при успешном ответе от сервера.
  * @param {Object} entry - Объект записи (возвращенный из createEntry)
- * @param {Object|string} rawResponse - Ответ от ИИ (объект или строка)
+ * @param {string} rawResponseText - Сырой текст ответа от сервера (до парсинга)
  */
-function updateEntrySuccess(entry, rawResponse) {
+function updateEntrySuccess(entry, rawResponseText) {
     if (!entry) return;
     
-    const responseStr = typeof rawResponse === 'string' ? rawResponse : JSON.stringify(rawResponse, null, 2);
-    
     // 1. Дублируем в консоль для отладки
-    console.log(`✅ [API RESPONSE] ${entry.request}:`, responseStr);
+    console.log(`✅ [API RESPONSE] ${entry.request}:`, rawResponseText);
     
     // 2. Обновляем объект (он уже находится в State по ссылке)
     entry.status = 'success';
-    entry.fullResponse = responseStr;
+    entry.fullResponse = rawResponseText; // Сохраняем сырой текст
+    entry.rawResponse = rawResponseText; // Дублируем в отдельное поле для ясности
     
     // 3. Обновляем UI (показываем галочку и ответ)
     Render.renderAuditList();
@@ -124,54 +123,143 @@ function exportAuditLog() {
     
     state.auditLog.forEach((entry, idx) => {
         txtLog += `=== Запись ${idx + 1} ===\n`;
+        txtLog += `ID: ${entry.id}\n`;
         txtLog += `Время: ${entry.timestamp}\n`;
         txtLog += `Статус: ${entry.status.toUpperCase()}\n`;
         txtLog += `Провайдер: ${entry.provider || 'не указан'}\n`;
         txtLog += `Модель: ${entry.model || 'не указана'}\n`;
-        if (entry.d10) txtLog += `d10: ${entry.d10}\n`; // Если был бросок кубика
+        if (entry.d10) txtLog += `d10: ${entry.d10}\n`;
         
-        txtLog += `\n[REQUEST HEADER]: ${entry.request}\n`;
+        txtLog += `\n=== REQUEST ===\n`;
+        txtLog += `Заголовок: ${entry.request}\n`;
         
         if (entry.requestDebug && entry.requestDebug.body) {
-            txtLog += `\n[REQUEST BODY]:\n${entry.requestDebug.body}\n`;
+            txtLog += `\nТело запроса (RAW):\n${entry.requestDebug.body}\n`;
         }
         
+        txtLog += `\n=== RESPONSE ===\n`;
         if (entry.fullResponse) {
-            txtLog += `\n[RESPONSE]:\n${entry.fullResponse}\n`;
+            txtLog += `Ответ (RAW):\n${entry.fullResponse}\n`;
         }
         
         if (entry.rawError) {
-            txtLog += `\n[ERROR]:\n${entry.rawError}\n`;
+            txtLog += `\n=== ERROR ===\n${entry.rawError}\n`;
         }
         
         txtLog += '\n' + '='.repeat(50) + '\n\n';
     });
     
-    if (navigator.clipboard) {
+    // Создаем имя файла
+    const fileName = `oto-audit-full-${state.gameId}-${new Date().toISOString().split('T')[0]}.txt`;
+    
+    // Сначала пытаемся скопировать в буфер обмена
+    if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(txtLog).then(() => {
             Render.showSuccessAlert(
                 "Экспорт успешен",
-                "Полный лог аудита скопирован в буфер обмена!\n\nВы можете вставить его в текстовый редактор для сохранения.",
-                null
+                "Полный лог аудита скопирован в буфер обмена!\n\nХотите также скачать файл?",
+                {
+                    text: "Скачать файл",
+                    callback: () => Utils.exportToFile(txtLog, fileName, 'text/plain;charset=utf-8')
+                }
             );
         }).catch(() => {
-            fallbackDownload(txtLog);
-        });
-    } else {
-        fallbackDownload(txtLog);
-    }
-    
-    function fallbackDownload(data) {
-        const fileName = `oto-audit-log-${state.gameId}-${new Date().toISOString().split('T')[0]}.txt`;
-        Utils.exportToFile(data, fileName, 'text/plain;charset=utf-8');
-        
-        setTimeout(() => {
+            // Fallback: скачиваем файл
+            Utils.exportToFile(txtLog, fileName, 'text/plain;charset=utf-8');
             Render.showSuccessAlert(
                 "Экспорт успешен",
                 `Лог аудита сохранен в файл: ${fileName}`,
                 null
             );
-        }, 500);
+        });
+    } else {
+        // Fallback для старых браузеров или небезопасного контекста
+        Utils.exportToFile(txtLog, fileName, 'text/plain;charset=utf-8');
+        Render.showSuccessAlert(
+            "Экспорт успешен",
+            `Лог аудита сохранен в файл: ${fileName}`,
+            null
+        );
+    }
+}
+
+/**
+ * Экспорт одной записи аудита (request-response) в виде файла
+ * @param {number} entryId - ID записи для экспорта
+ */
+function exportSingleAuditEntry(entryId) {
+    const state = State.getState();
+    const entry = state.auditLog.find(e => e.id === entryId);
+    
+    if (!entry) {
+        Render.showErrorAlert(
+            "Экспорт записи",
+            "Запись не найдена.",
+            null
+        );
+        return;
+    }
+    
+    // Формируем содержание для одной записи
+    let txtLog = `=== OTO Audit Log Entry ===\n`;
+    txtLog += `ID: ${entry.id}\n`;
+    txtLog += `Время: ${entry.timestamp}\n`;
+    txtLog += `Статус: ${entry.status.toUpperCase()}\n`;
+    txtLog += `Запрос: ${entry.request}\n`;
+    txtLog += `Провайдер: ${entry.provider || 'не указан'}\n`;
+    txtLog += `Модель: ${entry.model || 'не указана'}\n`;
+    if (entry.d10) txtLog += `d10: ${entry.d10}\n`;
+    
+    txtLog += `\n=== REQUEST ===\n`;
+    txtLog += `Заголовок: ${entry.request}\n`;
+    if (entry.requestDebug && entry.requestDebug.body) {
+        txtLog += `\nТело запроса (RAW):\n${entry.requestDebug.body}\n`;
+    }
+    
+    txtLog += `\n=== RESPONSE ===\n`;
+    if (entry.fullResponse) {
+        txtLog += `Ответ (RAW):\n${entry.fullResponse}\n`;
+    }
+    
+    if (entry.rawError) {
+        txtLog += `\n=== ERROR ===\n${entry.rawError}\n`;
+    }
+    
+    txtLog += '\n' + '='.repeat(50) + '\n';
+    txtLog += `Экспортировано: ${Utils.formatMoscowTime(new Date())}\n`;
+    
+    // Создаем имя файла
+    const fileName = `oto-audit-entry-${entry.id}-${entry.timestamp.replace(/[:.]/g, '-')}.txt`;
+    
+    // Сначала пытаемся скопировать в буфер обмена
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(txtLog).then(() => {
+            Render.showSuccessAlert(
+                "Скопировано!",
+                "Запись аудита скопирована в буфер обмена.\n\nХотите также скачать файл?",
+                {
+                    text: "Скачать файл",
+                    callback: () => Utils.exportToFile(txtLog, fileName, 'text/plain;charset=utf-8')
+                }
+            );
+        }).catch(err => {
+            console.warn("Не удалось скопировать в буфер обмена:", err);
+            // Fallback: сразу скачиваем файл
+            Utils.exportToFile(txtLog, fileName, 'text/plain;charset=utf-8');
+            Render.showSuccessAlert(
+                "Файл скачан",
+                `Запись аудита сохранена в файл: ${fileName}`,
+                null
+            );
+        });
+    } else {
+        // Fallback для старых браузеров или небезопасного контекста
+        Utils.exportToFile(txtLog, fileName, 'text/plain;charset=utf-8');
+        Render.showSuccessAlert(
+            "Файл скачан",
+            `Запись аудита сохранена в файл: ${fileName}`,
+            null
+        );
     }
 }
 
@@ -182,5 +270,6 @@ export const Audit = {
     updateEntrySuccess,
     updateEntryError,
     clearAudit,
-    exportAuditLog
+    exportAuditLog,
+    exportSingleAuditEntry // Новая функция
 };
