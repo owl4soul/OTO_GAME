@@ -6,9 +6,41 @@ import { State } from './3-state.js';
 import { DOM } from './4-dom.js';
 import { Utils } from './2-utils.js';
 import { Game } from './6-game.js';
-import { Audit } from './8-audit.js'; // Добавляем импорт Audit для кнопок экспорта
+import { Audit } from './8-audit.js';
 
 const dom = DOM.getDOM();
+
+// Вспомогательные функции для работы с game_item
+function getGameItemIcon(id) {
+    if (!id) return '❓';
+    const [type] = id.split(':');
+    switch (type) {
+        case 'stat': return '📊';
+        case 'skill': return '📜';
+        case 'inventory': return '📦';
+        case 'relations': return '🤝';
+        case 'bless': return '✨';
+        case 'curse': return '💀';
+        case 'buff': return '⬆️';
+        case 'debuff': return '⬇️';
+        case 'personality': return '🧠';
+        case 'initiation_degree': return '🎓';
+        case 'progress': return '📈';
+        default: return '❓';
+    }
+}
+
+function getGameItemName(id) {
+    if (!id) return '';
+    const [type, name] = id.split(':');
+    if (type === 'stat') {
+        return getRussianStatName(name);
+    }
+    if (type === 'relations') {
+        return name.replace(/_/g, ' ');
+    }
+    return name;
+}
 
 /**
  * Обновление полей API ключей в зависимости от выбранного провайдера
@@ -128,9 +160,6 @@ function updateLogCount() {
 /**
  * Отрисовка списка аудита
  */
-
-
-
 function renderAuditList() {
     const state = State.getState();
     const list = document.getElementById('auditList');
@@ -138,10 +167,9 @@ function renderAuditList() {
     if (!list) return;
     
     // Показываем последние 20 записей
-    const displayLog = state.auditLog.slice(-20).reverse(); // Новые записи сверху
+    const displayLog = state.auditLog.slice(-20).reverse();
     
     list.innerHTML = displayLog.map(entry => {
-        // Определение цветов
         let statusColor = '#888';
         let borderColor = '#444';
         
@@ -156,11 +184,9 @@ function renderAuditList() {
             borderColor = '#e1b12c';
         }
 
-        // Заголовок записи
         let headerText = `<span style="color:${statusColor}; font-weight:bold;">${entry.timestamp}</span>: [${entry.status.toUpperCase()}] - ${entry.request}`;
         if (entry.d10) headerText += ` (d10=${entry.d10})`;
 
-        // Request - форматируем JSON
         let requestHtml = '';
         if (entry.requestDebug && entry.requestDebug.body) {
             const formattedRequest = Utils.formatJsonWithUnicode(entry.requestDebug.body);
@@ -171,7 +197,6 @@ function renderAuditList() {
             </details>`;
         }
 
-        // Response - форматируем JSON и декодируем Unicode
         let responseHtml = '';
         if (entry.fullResponse) {
             const formattedResponse = Utils.formatJsonWithUnicode(entry.fullResponse);
@@ -182,7 +207,6 @@ function renderAuditList() {
             </details>`;
         }
 
-        // Error
         let errorHtml = '';
         if (entry.rawError) {
             const formattedError = Utils.formatJsonWithUnicode(entry.rawError);
@@ -193,7 +217,6 @@ function renderAuditList() {
             </details>`;
         }
 
-        // Кнопки действий
         const actionButtons = `
         <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end;">
             <button onclick="window.Audit.exportSingleAuditEntry(${entry.id})" 
@@ -218,7 +241,6 @@ function renderAuditList() {
     
     updateLogCount();
     
-    // Добавляем глобальную функцию для копирования записи
     if (!window.copyAuditEntry) {
         window.copyAuditEntry = function(entryId) {
             const state = State.getState();
@@ -226,7 +248,6 @@ function renderAuditList() {
             
             if (!entry) return;
             
-            // Формируем текст для копирования (с декодированием Unicode)
             let textToCopy = `Запрос: ${entry.request}\n`;
             textToCopy += `Время: ${entry.timestamp}\n`;
             textToCopy += `Статус: ${entry.status}\n`;
@@ -249,7 +270,6 @@ function renderAuditList() {
             }
             
             navigator.clipboard.writeText(textToCopy).then(() => {
-                // Показываем уведомление
                 const notification = document.createElement('div');
                 notification.style.cssText = `
                     position: fixed;
@@ -280,30 +300,24 @@ function renderAuditList() {
 /**
  * Отрисовка текущей сцены
  */
-/**
- * Отрисовка текущей сцены
- */
 function renderScene() {
     const state = State.getState();
     
-    // Безопасная проверка наличия текущей сцены
     if (!state.gameState.currentScene) {
         console.error('❌ renderScene: currentScene отсутствует, использую начальную сцену');
-        state.gameState.currentScene = PROMPTS.initialGameState; // Прямая ссылка на полный объект
+        state.gameState.currentScene = { ...PROMPTS.initialGameState };
         State.setState({ gameState: state.gameState });
     }
     
     const currentScene = state.gameState.currentScene;
     
-    // Отрисовываем основной текст сцены (исправлено: scene вместо text)
     if (currentScene.scene) {
         dom.sceneText.innerHTML = `<p>${currentScene.scene.replace(/\n/g, '</p><p>')}</p>`;
     } else {
         console.warn('⚠️ Текст сцены пуст, использую дефолтный');
-        dom.sceneText.innerHTML = PROMPTS.initialGameState.scene; // Прямая ссылка на строку сцены
+        dom.sceneText.innerHTML = PROMPTS.initialGameState.scene;
     }
     
-    // Отрисовываем рефлексию, если есть
     if (currentScene.reflection) {
         dom.reflection.style.display = 'block';
         dom.reflection.textContent = currentScene.reflection;
@@ -311,7 +325,6 @@ function renderScene() {
         dom.reflection.style.display = 'none';
     }
     
-    // Восстановление плашки изменений за ход после перезагрузки
     if (state.lastTurnUpdates && state.lastTurnUpdates.length > 0) {
         dom.updates.style.display = 'block';
         dom.updates.innerHTML = state.lastTurnUpdates;
@@ -319,9 +332,272 @@ function renderScene() {
         dom.updates.style.display = 'none';
         dom.updates.innerHTML = '';
     }
+}
+
+/**
+ * Отрисовка характеристик героя, прогресса и степеней (ФОРМАТ 4.1)
+ */
+function renderStats() {
+    const state = State.getState();
     
-    // Скрываем обновления (будут показаны после хода)
-    dom.updates.style.display = 'none';
+    // 1. Получаем значения статов из game_items
+    const willValue = State.getGameItemValue('stat:will') || 50;
+    const stealthValue = State.getGameItemValue('stat:stealth') || 50;
+    const influenceValue = State.getGameItemValue('stat:influence') || 50;
+    const sanityValue = State.getGameItemValue('stat:sanity') || 50;
+    
+    // Обновляем значения характеристик
+    dom.vals.will.textContent = willValue;
+    dom.vals.stealth.textContent = stealthValue;
+    dom.vals.inf.textContent = influenceValue;
+    dom.vals.sanity.textContent = sanityValue;
+    
+    // 2. Обновляем описание личности
+    const personality = State.getGameItemValue('personality:hero') || "Описание отсутствует";
+    dom.pers.textContent = personality;
+    
+    // 3. Обновляем прогресс-бар
+    const progressValue = State.getGameItemValue('progress:oto') || 0;
+    const maxScore = 110;
+    const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
+    dom.tube.style.height = `${pct}%`;
+    
+    // 4. Отрисовываем список степеней
+    const degreeItems = State.getGameItemsByType('initiation_degree:');
+    const currentDegreeItem = degreeItems.find(item => item.value && item.value.trim() !== '');
+    let currentDegreeIndex = 0;
+    
+    if (currentDegreeItem) {
+        const degreeMatch = currentDegreeItem.value.match(/(\d+)°/);
+        if (degreeMatch) {
+            currentDegreeIndex = parseInt(degreeMatch[1]) || 0;
+        }
+    }
+    
+    if (dom.degrees) {
+        dom.degrees.innerHTML = CONFIG.degrees.slice().reverse().map(d => {
+            let cls = 'degree-item';
+            if (d.lvl < currentDegreeIndex) cls += ' passed';
+            if (d.lvl === currentDegreeIndex) cls += ' active';
+            return `<div class="${cls}">${d.name}</div>`;
+        }).join('');
+    }
+    
+    // 5. Отображаем баффы/дебаффы рядом со статами
+    renderBuffsAndDebuffsStats();
+}
+
+/**
+ * Отображение баффов/дебаффов рядом со статами
+ */
+function renderBuffsAndDebuffsStats() {
+    const buffs = State.getGameItemsByType('buff:');
+    const debuffs = State.getGameItemsByType('debuff:');
+    const allEffects = [...buffs, ...debuffs];
+    
+    const statModifiers = {
+        'will': [],
+        'stealth': [],
+        'influence': [],
+        'sanity': []
+    };
+    
+    allEffects.forEach(effect => {
+        const [type, statName] = effect.id.split(':');
+        if (statModifiers[statName] && effect.value && effect.duration) {
+            statModifiers[statName].push({
+                value: effect.value,
+                duration: effect.duration
+            });
+        }
+    });
+    
+    Object.entries(statModifiers).forEach(([statName, modifiers]) => {
+        if (modifiers.length > 0) {
+            const total = modifiers.reduce((sum, mod) => sum + mod.value, 0);
+            const durationText = modifiers.map(m => `(${m.duration})`).join(' ');
+            const sign = total > 0 ? '+' : '';
+            const color = total > 0 ? '#4cd137' : '#e84118';
+            
+            const valElement = document.getElementById(`val${statName.charAt(0).toUpperCase() + statName.slice(1)}`);
+            if (valElement) {
+                const baseValue = parseInt(valElement.textContent) || 50;
+                valElement.innerHTML = `
+                    ${baseValue} 
+                    <span style="color: ${color}; font-size: 0.9em; margin-left: 4px;">
+                        (${sign}${total} ${durationText})
+                    </span>
+                `;
+            }
+        }
+    });
+}
+
+/**
+ * Отображение всех game_items в нижней секции
+ */
+function renderAllGameItems() {
+    console.log('🔍 renderAllGameItems called');
+    
+    // 1. Отображаем Личность (уже в renderStats)
+    // 2. Отображаем Отношения
+    renderRelations();
+    
+    // 3. Отображаем Навыки
+    renderSkills();
+    
+    // 4. Отображаем Благословения/Проклятия
+    renderBlessingsAndCurses();
+    
+    // 5. Отображаем Инвентарь
+    renderInventory();
+    
+    // 6. Отображаем Баффы/Дебаффы отдельным блоком
+    renderBuffsAndDebuffsList();
+}
+
+/**
+ * Отображение списка баффов и дебаффов
+ */
+function renderBuffsAndDebuffsList() {
+    let buffsContainer = document.getElementById('buffsContainer');
+    if (!buffsContainer) {
+        buffsContainer = document.createElement('div');
+        buffsContainer.id = 'buffsContainer';
+        buffsContainer.className = 'buffs-section';
+        
+        const blessingsContainer = document.getElementById('blessingsContainer');
+        const targetContainer = blessingsContainer || 
+                               document.getElementById('skillsContainer') ||
+                               document.getElementById('inventoryContainer');
+        
+        if (targetContainer && targetContainer.parentNode) {
+            targetContainer.parentNode.insertBefore(buffsContainer, targetContainer.nextSibling);
+        }
+    }
+    
+    const buffItems = State.getGameItemsByType('buff:');
+    const debuffItems = State.getGameItemsByType('debuff:');
+    const allBuffs = [...buffItems, ...debuffItems];
+    
+    let html = `<div style="margin-top: 10px; font-weight: bold; color: #00a8ff; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; font-size: 0.85rem;">
+        <i class="fas fa-sparkles"></i> ЭФФЕКТЫ (${allBuffs.length})
+    </div>`;
+
+    if (allBuffs.length === 0) {
+        html += `<div style="font-size: 0.8rem; color: #666; font-style: italic;">Нет активных эффектов</div>`;
+    } else {
+        html += `<div style="display: flex; flex-direction: column; gap: 4px;">`;
+        allBuffs.forEach(buff => {
+            const isBuff = buff.id.startsWith('buff:');
+            const buffName = buff.id.split(':')[1];
+            const buffValue = buff.value || 0;
+            const duration = buff.duration || 0;
+            const description = buff.description || '';
+            
+            const color = isBuff ? '#4cd137' : '#e84118';
+            const icon = isBuff ? '📈' : '📉';
+            const sign = buffValue > 0 ? '+' : '';
+            
+            html += `
+                <div style="background: rgba(${isBuff ? '76, 175, 80' : '244, 67, 54'}, 0.1); padding: 6px 8px; border-radius: 4px; border-left: 3px solid ${color};">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                        <div style="color: ${color}; font-size: 0.8rem;">
+                            ${icon} ${buffName}: ${sign}${buffValue}
+                        </div>
+                        <div style="color: #888; font-size: 0.7rem;">
+                            ${duration} ход${duration === 1 ? '' : duration > 1 && duration < 5 ? 'а' : 'ов'}
+                        </div>
+                    </div>
+                    ${description ? `<div style="font-size: 0.7rem; color: #aaa;">${description}</div>` : ''}
+                </div>
+            `;
+        });
+        html += `</div>`;
+    }
+    
+    buffsContainer.innerHTML = html;
+}
+
+/**
+ * Отображение благословений и проклятий
+ */
+function renderBlessingsAndCurses() {
+    const blessItems = State.getGameItemsByType('bless:');
+    const curseItems = State.getGameItemsByType('curse:');
+    const allItems = [...blessItems, ...curseItems];
+    
+    let container = document.getElementById('blessingsContainer');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'blessingsContainer';
+        container.className = 'blessings-section';
+        
+        const skillsContainer = document.getElementById('skillsContainer');
+        const relationsContainer = document.getElementById('relationsDisplay');
+        const targetContainer = relationsContainer || skillsContainer || 
+                               document.getElementById('inventoryContainer');
+        
+        if (targetContainer && targetContainer.parentNode) {
+            targetContainer.parentNode.insertBefore(container, targetContainer.nextSibling);
+        }
+    }
+    
+    let html = `<div style="margin-top: 15px; font-weight: bold; color: #ff9ff3; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; font-size: 0.85rem;">
+        <i class="fas fa-star"></i> СИЛЫ (${allItems.length})
+    </div>`;
+
+    if (allItems.length === 0) {
+        html += `<div style="font-size: 0.8rem; color: #666; font-style: italic;">Нет благословений или проклятий</div>`;
+    } else {
+        html += `<div style="display: flex; flex-wrap: wrap; gap: 6px;">`;
+        allItems.forEach(item => {
+            const isBlessing = item.id.startsWith('bless:');
+            const itemName = item.value || item.id.split(':')[1];
+            const description = item.description || '';
+            
+            const color = isBlessing ? '#fbc531' : '#c23616';
+            const bgColor = isBlessing ? 'rgba(251, 197, 49, 0.1)' : 'rgba(194, 54, 22, 0.1)';
+            const icon = isBlessing ? '✨' : '💀';
+            
+            html += `
+                <div style="background: ${bgColor}; padding: 4px 8px; border-radius: 4px; border: 1px solid ${color};" 
+                     title="${description}">
+                    <span style="color: ${color}; font-size: 0.75rem;">
+                        ${icon} ${itemName}
+                    </span>
+                </div>
+            `;
+        });
+        html += `</div>`;
+    }
+    
+    container.innerHTML = html;
+}
+
+/**
+ * Полная перерисовка интерфейса
+ */
+function renderAll() {
+    console.info(`⚠️   RENDER ALL (формат 4.1)   ⚠️`);
+    
+    try {
+        renderScene();
+        renderStats();
+        renderChoices();
+        renderAllGameItems();
+        renderHistory();
+        applyStateEffects();
+        updateUIMode();
+        
+        if (dom.turnCounter) {
+            dom.turnCounter.innerHTML = `ХОДЫ: <span style="color: #888; font-family: monospace;">${State.getTurnCount()}</span>`;
+        }
+        
+        console.info(`✅ ALL RENDERED (формат 4.1)`);
+    } catch (error) {
+        console.error('❌ Ошибка при рендеринге:', error);
+    }
 }
 
 /**
@@ -330,11 +606,9 @@ function renderScene() {
 function updateUIMode() {
     const state = State.getState();
     
-    // Синхронизируем тумблер с фактическим режимом
     dom.freeModeToggle.checked = state.freeMode;
     
     if (state.freeMode) {
-        // Режим свободного ввода
         dom.choicesList.style.display = 'none';
         dom.freeInputWrapper.style.display = 'block';
         dom.modeIcon.innerHTML = '<i class="fas fa-keyboard"></i>';
@@ -342,27 +616,22 @@ function updateUIMode() {
         dom.modeText.classList.add('free-mode');
         dom.choicesCounter.textContent = `${state.freeModeText.length > 0 ? '✓' : '0'}/∞`;
         
-        // Устанавливаем текст и настраиваем поле ввода
         dom.freeInputText.value = state.freeModeText;
         dom.freeInputText.disabled = false;
         
-        // Настраиваем высоту поля с учетом масштаба
         const scale = state.settings.scale;
         const baseHeight = 140;
         const adjustedHeight = baseHeight * scale;
         dom.freeInputText.style.height = `${adjustedHeight}px`;
         dom.freeInputText.style.minHeight = `${adjustedHeight}px`;
         
-        // Фокусируемся на поле ввода
         setTimeout(() => {
             dom.freeInputText.focus();
             dom.freeInputText.scrollTop = dom.freeInputText.scrollHeight;
         }, 100);
         
-        // Включаем/выключаем кнопку отправки
         dom.btnSubmit.disabled = state.freeModeText.trim().length === 0;
     } else {
-        // Режим выбора вариантов
         dom.choicesList.style.display = 'block';
         dom.freeInputWrapper.style.display = 'none';
         dom.modeIcon.innerHTML = '<i class="fas fa-list-ul"></i>';
@@ -379,14 +648,12 @@ function normalizeStatKey(statName) {
     
     const lowerStat = statName.toString().toLowerCase().trim();
     
-    // Ищем в алиасах конфига
     for (const [alias, key] of Object.entries(CONFIG.statAliases)) {
         if (alias.toLowerCase() === lowerStat) {
             return key;
         }
     }
     
-    // Если не нашли в алиасах, проверяем стандартные ключи
     const standardKeys = ['will', 'stealth', 'influence', 'sanity'];
     if (standardKeys.includes(lowerStat)) {
         return lowerStat;
@@ -422,7 +689,7 @@ function getRussianStatName(key) {
 }
 
 /**
- * Компактный формат требований (одной строкой) - ФОРМАТ 4.1
+ * Компактный формат требований (ФОРМАТ 4.1)
  */
 function formatCompactRequirements(requirements) {
     if (!Array.isArray(requirements) || requirements.length === 0) {
@@ -430,37 +697,49 @@ function formatCompactRequirements(requirements) {
     }
     
     const items = requirements.map(reqId => {
+        if (!reqId || typeof reqId !== 'string') return '';
+        
         const [type, name] = reqId.split(':');
         let color = '#888';
-        let icon = '?';
+        let icon = getGameItemIcon(reqId);
+        let displayName = name || reqId;
         
         switch (type) {
             case 'stat':
                 color = '#fbc531';
-                icon = '📊';
+                displayName = getRussianStatName(name);
                 break;
             case 'skill':
                 color = '#9c88ff';
-                icon = '📜';
                 break;
             case 'inventory':
                 color = '#00a8ff';
-                icon = '📦';
                 break;
             case 'relations':
                 color = '#ff9ff3';
-                icon = '🤝';
+                displayName = name.replace(/_/g, ' ');
+                break;
+            case 'bless':
+                color = '#fbc531';
+                break;
+            case 'curse':
+                color = '#c23616';
+                break;
+            case 'initiation_degree':
+                color = '#ff9ff3';
                 break;
         }
         
-        return `<span style="color:${color};">${icon}${name}</span>`;
-    });
+        return `<span style="color:${color};" title="${reqId}">${icon} ${displayName}</span>`;
+    }).filter(item => item !== '');
     
-    return `<div style="font-size:0.75rem; margin-top:3px; color:#888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.3">🔒 Треб: ${items.join(', ')}</div>`;
+    if (items.length === 0) return '';
+    
+    return `<div style="font-size:0.75rem; margin-top:3px; color:#888; opacity: 0.3">🔒 Треб: ${items.join(', ')}</div>`;
 }
 
 /**
- * Компактный формат операций (наград/штрафов)
+ * Компактный формат операций (ФОРМАТ 4.1)
  */
 function formatCompactOperations(operations, type) {
     if (!Array.isArray(operations) || operations.length === 0) {
@@ -471,22 +750,29 @@ function formatCompactOperations(operations, type) {
     const items = [];
     
     operations.forEach(op => {
+        if (!op || !op.id) return;
+        
         const [itemType, name] = op.id.split(':');
         let display = '';
         
         switch (op.operation) {
             case 'MODIFY':
                 const sign = op.delta > 0 ? '+' : '';
-                display = `${name}${sign}${op.delta}`;
+                const statName = itemType === 'stat' ? getRussianStatName(name) : name;
+                display = `${statName}${sign}${op.delta}`;
                 break;
             case 'ADD':
-                display = `+${name}`;
+                if (itemType === 'buff' || itemType === 'debuff') {
+                    display = `${name}+${op.value}`;
+                } else {
+                    display = `+${name}`;
+                }
                 break;
             case 'REMOVE':
                 display = `-${name}`;
                 break;
             case 'SET':
-                display = `${name}→"${String(op.value).substring(0, 10)}"`;
+                display = `${name}→"${String(op.value || '').substring(0, 10)}"`;
                 break;
         }
         
@@ -500,7 +786,7 @@ function formatCompactOperations(operations, type) {
     const color = isSuccess ? '#4cd137' : '#e84118';
     const icon = isSuccess ? '✅' : '❌';
     
-    return `<div style="font-size:0.75rem; margin-top:2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.3">
+    return `<div style="font-size:0.75rem; margin-top:2px; opacity: 0.3">
         <span style="color:${color};">${icon} ${items.join(', ')}</span>
     </div>`;
 }
@@ -509,17 +795,32 @@ function formatCompactOperations(operations, type) {
  * Отрисовка вариантов выбора (ФОРМАТ 4.1)
  */
 function renderChoices() {
+    console.log('🔍 renderChoices called');
+    
     const state = State.getState();
-    if (!dom.choicesList) return;
-    
-    dom.choicesList.innerHTML = '';
-    
-    if (!state.gameState.currentScene || !Array.isArray(state.gameState.currentScene.choices)) {
-        console.error('❌ Ошибка renderChoices: нет choices в currentScene');
+    if (!dom.choicesList) {
+        console.error('❌ DOM element choicesList not found');
         return;
     }
     
-    state.gameState.currentScene.choices.forEach((choice, idx) => {
+    dom.choicesList.innerHTML = '';
+    
+    if (!state.gameState.currentScene) {
+        console.error('❌ renderChoices: currentScene отсутствует');
+        return;
+    }
+    
+    const currentScene = state.gameState.currentScene;
+    const choices = currentScene.choices;
+    
+    if (!choices || !Array.isArray(choices)) {
+        console.error('❌ renderChoices: choices отсутствует или не массив');
+        return;
+    }
+    
+    console.log(`📋 Отображаем ${choices.length} вариантов выбора`);
+    
+    choices.forEach((choice, idx) => {
         if (!choice || typeof choice !== 'object') {
             console.warn(`⚠️ Пропущен choice с индексом ${idx}: объект не существует`);
             return;
@@ -529,25 +830,25 @@ function renderChoices() {
         const isSelected = state.gameState.selectedActions &&
             Array.isArray(state.gameState.selectedActions) ?
             state.gameState.selectedActions.includes(idx) : false;
+        
         btn.className = `choice-btn ${isSelected ? 'selected' : ''}`;
         
-        // Текст действия
         const choiceText = choice.text || "Действие без названия";
         let content = `${choiceText}`;
         
-        // Уровень сложности
         const difficulty = choice.difficulty_level || 5;
         content += `<div style="font-size:0.75rem; color:#888; margin-top:3px; opacity: 0.3">🎯 Сложность: ${difficulty}/10</div>`;
         
-        // Компактные требования
         if (Array.isArray(choice.requirements) && choice.requirements.length > 0) {
             content += formatCompactRequirements(choice.requirements);
+        } else {
+            content += `<div style="font-size:0.75rem; color:#888; margin-top:3px; opacity: 0.3">🔓 Нет требований</div>`;
         }
         
-        // Компактные награды/штрафы
         if (Array.isArray(choice.success_rewards) && choice.success_rewards.length > 0) {
             content += formatCompactOperations(choice.success_rewards, 'success');
         }
+        
         if (Array.isArray(choice.fail_penalties) && choice.fail_penalties.length > 0) {
             content += formatCompactOperations(choice.fail_penalties, 'fail');
         }
@@ -557,63 +858,20 @@ function renderChoices() {
         dom.choicesList.appendChild(btn);
     });
     
-    // Обновляем счетчик
     const count = state.gameState.selectedActions ? state.gameState.selectedActions.length : 0;
     if (dom.choicesCounter) {
         dom.choicesCounter.textContent = `${count}/${CONFIG.maxChoices}`;
     }
-}
-
-/**
- * Отрисовка характеристик героя (ФОРМАТ 4.1 - game_items)
- */
-function renderStats() {
-    const state = State.getState();
     
-    // Получаем значения статов из game_items
-    const willValue = State.getGameItemValue('stat:will') || 50;
-    const stealthValue = State.getGameItemValue('stat:stealth') || 50;
-    const influenceValue = State.getGameItemValue('stat:influence') || 50;
-    const sanityValue = State.getGameItemValue('stat:sanity') || 50;
-    
-    // Обновляем значения характеристик
-    dom.vals.will.textContent = willValue;
-    dom.vals.stealth.textContent = stealthValue;
-    dom.vals.inf.textContent = influenceValue;
-    dom.vals.sanity.textContent = sanityValue;
-    
-    // Обновляем описание личности
-    const personality = State.getGameItemValue('personality:hero') || "Описание отсутствует";
-    dom.pers.textContent = personality;
-    
-    // Обновляем прогресс-бар
-    const progressValue = State.getGameItemValue('progress:oto') || 0;
-    const maxScore = 110;
-    const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
-    dom.tube.style.height = `${pct}%`;
-    
-    // Отрисовываем список степеней
-    // Находим текущую степень
-    const degreeItem = state.heroState.find(item => item.id.startsWith('initiation_degree:'));
-    const currentDegreeIndex = degreeItem ? 
-        parseInt(degreeItem.id.split('_').pop()) || 0 : 0;
-    
-    dom.degrees.innerHTML = CONFIG.degrees.slice().reverse().map(d => {
-        let cls = 'degree-item';
-        if (d.lvl < currentDegreeIndex) cls += ' passed';
-        if (d.lvl === currentDegreeIndex) cls += ' active';
-        return `<div class="${cls}">${d.name}</div>`;
-    }).join('');
+    console.log('✅ Choices rendered');
 }
 
 /**
  * Отрисовка инвентаря (ФОРМАТ 4.1 - game_items)
  */
 function renderInventory() {
-    const state = State.getState();
     let invContainer = document.getElementById('inventoryContainer');
     
-    // Создаем контейнер если его нет
     if (!invContainer) {
         invContainer = document.createElement('div');
         invContainer.id = 'inventoryContainer';
@@ -623,7 +881,6 @@ function renderInventory() {
         }
     }
     
-    // Получаем предметы из game_items
     const inventoryItems = State.getGameItemsByType('inventory:');
     
     let html = `<div style="margin-top:15px; font-weight:bold; color:#d4af37; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
@@ -656,8 +913,6 @@ function renderInventory() {
  * Отрисовка навыков (ФОРМАТ 4.1 - game_items)
  */
 function renderSkills() {
-    const state = State.getState();
-    
     let skillsContainer = document.getElementById('skillsContainer');
     if (!skillsContainer) {
         skillsContainer = document.createElement('div');
@@ -670,7 +925,6 @@ function renderSkills() {
         }
     }
     
-    // Получаем навыки из game_items
     const skillItems = State.getGameItemsByType('skill:');
     
     let html = `<div style="margin-top:15px; font-weight:bold; color:#9c88ff; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
@@ -698,8 +952,6 @@ function renderSkills() {
  * Отрисовка отношений (ФОРМАТ 4.1 - game_items)
  */
 function renderRelations() {
-    const state = State.getState();
-    
     let relContainer = document.getElementById('relationsDisplay');
     if (!relContainer) {
         relContainer = document.createElement('div');
@@ -714,7 +966,6 @@ function renderRelations() {
         }
     }
 
-    // Получаем отношения из game_items
     const relationItems = State.getGameItemsByType('relations:');
     
     let html = `<div style="margin-top:10px; font-weight:bold; color:#fbc531; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
@@ -724,7 +975,6 @@ function renderRelations() {
     if (relationItems.length === 0) {
         html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Пока нет заметных связей...</div>`;
     } else {
-        // Сортировка по убыванию значения
         relationItems.sort((a, b) => b.value - a.value);
         
         html += `<div style="display:flex; flex-direction:column; gap:4px; font-size:0.75rem;">`;
@@ -732,7 +982,6 @@ function renderRelations() {
             const npcName = relation.id.split(':')[1].replace(/_/g, ' ');
             const npcValue = relation.value || 0;
             
-            // Цвет по силе отношения
             let color = '#ccc';
             if (npcValue >= 60) color = '#4cd137';
             else if (npcValue >= 20) color = '#9c88ff';
@@ -758,140 +1007,18 @@ function renderRelations() {
 }
 
 /**
- * Отрисовка баффов/дебаффов (ФОРМАТ 4.1 - game_items)
- */
-function renderBuffs() {
-    const state = State.getState();
-    
-    let buffsContainer = document.getElementById('buffsContainer');
-    if (!buffsContainer) {
-        buffsContainer = document.createElement('div');
-        buffsContainer.id = 'buffsContainer';
-        buffsContainer.className = 'buffs-section';
-        
-        const skillsContainer = document.getElementById('skillsContainer');
-        const relationsContainer = document.getElementById('relationsDisplay');
-        const targetContainer = relationsContainer || skillsContainer || 
-                               document.getElementById('inventoryContainer');
-        
-        if (targetContainer && targetContainer.parentNode) {
-            targetContainer.parentNode.insertBefore(buffsContainer, targetContainer.nextSibling);
-        }
-    }
-    
-    // Получаем баффы и дебаффы
-    const buffItems = State.getGameItemsByType('buff:');
-    const debuffItems = State.getGameItemsByType('debuff:');
-    const allBuffs = [...buffItems, ...debuffItems];
-    
-    let html = `<div style="margin-top:10px; font-weight:bold; color:#00a8ff; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
-        <i class="fas fa-sparkles"></i> ЭФФЕКТЫ (${allBuffs.length})
-    </div>`;
-
-    if (allBuffs.length === 0) {
-        html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Нет активных эффектов</div>`;
-    } else {
-        html += `<div style="display:flex; flex-direction:column; gap:4px;">`;
-        allBuffs.forEach(buff => {
-            const isBuff = buff.id.startsWith('buff:');
-            const buffName = buff.id.split(':')[1];
-            const buffValue = buff.value || 0;
-            const duration = buff.duration || 0;
-            const description = buff.description || '';
-            
-            const color = isBuff ? '#4cd137' : '#e84118';
-            const icon = isBuff ? '📈' : '📉';
-            const sign = buffValue > 0 ? '+' : '';
-            
-            html += `
-                <div style="background:rgba(${isBuff ? '76, 175, 80' : '244, 67, 54'}, 0.1); padding:6px 8px; border-radius:4px; border-left: 3px solid ${color};">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                        <div style="color:${color}; font-size:0.8rem;">
-                            ${icon} ${buffName}: ${sign}${buffValue}
-                        </div>
-                        <div style="color:#888; font-size:0.7rem;">
-                            ${duration} ход${duration === 1 ? '' : duration > 1 && duration < 5 ? 'а' : 'ов'}
-                        </div>
-                    </div>
-                    ${description ? `<div style="font-size:0.7rem; color:#aaa;">${description}</div>` : ''}
-                </div>
-            `;
-        });
-        html += `</div>`;
-    }
-    
-    buffsContainer.innerHTML = html;
-}
-
-/**
- * Отрисовка благословений/проклятий (ФОРМАТ 4.1 - game_items)
- */
-function renderBlessings() {
-    const state = State.getState();
-    
-    let blessingsContainer = document.getElementById('blessingsContainer');
-    if (!blessingsContainer) {
-        blessingsContainer = document.createElement('div');
-        blessingsContainer.id = 'blessingsContainer';
-        blessingsContainer.className = 'blessings-section';
-        
-        const buffsContainer = document.getElementById('buffsContainer');
-        if (buffsContainer && buffsContainer.parentNode) {
-            buffsContainer.parentNode.insertBefore(blessingsContainer, buffsContainer.nextSibling);
-        }
-    }
-    
-    // Получаем благословения и проклятия
-    const blessItems = State.getGameItemsByType('bless:');
-    const curseItems = State.getGameItemsByType('curse:');
-    const allBlessings = [...blessItems, ...curseItems];
-    
-    let html = `<div style="margin-top:10px; font-weight:bold; color:#ff9ff3; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
-        <i class="fas fa-star"></i> СИЛЫ (${allBlessings.length})
-    </div>`;
-
-    if (allBlessings.length === 0) {
-        html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Нет особых сил</div>`;
-    } else {
-        html += `<div style="display:flex; flex-wrap:wrap; gap:6px;">`;
-        allBlessings.forEach(blessing => {
-            const isBlessing = blessing.id.startsWith('bless:');
-            const blessingName = blessing.value || blessing.id.split(':')[1];
-            const description = blessing.description || '';
-            
-            const color = isBlessing ? '#fbc531' : '#c23616';
-            const bgColor = isBlessing ? 'rgba(251, 197, 49, 0.1)' : 'rgba(194, 54, 22, 0.1)';
-            
-            html += `
-                <div style="background:${bgColor}; padding:4px 8px; border-radius:4px; border:1px solid ${color};" 
-                     title="${description}">
-                    <span style="color:${color}; font-size:0.75rem;">
-                        ${isBlessing ? '✨' : '💀'} ${blessingName}
-                    </span>
-                </div>
-            `;
-        });
-        html += `</div>`;
-    }
-    
-    blessingsContainer.innerHTML = html;
-}
-
-/**
  * Применение визуальных эффектов состояния
  */
 function applyStateEffects() {
     const state = State.getState();
     const body = document.body;
     
-    // 1. Эффект Ритуала
     if (state.isRitualActive) {
         body.classList.add('ritual-mode');
     } else {
         body.classList.remove('ritual-mode');
     }
     
-    // 2. Эффект Безумия (Sanity < 20)
     const sanityValue = State.getGameItemValue('stat:sanity') || 50;
     if (sanityValue < 20) {
         body.classList.add('glitch-active');
@@ -908,12 +1035,10 @@ function renderHistory() {
     
     dom.hist.innerHTML = '';
     
-    // Отрисовываем историю в обратном порядке (последние ходы сверху)
     [...state.gameState.history].reverse().forEach(entry => {
         const item = document.createElement('div');
         item.className = 'history-item';
         
-        // Заголовок записи
         const head = document.createElement('div');
         head.className = 'history-header';
         head.innerHTML = `
@@ -921,7 +1046,6 @@ function renderHistory() {
             <i class="fas fa-chevron-down" style="color:#444"></i>
         `;
         
-        // Тело записи
         const body = document.createElement('div');
         body.className = 'history-content';
         body.innerHTML = `
@@ -931,7 +1055,6 @@ function renderHistory() {
             </div>
         `;
         
-        // Обработчик раскрытия/скрытия
         head.onclick = () => {
             body.classList.toggle('open');
             const icon = head.querySelector('i');
@@ -942,66 +1065,6 @@ function renderHistory() {
         item.appendChild(body);
         dom.hist.appendChild(item);
     });
-}
-
-/**
- * Полная перерисовка интерфейса
- */
-function renderAll() {
-    console.info(`⚠️   RENDER ALL (формат 4.1)   ⚠️`);
-    
-    try {
-        renderScene();
-        console.log("Scene rendered")
-        renderStats();
-        console.log("Stats rendered")
-        renderChoices();
-        renderInventory();
-        renderSkills();
-        renderRelations();
-        renderBuffs();
-        renderBlessings();
-        renderHistory();
-        applyStateEffects();
-        console.log("Effects applied")
-        updateUIMode();
-        console.log("Ui updated")
-        // Обновляем счетчик ходов
-        if (dom.turnCounter) {
-            dom.turnCounter.innerHTML = `ХОДЫ: <span style="color: #888; font-family: monospace;">${State.getTurnCount()}</span>`;
-        }
-        
-        console.info(`✅ ALL RENDERED (формат 4.1)`);
-    } catch (error) {
-        console.error('❌ Ошибка при рендеринге:', error);
-    }
-}
-
-/**
- * Показ подложки для фраз героя
- */
-function showThoughtsOfHeroLayout() {
-    if (dom.thoughtsOfHeroLayout) {
-        dom.thoughtsOfHeroLayout.style.display = 'flex';
-    }
-}
-
-/**
- * Скрытие подложки для фраз героя
- */
-function hideThoughtsOfHeroLayout() {
-    if (dom.thoughtsOfHeroLayout) {
-        dom.thoughtsOfHeroLayout.style.display = 'none';
-    }
-}
-
-/**
- * Обновление текста на подложке фраз героя
- */
-function updateThoughtsOfHeroText(text) {
-    if (dom.thoughtsOfHeroText) {
-        dom.thoughtsOfHeroText.textContent = text;
-    }
 }
 
 /**
@@ -1020,7 +1083,6 @@ function showAlert(title, message, details = null, type = 'error') {
 
     if (!alertModal) return;
 
-    // Устанавливаем стиль в зависимости от типа
     if (type === 'error') {
         alertModalContent.className = 'alert-modal-content error';
         alertModalHeader.className = 'modal-header alert-modal-header error';
@@ -1038,7 +1100,6 @@ function showAlert(title, message, details = null, type = 'error') {
         copyErrorBtn.style.display = details ? 'block' : 'none';
     }
 
-    // Заполняем уведомление
     alertMessage.innerHTML = `<h3 style="margin-bottom: 0.5rem;">${title}</h3><p>${message}</p>`;
 
     if (details) {
@@ -1058,7 +1119,6 @@ function showAlert(title, message, details = null, type = 'error') {
             });
         };
 
-        // Для ошибок: вывод стек-трейса
         if (details instanceof Error && details.stack) {
             alertStack.textContent = details.stack;
             alertStack.style.display = 'block';
@@ -1124,14 +1184,9 @@ export const Render = {
     renderHistory,
     renderSkills,
     renderRelations,
-    renderBuffs,
-    renderBlessings,
     renderAll,
     showAlert,
     showErrorAlert,
     showSuccessAlert,
-    showWarningAlert,
-    showThoughtsOfHeroLayout,
-    hideThoughtsOfHeroLayout,
-    updateThoughtsOfHeroText
+    showWarningAlert
 };

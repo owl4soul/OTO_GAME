@@ -29,7 +29,7 @@ function repairTruncatedJSON(text) {
         repaired += '"';
     }
     
-    // 2. Удаляем "висячую" запятую в конце (частая проблема обрыва массивов/объектов)
+    // 2. Удаляем "висячую" запяту в конце (частая проблема обрыва массивов/объектов)
     // Например: {"items": ["key",], -> {"items": ["key"]}
     repaired = repaired.replace(/,\s*([}\]]*)$/, '$1');
     
@@ -52,14 +52,6 @@ function repairTruncatedJSON(text) {
     
     return repaired;
 }
-
-/**
- * Надежный парсинг JSON из ответа ИИ
- * Специально для нового формата с requirements, success_rewards, fail_penalties
- * @param {string} rawContent - Сырой текст ответа
- * @returns {Object} Распарсенный JSON объект
- */
-// В 2-utils.js замени функцию robustJsonParse:
 
 /**
  * Надежный парсинг JSON из ответа ИИ (ФОРМАТ 4.1)
@@ -95,7 +87,7 @@ function robustJsonParse(rawContent) {
         summary: ""
     };
     
-    // Извлекаем основные поля через regex для ФОРМАТА 4.1
+    // Извлекаем основные поля через regex для ФОРМАТ 4.1
     const designNotesMatch = text.match(/"design_notes"\s*:\s*"((?:[^"\\]|\\.)*)"/);
     if (designNotesMatch) {
         result.design_notes = designNotesMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
@@ -202,11 +194,6 @@ function robustJsonParse(rawContent) {
     
     return result;
 }
-
-// Удалите старые функции, которые больше не нужны:
-// - extractChoiceObjects
-// - validateAndFixStructure (старая версия)
-// Вместо них используйте validateAndNormalizeResponse из 7-2-api-response.js
 
 /**
  * Безопасный парсинг ответа ИИ

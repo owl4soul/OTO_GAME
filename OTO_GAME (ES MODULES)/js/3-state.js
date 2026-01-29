@@ -145,8 +145,7 @@ function initializeState() {
         // Гарантируем наличие текущей сцены
         if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
           console.warn('⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
-          
-          state.gameState.currentScene = PROMPTS.initialGameState;
+          state.gameState.currentScene = { ...PROMPTS.initialGameState };
         }
         
         console.log('✅ Состояние загружено из localStorage (формат 4.1)');
@@ -259,201 +258,152 @@ function syncDegree() {
 // ========================
 
 /**
- * Применение операции ADD к состоянию героя
- */
-function applyAddOperation(operation) {
-  const { id, value, duration, description } = operation;
-  
-  // Проверяем, существует ли уже такой game_item
-  const exists = state.heroState.some(item => item.id === id);
-  if (exists) {
-    console.warn(`⚠️ Game item ${id} уже существует, операция ADD пропущена`);
-    return false;
-  }
-  
-  // Создаем новый game_item
-  const newItem = { id, value };
-  
-  // Добавляем дополнительные поля в зависимости от типа
-  if (duration !== undefined) {
-    newItem.duration = duration;
-  }
-  
-  if (description !== undefined) {
-    newItem.description = description;
-  }
-  
-  state.heroState.push(newItem);
-  return true;
-}
-
-/**
- * Применение операции REMOVE к состоянию героя
- */
-function applyRemoveOperation(operation) {
-  const { id } = operation;
-  
-  const initialLength = state.heroState.length;
-  state.heroState = state.heroState.filter(item => item.id !== id);
-  
-  const removed = initialLength > state.heroState.length;
-  if (removed) {
-    console.log(`🗑️ Удален game_item: ${id}`);
-  }
-  
-  return removed;
-}
-
-/**
- * Применение операции SET к состоянию героя
- */
-function applySetOperation(operation) {
-  const { id, value, description } = operation;
-  
-  const itemIndex = state.heroState.findIndex(item => item.id === id);
-  if (itemIndex === -1) {
-    console.warn(`⚠️ Game item ${id} не найден для операции SET`);
-    return false;
-  }
-  
-  // Обновляем значение
-  state.heroState[itemIndex].value = value;
-  
-  // Обновляем описание, если предоставлено
-  if (description !== undefined) {
-    state.heroState[itemIndex].description = description;
-  }
-  
-  return true;
-}
-
-/**
- * Применение операции MODIFY к состоянию героя
- */
-function applyModifyOperation(operation) {
-  const { id, delta } = operation;
-  
-  const itemIndex = state.heroState.findIndex(item => item.id === id);
-  if (itemIndex === -1) {
-    console.warn(`⚠️ Game item ${id} не найден для операции MODIFY`);
-    return false;
-  }
-  
-  const item = state.heroState[itemIndex];
-  
-  // Проверяем, что значение числовое
-  if (typeof item.value !== 'number') {
-    console.warn(`⚠️ Game item ${id} имеет нечисловое значение для операции MODIFY`);
-    return false;
-  }
-  
-  // Применяем дельту с ограничениями
-  const newValue = item.value + delta;
-  
-  // Для статов ограничиваем 0-100
-  if (item.id.startsWith('stat:')) {
-    item.value = Math.max(0, Math.min(100, newValue));
-  }
-  // Для отношений ограничиваем -100 до 100
-  else if (item.id.startsWith('relations:')) {
-    item.value = Math.max(-100, Math.min(100, newValue));
-  }
-  // Для прогресса ограничиваем 0-100
-  else if (item.id.startsWith('progress:')) {
-    item.value = Math.max(0, Math.min(100, newValue));
-  }
-  // Для остальных просто применяем
-  else {
-    item.value = newValue;
-  }
-  
-  return true;
-}
-
-/**
- * Применение массива операций к состоянию героя
+ * Применение операций к game_items (ФОРМАТ 4.1) - ИСПРАВЛЕННАЯ ВЕРСИЯ
  */
 function applyOperations(operations) {
-  if (!Array.isArray(operations)) return [];
-  
-  const results = [];
-  
-  operations.forEach(op => {
-    try {
-      let success = false;
-      
-      switch (op.operation) {
-        case 'ADD':
-          success = applyAddOperation(op);
-          break;
-        case 'REMOVE':
-          success = applyRemoveOperation(op);
-          break;
-        case 'SET':
-          success = applySetOperation(op);
-          break;
-        case 'MODIFY':
-          success = applyModifyOperation(op);
-          break;
-        default:
-          console.warn(`⚠️ Неизвестная операция: ${op.operation}`);
-      }
-      
-      results.push({
-        operation: op.operation,
-        id: op.id,
-        success,
-        timestamp: new Date().toISOString()
-      });
-      
-    } catch (error) {
-      console.error(`❌ Ошибка применения операции ${JSON.stringify(op)}:`, error);
-      results.push({
-        operation: op.operation,
-        id: op.id,
-        success: false,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
+    console.log('🔧 applyOperations called with:', operations);
+    
+    if (!Array.isArray(operations) || operations.length === 0) {
+        console.log('⚠️ Нет операций для применения');
+        return;
     }
-  });
-  
-  // Проверяем смерть героя после применения операций
-  checkHeroDeath();
-  
-  // Сохраняем состояние
-  Saveload.saveState();
-  
-  return results;
+    
+    // Гарантируем наличие heroState как массива
+    if (!Array.isArray(state.heroState)) {
+        console.error('❌ heroState не является массивом');
+        return;
+    }
+    
+    let hasChanges = false;
+    
+    operations.forEach(operation => {
+        if (!operation || !operation.id || !operation.operation) {
+            console.warn('⚠️ Пропускаем некорректную операцию:', operation);
+            return;
+        }
+        
+        const existingIndex = state.heroState.findIndex(item => item && item.id === operation.id);
+        
+        try {
+            switch (operation.operation) {
+                case 'ADD':
+                    if (existingIndex === -1) {
+                        const newItem = {
+                            id: operation.id,
+                            value: operation.value,
+                            ...(operation.duration !== undefined && { duration: operation.duration }),
+                            ...(operation.description && { description: operation.description })
+                        };
+                        state.heroState.push(newItem);
+                        console.log(`➕ Добавлен: ${operation.id} = ${operation.value}`);
+                        hasChanges = true;
+                    }
+                    break;
+                    
+                case 'REMOVE':
+                    if (existingIndex !== -1) {
+                        state.heroState.splice(existingIndex, 1);
+                        console.log(`➖ Удален: ${operation.id}`);
+                        hasChanges = true;
+                    }
+                    break;
+                    
+                case 'SET':
+                    if (existingIndex !== -1) {
+                        state.heroState[existingIndex].value = operation.value;
+                        if (operation.description) {
+                            state.heroState[existingIndex].description = operation.description;
+                        }
+                        console.log(`✏️ Установлен: ${operation.id} = ${operation.value}`);
+                        hasChanges = true;
+                    }
+                    break;
+                    
+                case 'MODIFY':
+                    if (existingIndex !== -1) {
+                        const currentItem = state.heroState[existingIndex];
+                        if (typeof currentItem.value === 'number') {
+                            const newValue = currentItem.value + (operation.delta || 0);
+                            
+                            // Для статов ограничиваем 0-100
+                            if (operation.id.startsWith('stat:')) {
+                                state.heroState[existingIndex].value = Math.max(0, Math.min(100, newValue));
+                            } else {
+                                state.heroState[existingIndex].value = newValue;
+                            }
+                            
+                            console.log(`📊 Модифицирован: ${operation.id} ${currentItem.value} → ${state.heroState[existingIndex].value}`);
+                            hasChanges = true;
+                        }
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error(`❌ Ошибка при обработке операции ${JSON.stringify(operation)}:`, error);
+        }
+    });
+    
+    // Обновляем состояние только если были изменения
+    if (hasChanges) {
+        // Сбрасываем duration для баффов/дебаффов
+        processDurations();
+        
+        // Сохраняем состояние
+        Saveload.saveState();
+        console.log('✅ Состояние обновлено');
+    } else {
+        console.log('⚠️ Не было изменений для применения');
+    }
+}
+
+/**
+ * Обработка длительности баффов/дебаффов
+ */
+function processDurations() {
+    const buffs = state.heroState.filter(item => item.id.startsWith('buff:') || item.id.startsWith('debuff:'));
+    
+    buffs.forEach(buff => {
+        if (buff.duration !== undefined) {
+            buff.duration--;
+            if (buff.duration <= 0) {
+                // Удаляем истекший бафф/дебафф
+                const index = state.heroState.findIndex(item => item.id === buff.id);
+                if (index !== -1) {
+                    state.heroState.splice(index, 1);
+                    console.log(`🕐 Удален истекший: ${buff.id}`);
+                }
+            }
+        }
+    });
 }
 
 /**
  * Получение game_item по ID
  */
 function getGameItem(id) {
-  return state.heroState.find(item => item.id === id);
+    return state.heroState.find(item => item.id === id);
 }
 
 /**
  * Получение всех game_items определенного типа
  */
 function getGameItemsByType(typePrefix) {
-  return state.heroState.filter(item => item.id.startsWith(typePrefix));
+    return state.heroState.filter(item => item.id.startsWith(typePrefix));
 }
 
 /**
  * Проверка наличия game_item
  */
 function hasGameItem(id) {
-  return state.heroState.some(item => item.id === id);
+    return state.heroState.some(item => item.id === id);
 }
 
 /**
  * Получение значения game_item
  */
 function getGameItemValue(id) {
-  const item = getGameItem(id);
-  return item ? item.value : null;
+    const item = getGameItem(id);
+    return item ? item.value : null;
 }
 
 // ========================
@@ -479,7 +429,7 @@ function resetGameProgress() {
       summary: "",
       history: [],
       aiMemory: {},
-      currentScene: { ...PROMPTS.initialGameState.scene },
+      currentScene: { ...PROMPTS.initialGameState },
       selectedActions: [],
     };
     

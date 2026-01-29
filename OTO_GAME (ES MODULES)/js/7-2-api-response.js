@@ -69,7 +69,12 @@ function validateAndNormalizeResponse(parsedData) {
                 ? Math.max(1, Math.min(10, choice.difficulty_level)) 
                 : 5,
             requirements: Array.isArray(choice.requirements) 
-                ? choice.requirements.filter(req => typeof req === 'string' && req.includes(':'))
+                ? choice.requirements.map(req => {
+                    if (typeof req === 'string' && req.includes(':')) {
+                        return req.trim();
+                    }
+                    return null;
+                }).filter(Boolean)
                 : [],
             success_rewards: Array.isArray(choice.success_rewards) 
                 ? choice.success_rewards.filter(op => op && op.operation && op.id)
