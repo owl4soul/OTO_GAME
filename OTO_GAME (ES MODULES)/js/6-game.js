@@ -172,7 +172,7 @@ function createTurnUpdatesHTML(actionResults, events) {
         
         actionResults.forEach((result, idx) => {
             const operations = result.operations || [];
-            if (operations.length === 0) return;
+            if (operations.length === 0 && !result.reason) return;
             
             hasActionOperations = true;
             const successColor = result.success ? '#4cd137' : '#e84118';
@@ -184,9 +184,9 @@ function createTurnUpdatesHTML(actionResults, events) {
                     <div style="color: ${successColor}; font-weight: bold;">
                         <i class="fas ${successIcon}"></i> Действие ${idx + 1}${partialText}
                     </div>
-                    <div style="color: #ccc; font-size: 0.8rem; margin-top: 4px;">${result.reason || 'Результат действия'}</div>
+                    <div style="color: #ccc; font-size: 0.8rem; margin-top: 4px;">${result.choice_text || 'Действие'}</div>
                     <div style="color: #888; font-size: 0.75rem; margin-top: 4px;">
-                        🎯 Сложность: ${result.difficulty || 'N/A'} | 🎲 d10: ${result.d10 || 'N/A'}
+                        ${result.reason || ''} | 🎯 Сложность: ${result.difficulty} | 🎲 d10: ${result.d10}
                     </div>
             `;
             
@@ -221,7 +221,6 @@ function createTurnUpdatesHTML(actionResults, events) {
         
         events.forEach((event, idx) => {
             const effects = event.effects || [];
-            if (effects.length === 0) return;
             
             hasEventOperations = true;
             const eventTypeIcons = {
@@ -275,6 +274,18 @@ function calculateChoiceResult(choice, d10) {
     if (!choice || typeof choice !== 'object') {
         console.error('❌ Некорректный choice для расчета:', choice);
         return null;
+    }
+    
+    // 🚫🚫🚫 ИЗМЕНЕНО: Если сложность 0 (свободный ввод), считаем это автоматическим успехом
+    if (choice.difficulty_level === 0) {
+        return {
+            success: true,
+            partial: false,
+            reason: 'Свободный ввод: Автоматический успех',
+            d10: d10,
+            difficulty: 0,
+            operations: []
+        };
     }
     
     const requirementsCheck = checkRequirements(choice.requirements || []);
@@ -462,9 +473,10 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             return;
         }
         
+        // 🚫🚫🚫 ИЗМЕНЕНО: Для свободного ввода ставим сложность 0, чтобы гарантировать успех
         selectedChoicesData = [{
             text: requestText,
-            difficulty_level: 5,
+            difficulty_level: 0, 
             requirements: [],
             success_rewards: [],
             fail_penalties: []
@@ -520,8 +532,9 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     
     console.log('📊 Результаты действий:', actionResults);
     
+    // 🚫🚫🚫 ИЗМЕНЕНО: Исправлен ключ с choice_text на text для корректной передачи в API Prompt
     const selectedActions = actionResults.map(result => ({
-        choice_text: result.choice_text,
+        text: result.choice_text, // WAS: choice_text
         difficulty_level: result.difficulty,
         requirements: selectedChoicesData.find(c => c.text === result.choice_text)?.requirements || [],
         success: result.success,
@@ -662,11 +675,12 @@ function processTurn(data, actionResults, d10) {
         scene: data.scene || state.gameState.currentScene.scene,
         reflection: data.reflection || "",
         choices: data.choices || state.gameState.currentScene.choices,
-        typology: data.typology || "",
+        typology: data.typology || "", // 🚫🚫🚫 Важно: сохраняем типологию для отображения
         design_notes: data.design_notes || ""
     };
     
     // 6. Добавляем в историю
+    // 🚫🚫🚫 ИЗМЕНЕНО: Добавляем actionResults для корректного отображения в контексте следующего хода
     const newHistoryEntry = {
         fullText: data.scene || "",
         summary: data.summary || "",
@@ -702,6 +716,7 @@ function processTurn(data, actionResults, d10) {
     State.incrementTurnCount();
     
     // 8. Создаем и показываем блок изменений за ход
+    // В renderScene (File 5) этот блок будет перемещен наверх
     const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
     console.log('📄 Созданный HTML изменений:', updatesHTML);
     

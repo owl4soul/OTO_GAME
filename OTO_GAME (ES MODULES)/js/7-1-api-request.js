@@ -68,6 +68,7 @@ function getDynamicSystemInjections(state) {
 
 /**
  * Сборка блока контекста для USER-промпта (ФОРМАТ 4.1)
+ * 🚫🚫🚫 ИЗМЕНЕНО: Обновлена логика чтения истории для поддержки actionResults
  */
 function buildContextBlock(state) {
     let parts = [];
@@ -77,9 +78,9 @@ function buildContextBlock(state) {
         parts.push(`### ГЛОБАЛЬНАЯ ЛЕТОПИСЬ\n${state.gameState.summary}`);
     }
     
-    // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ МИРА (aiMemory)
+    // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ ИИ (aiMemory)
     if (state.gameState.aiMemory && Object.keys(state.gameState.aiMemory).length > 0) {
-        parts.push(`### ДИНАМИЧЕСКАЯ ПАМЯТЬ МИРА\n${JSON.stringify(state.gameState.aiMemory, null, 2)}`);
+        parts.push(`### ТВОЯ ДИНАМИЧЕСКАЯ ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(state.gameState.aiMemory, null, 2)}`);
     }
     
     // В. КРАТКОСРОЧНАЯ ИСТОРИЯ
@@ -87,9 +88,14 @@ function buildContextBlock(state) {
     const historySlice = state.gameState.history.slice(-turnsToTake);
     
     if (historySlice.length > 0) {
-        const historyString = historySlice.map(entry =>
-            `СЦЕНА: ${entry.fullText}\nВЫБОР: ${entry.choice}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`
-        ).join('\n---\n');
+        const historyString = historySlice.map(entry => {
+            // 🚫🚫🚫 Извлечение текста выбора из массива actionResults или fallback к старому полю choice
+            const choiceText = entry.actionResults 
+                ? entry.actionResults.map(a => `${a.text}${a.success ? '' : ' (Провал)'}`).join(', ') 
+                : (entry.choice || 'Нет выбора');
+                
+            return `СЦЕНА: ${entry.fullText}\nВЫБОР: ${choiceText}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`;
+        }).join('\n---\n');
         parts.push(`### КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ${historySlice.length} ходов)\n${historyString}`);
     }
     
@@ -181,7 +187,7 @@ ${PROMPTS.commonErrors}`;
     const needsHeroPhrases = State.needsHeroPhrases();
     
     const userPrompt = `### ЗАДАНИЕ:
-Сгенерируй следующую сцену на основе выбранных действий и текущего состояния героя.
+Сгенерируй продолжение игры.
 
 ### ИНСТРУКЦИИ:
 1. Используй ПОШАГОВЫЙ АЛГОРИТМ ГЕНЕРАЦИИ ОТВЕТА из системного промпта.
@@ -196,7 +202,7 @@ d10 = ${d10}
 ${contextBlock}
 
 ### ТЕКУЩАЯ СЦЕНА:
-${state.gameState.currentScene.text}
+${state.gameState.currentScene.scene}
 
 ### СОСТОЯНИЕ ГЕРОЯ (GAME_ITEMS):
 ${heroStateSummary}
@@ -207,7 +213,7 @@ ${formatSelectedActionsForPrompt(selectedActions)}
 ${needsHeroPhrases ? '### ЗАПРОС: Пожалуйста, сгенерируй 10+ мыслей героя (thoughts) для отображения в интерфейсе.' : ''}
 
 ### ТРЕБОВАНИЯ К ОТВЕТУ:
-Верни ТОЛЬКО валидный JSON объект согласно указанной структуре, без пояснений или дополнительного текста.`;
+Верни ТОЛЬКО валидный JSON объект согласно указанной структуре.`;
     
     return {
         messages: [
@@ -215,8 +221,8 @@ ${needsHeroPhrases ? '### ЗАПРОС: Пожалуйста, сгенериру
             { role: "user", content: userPrompt }
         ],
         model: state.settings.model,
-        temperature: 0.7,
-        max_tokens: 4000
+        temperature: 0.9,
+        max_tokens: 10000
     };
 }
 

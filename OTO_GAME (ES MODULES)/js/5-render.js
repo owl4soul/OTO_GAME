@@ -299,6 +299,7 @@ function renderAuditList() {
 
 /**
  * Отрисовка текущей сцены
+ * 🚫🚫🚫 ИЗМЕНЕНО: Добавлен вывод Типологии под рефлексией и принудительное перемещение блока изменений наверх
  */
 function renderScene() {
     const state = State.getState();
@@ -311,18 +312,10 @@ function renderScene() {
     
     const currentScene = state.gameState.currentScene;
     
-    if (currentScene.scene) {
-        dom.sceneText.innerHTML = `<p>${currentScene.scene.replace(/\n/g, '</p><p>')}</p>`;
-    } else {
-        console.warn('⚠️ Текст сцены пуст, использую дефолтный');
-        dom.sceneText.innerHTML = PROMPTS.initialGameState.scene;
-    }
-    
-    if (currentScene.reflection) {
-        dom.reflection.style.display = 'block';
-        dom.reflection.textContent = currentScene.reflection;
-    } else {
-        dom.reflection.style.display = 'none';
+    // 🚫🚫🚫 ГЛОБАЛЬНАЯ ЗАДАЧА: Весь блок изменений перенести наверх
+    if (dom.updates && dom.sceneText && dom.sceneText.parentNode) {
+        // Перемещаем блок updates перед sceneText в DOM
+        dom.sceneText.parentNode.insertBefore(dom.updates, dom.sceneText);
     }
     
     if (state.lastTurnUpdates && state.lastTurnUpdates.length > 0) {
@@ -332,29 +325,57 @@ function renderScene() {
         dom.updates.style.display = 'none';
         dom.updates.innerHTML = '';
     }
+    
+    if (currentScene.scene) {
+        dom.sceneText.innerHTML = `<p>${currentScene.scene.replace(/\n/g, '</p><p>')}</p>`;
+    } else {
+        console.warn('⚠️ Текст сцены пуст, использую дефолтный');
+        dom.sceneText.innerHTML = PROMPTS.initialGameState.scene;
+    }
+    
+    // 🚫🚫🚫 ГЛОБАЛЬНАЯ ЗАДАЧА: Типологию отобразить под рефлексией
+    let reflectionAndTypologyHtml = '';
+    
+    if (currentScene.reflection) {
+        reflectionAndTypologyHtml += `<div class="reflection-content">${currentScene.reflection}</div>`;
+    }
+    
+    if (currentScene.typology) {
+        reflectionAndTypologyHtml += `<div class="typology-content" style="margin-top: 10px; font-style: italic; color: #1dd1a1; font-size: 0.9em;">
+            <i class="fas fa-fingerprint"></i> ${currentScene.typology}
+        </div>`;
+    }
+    
+    if (reflectionAndTypologyHtml) {
+        dom.reflection.style.display = 'block';
+        dom.reflection.innerHTML = reflectionAndTypologyHtml;
+    } else {
+        dom.reflection.style.display = 'none';
+    }
 }
 
 /**
  * Отрисовка характеристик героя, прогресса и степеней (ФОРМАТ 4.1)
+ * 🚫🚫🚫 ИЗМЕНЕНО: Изменена логика отображения статов (цвет значения + дельта с ходами)
  */
 function renderStats() {
     const state = State.getState();
     
     // 1. Получаем значения статов из game_items
-    const willValue = State.getGameItemValue('stat:will') || 50;
-    const stealthValue = State.getGameItemValue('stat:stealth') || 50;
-    const influenceValue = State.getGameItemValue('stat:influence') || 50;
-    const sanityValue = State.getGameItemValue('stat:sanity') || 50;
+    const statsData = {
+        will: State.getGameItemValue('stat:will') || 50,
+        stealth: State.getGameItemValue('stat:stealth') || 50,
+        influence: State.getGameItemValue('stat:influence') || 50,
+        sanity: State.getGameItemValue('stat:sanity') || 50
+    };
     
-    // Обновляем значения характеристик
-    dom.vals.will.textContent = willValue;
-    dom.vals.stealth.textContent = stealthValue;
-    dom.vals.inf.textContent = influenceValue;
-    dom.vals.sanity.textContent = sanityValue;
+    // Обновляем значения характеристик (базовые)
+    dom.vals.will.textContent = statsData.will;
+    dom.vals.stealth.textContent = statsData.stealth;
+    dom.vals.inf.textContent = statsData.influence;
+    dom.vals.sanity.textContent = statsData.sanity;
     
-    // 2. Обновляем описание личности
-    const personality = State.getGameItemValue('personality:hero') || "Описание отсутствует";
-    dom.pers.textContent = personality;
+    // 2. Обновляем описание личности (отображается в нижней секции в renderAllGameItems)
     
     // 3. Обновляем прогресс-бар
     const progressValue = State.getGameItemValue('progress:oto') || 0;
@@ -383,14 +404,15 @@ function renderStats() {
         }).join('');
     }
     
-    // 5. Отображаем баффы/дебаффы рядом со статами
-    renderBuffsAndDebuffsStats();
+    // 5. 🚫🚫🚫 ГЛОБАЛЬНАЯ ЗАДАЧА: Баффы/Дебаффы отображать рядом со значениями статов с дельтой и ходами
+    renderBuffsAndDebuffsStats(statsData);
 }
 
 /**
  * Отображение баффов/дебаффов рядом со статами
+ * 🚫🚫🚫 ИЗМЕНЕНО: Реализован формат (val +/-delta (turns)) и окрашивание значения
  */
-function renderBuffsAndDebuffsStats() {
+function renderBuffsAndDebuffsStats(currentBaseStats) {
     const buffs = State.getGameItemsByType('buff:');
     const debuffs = State.getGameItemsByType('debuff:');
     const allEffects = [...buffs, ...debuffs];
@@ -402,178 +424,231 @@ function renderBuffsAndDebuffsStats() {
         'sanity': []
     };
     
+    // Группируем модификаторы по статам
     allEffects.forEach(effect => {
         const [type, statName] = effect.id.split(':');
         if (statModifiers[statName] && effect.value && effect.duration) {
             statModifiers[statName].push({
                 value: effect.value,
-                duration: effect.duration
+                duration: effect.duration,
+                type: type // 'buff' or 'debuff'
             });
         }
     });
     
+    // Рендерим для каждого стата
     Object.entries(statModifiers).forEach(([statName, modifiers]) => {
-        if (modifiers.length > 0) {
-            const total = modifiers.reduce((sum, mod) => sum + mod.value, 0);
-            const durationText = modifiers.map(m => `(${m.duration})`).join(' ');
-            const sign = total > 0 ? '+' : '';
-            const color = total > 0 ? '#4cd137' : '#e84118';
+        const valElement = document.getElementById(`val${statName.charAt(0).toUpperCase() + statName.slice(1)}`);
+        
+        if (valElement) {
+            const baseValue = currentBaseStats[statName];
             
-            const valElement = document.getElementById(`val${statName.charAt(0).toUpperCase() + statName.slice(1)}`);
-            if (valElement) {
-                const baseValue = parseInt(valElement.textContent) || 50;
+            if (modifiers.length > 0) {
+                // Считаем сумму модификаторов
+                const totalMod = modifiers.reduce((sum, mod) => sum + mod.value, 0);
+                // Формируем строку дельт: (+5 (3)) (-2 (1))
+                const deltasHtml = modifiers.map(m => {
+                    const sign = m.value > 0 ? '+' : '';
+                    const color = m.value > 0 ? '#4cd137' : '#e84118';
+                    return `<span style="color: ${color}; margin-left: 3px; font-size: 0.8em;">(${sign}${m.value} (${m.duration}))</span>`;
+                }).join('');
+                
+                // Цвет основного значения зависит от суммы модификаторов
+                let valueColor = '#fff'; // белый по умолчанию
+                if (totalMod > 0) valueColor = '#4cd137'; // зеленый
+                else if (totalMod < 0) valueColor = '#e84118'; // красный
+                
+                // Финальный рендер строки стата
                 valElement.innerHTML = `
-                    ${baseValue} 
-                    <span style="color: ${color}; font-size: 0.9em; margin-left: 4px;">
-                        (${sign}${total} ${durationText})
-                    </span>
+                    <span style="color: ${valueColor}; font-weight: bold;">${baseValue}</span>
+                    ${deltasHtml}
                 `;
+            } else {
+                // Если нет модификаторов, просто значение
+                valElement.innerHTML = baseValue;
             }
         }
     });
 }
 
 /**
- * Отображение всех game_items в нижней секции
+ * Вспомогательная функция для рендеринга секции в левой панели
+ * 🚫🚫🚫 НОВАЯ ФУНКЦИЯ: Стандартизирует заголовки и плейсхолдеры
  */
-function renderAllGameItems() {
-    console.log('🔍 renderAllGameItems called');
-    
-    // 1. Отображаем Личность (уже в renderStats)
-    // 2. Отображаем Отношения
-    renderRelations();
-    
-    // 3. Отображаем Навыки
-    renderSkills();
-    
-    // 4. Отображаем Благословения/Проклятия
-    renderBlessingsAndCurses();
-    
-    // 5. Отображаем Инвентарь
-    renderInventory();
-    
-    // 6. Отображаем Баффы/Дебаффы отдельным блоком
-    renderBuffsAndDebuffsList();
+function renderSectionHTML(title, icon, color, items, renderItemFn) {
+    let html = `<div style="margin-top: 15px; font-weight: bold; color: ${color}; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; font-size: 0.85rem;">
+        <i class="fas ${icon}"></i> ${title} ${items.length > 0 ? `(${items.length})` : ''}
+    </div>`;
+
+    if (!items || items.length === 0) {
+        html += `<div style="font-size: 0.8rem; color: #444; font-style: italic;">Нет данных...</div>`;
+    } else {
+        html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
+        html += items.map(renderItemFn).join('');
+        html += `</div>`;
+    }
+    return html;
 }
 
 /**
- * Отображение списка баффов и дебаффов
+ * Отображение всех game_items в нижней секции
+ * 🚫🚫🚫 ИЗМЕНЕНО: Полностью переписана для обеспечения строгого порядка вывода блоков
  */
-function renderBuffsAndDebuffsList() {
-    let buffsContainer = document.getElementById('buffsContainer');
-    if (!buffsContainer) {
-        buffsContainer = document.createElement('div');
-        buffsContainer.id = 'buffsContainer';
-        buffsContainer.className = 'buffs-section';
-        
-        const blessingsContainer = document.getElementById('blessingsContainer');
-        const targetContainer = blessingsContainer || 
-                               document.getElementById('skillsContainer') ||
-                               document.getElementById('inventoryContainer');
-        
-        if (targetContainer && targetContainer.parentNode) {
-            targetContainer.parentNode.insertBefore(buffsContainer, targetContainer.nextSibling);
-        }
+function renderAllGameItems() {
+    console.log('🔍 renderAllGameItems called (Unified Order)');
+    
+    // Целевой контейнер - родитель элемента Personality.
+    // Мы будем добавлять блоки после dom.pers (элемента личности)
+    // Но чтобы соблюсти порядок, лучше очистить контейнер (кроме прогресс-бара, если он там) или 
+    // создать единый контейнер для инфо-блоков.
+    
+    // Предполагаем структуру: Parent -> [PersonalityDiv, ..., OtherDivs]
+    // Чтобы не ломать верстку, найдем контейнер, где лежит personalityDisplay
+    const personalityEl = document.getElementById('personalityDisplay');
+    if (!personalityEl || !personalityEl.parentNode) {
+        console.error('❌ Cannot find personalityDisplay container');
+        return;
     }
     
+    const container = personalityEl.parentNode;
+    
+    // 1. Отрисовка ЛИЧНОСТИ (всегда первая)
+    const personalityVal = State.getGameItemValue('personality:hero') || "Описание отсутствует";
+    personalityEl.textContent = personalityVal;
+    
+    // Удаляем все предыдущие динамические контейнеры, чтобы пересоздать их в правильном порядке
+    // Идентификаторы контейнеров, которые мы управляем:
+    const managedIds = [
+        'typologyContainer', 
+        'relationsDisplay', 
+        'skillsContainer', 
+        'blessingsContainer', 
+        'buffsContainer',
+        'inventoryContainer' // Инвентарь тоже, хотя в задаче про него не сказано явно в списке порядка, но он есть в коде
+    ];
+    
+    managedIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    });
+    
+    // Создаем фрагмент для вставки в нужном порядке
+    const fragment = document.createDocumentFragment();
+    
+    // 2. ТИПОЛОГИЯ (Typology)
+    // Глобальная задача: Типология (последняя переданная не пустая)
+    const state = State.getState();
+    const typologyVal = state.gameState.currentScene ? state.gameState.currentScene.typology : null;
+    
+    const typologyDiv = document.createElement('div');
+    typologyDiv.id = 'typologyContainer';
+    typologyDiv.innerHTML = `<div style="margin-top: 10px; font-weight: bold; color: #1dd1a1; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; font-size: 0.85rem;">
+        <i class="fas fa-fingerprint"></i> ТИПОЛОГИЯ
+    </div>
+    <div style="font-size: 0.8rem; color: ${typologyVal ? '#ccc' : '#444; font-style: italic'};">
+        ${typologyVal || 'Не определена...'}
+    </div>`;
+    fragment.appendChild(typologyDiv);
+
+    // 3. ОТНОШЕНИЯ (Relations)
+    const relationsDiv = document.createElement('div');
+    relationsDiv.id = 'relationsDisplay';
+    relationsDiv.className = 'relations-section';
+    const relationItems = State.getGameItemsByType('relations:');
+    relationsDiv.innerHTML = renderSectionHTML('ОТНОШЕНИЯ', 'fa-handshake', '#fbc531', relationItems, (item) => {
+        const npcName = item.id.split(':')[1].replace(/_/g, ' ');
+        const val = item.value || 0;
+        let color = val >= 60 ? '#4cd137' : val >= 20 ? '#9c88ff' : val > -20 ? '#fbc531' : '#e84118';
+        return `
+            <div style="width: 100%; display:flex; justify-content:space-between; align-items:center; gap:6px; padding:4px 0; border-bottom:1px solid #222;">
+                <span style="color:#ccc; font-size:0.75rem;">${npcName}</span>
+                <span style="color:${color}; font-family:monospace; font-weight:bold; font-size:0.8rem;">${val > 0 ? '+' : ''}${val}</span>
+            </div>`;
+    });
+    fragment.appendChild(relationsDiv);
+
+    // 4. НАВЫКИ (Skills)
+    const skillsDiv = document.createElement('div');
+    skillsDiv.id = 'skillsContainer';
+    skillsDiv.className = 'skills-section';
+    const skillItems = State.getGameItemsByType('skill:');
+    skillsDiv.innerHTML = renderSectionHTML('НАВЫКИ', 'fa-scroll', '#9c88ff', skillItems, (item) => {
+        const name = item.value || item.id.split(':')[1];
+        const desc = item.description ? ` title="${item.description}"` : '';
+        return `<span style="background:rgba(156, 136, 255, 0.15); padding:3px 8px; border-radius:4px; font-size:0.75rem; border:1px solid rgba(156, 136, 255, 0.3); color:#ccc; margin-bottom: 4px;"${desc}>${name}</span>`;
+    });
+    fragment.appendChild(skillsDiv);
+
+    // 5. БЛАГОСЛОВЕНИЯ/ПРОКЛЯТИЯ (Blessings/Curses)
+    const blessDiv = document.createElement('div');
+    blessDiv.id = 'blessingsContainer';
+    blessDiv.className = 'blessings-section';
+    const blessItems = State.getGameItemsByType('bless:');
+    const curseItems = State.getGameItemsByType('curse:');
+    const allPowers = [...blessItems, ...curseItems];
+    blessDiv.innerHTML = renderSectionHTML('СИЛЫ', 'fa-star', '#ff9ff3', allPowers, (item) => {
+        const isBlessing = item.id.startsWith('bless:');
+        const name = item.value || item.id.split(':')[1];
+        const color = isBlessing ? '#fbc531' : '#c23616';
+        const bgColor = isBlessing ? 'rgba(251, 197, 49, 0.1)' : 'rgba(194, 54, 22, 0.1)';
+        const icon = isBlessing ? '✨' : '💀';
+        return `
+            <div style="background: ${bgColor}; padding: 4px 8px; border-radius: 4px; border: 1px solid ${color}; width: 100%; margin-bottom: 2px;" title="${item.description || ''}">
+                <span style="color: ${color}; font-size: 0.75rem;">${icon} ${name}</span>
+            </div>`;
+    });
+    fragment.appendChild(blessDiv);
+
+    // 6. БАФФЫ/ДЕБАФФЫ (Buffs/Debuffs)
+    const buffsDiv = document.createElement('div');
+    buffsDiv.id = 'buffsContainer';
+    buffsDiv.className = 'buffs-section';
     const buffItems = State.getGameItemsByType('buff:');
     const debuffItems = State.getGameItemsByType('debuff:');
     const allBuffs = [...buffItems, ...debuffItems];
-    
-    let html = `<div style="margin-top: 10px; font-weight: bold; color: #00a8ff; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; font-size: 0.85rem;">
-        <i class="fas fa-sparkles"></i> ЭФФЕКТЫ (${allBuffs.length})
-    </div>`;
-
-    if (allBuffs.length === 0) {
-        html += `<div style="font-size: 0.8rem; color: #666; font-style: italic;">Нет активных эффектов</div>`;
-    } else {
-        html += `<div style="display: flex; flex-direction: column; gap: 4px;">`;
-        allBuffs.forEach(buff => {
-            const isBuff = buff.id.startsWith('buff:');
-            const buffName = buff.id.split(':')[1];
-            const buffValue = buff.value || 0;
-            const duration = buff.duration || 0;
-            const description = buff.description || '';
-            
-            const color = isBuff ? '#4cd137' : '#e84118';
-            const icon = isBuff ? '📈' : '📉';
-            const sign = buffValue > 0 ? '+' : '';
-            
-            html += `
-                <div style="background: rgba(${isBuff ? '76, 175, 80' : '244, 67, 54'}, 0.1); padding: 6px 8px; border-radius: 4px; border-left: 3px solid ${color};">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                        <div style="color: ${color}; font-size: 0.8rem;">
-                            ${icon} ${buffName}: ${sign}${buffValue}
-                        </div>
-                        <div style="color: #888; font-size: 0.7rem;">
-                            ${duration} ход${duration === 1 ? '' : duration > 1 && duration < 5 ? 'а' : 'ов'}
-                        </div>
-                    </div>
-                    ${description ? `<div style="font-size: 0.7rem; color: #aaa;">${description}</div>` : ''}
+    buffsDiv.innerHTML = renderSectionHTML('ЭФФЕКТЫ', 'fa-sparkles', '#00a8ff', allBuffs, (item) => {
+        const isBuff = item.id.startsWith('buff:');
+        const name = item.id.split(':')[1];
+        const val = item.value || 0;
+        const dur = item.duration || 0;
+        const color = isBuff ? '#4cd137' : '#e84118';
+        const icon = isBuff ? '📈' : '📉';
+        const sign = val > 0 ? '+' : '';
+        return `
+            <div style="background: rgba(${isBuff ? '76, 175, 80' : '244, 67, 54'}, 0.1); padding: 4px 8px; border-radius: 4px; border-left: 3px solid ${color}; width: 100%; margin-bottom: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="color: ${color}; font-size: 0.8rem;">${icon} ${name}: ${sign}${val}</div>
+                    <div style="color: #888; font-size: 0.7rem;">(${dur} ход.)</div>
                 </div>
-            `;
-        });
-        html += `</div>`;
-    }
+            </div>`;
+    });
+    fragment.appendChild(buffsDiv);
     
-    buffsContainer.innerHTML = html;
+    // 7. ИНВЕНТАРЬ (Inventory) - добавляем в конец, чтобы не потерять
+    const invDiv = document.createElement('div');
+    invDiv.id = 'inventoryContainer';
+    invDiv.className = 'inventory-section';
+    const invItems = State.getGameItemsByType('inventory:');
+    invDiv.innerHTML = renderSectionHTML('ИНВЕНТАРЬ', 'fa-box-open', '#d4af37', invItems, (item) => {
+        const name = item.value || item.id.split(':')[1];
+        return `
+            <div style="background:rgba(255,255,255,0.08); padding:6px 8px; border-radius:4px; border:1px solid #444; width: 100%; margin-bottom: 2px;">
+                <div style="color:#ccc; font-size:0.8rem;">${name}</div>
+            </div>`;
+    });
+    fragment.appendChild(invDiv);
+
+    // Вставляем все созданные блоки после personalityEl
+    // Используем insertBefore с nextSibling, чтобы вставить сразу после Personality
+    if (personalityEl.nextSibling) {
+        container.insertBefore(fragment, personalityEl.nextSibling);
+    } else {
+        container.appendChild(fragment);
+    }
 }
 
-/**
- * Отображение благословений и проклятий
- */
-function renderBlessingsAndCurses() {
-    const blessItems = State.getGameItemsByType('bless:');
-    const curseItems = State.getGameItemsByType('curse:');
-    const allItems = [...blessItems, ...curseItems];
-    
-    let container = document.getElementById('blessingsContainer');
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'blessingsContainer';
-        container.className = 'blessings-section';
-        
-        const skillsContainer = document.getElementById('skillsContainer');
-        const relationsContainer = document.getElementById('relationsDisplay');
-        const targetContainer = relationsContainer || skillsContainer || 
-                               document.getElementById('inventoryContainer');
-        
-        if (targetContainer && targetContainer.parentNode) {
-            targetContainer.parentNode.insertBefore(container, targetContainer.nextSibling);
-        }
-    }
-    
-    let html = `<div style="margin-top: 15px; font-weight: bold; color: #ff9ff3; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; font-size: 0.85rem;">
-        <i class="fas fa-star"></i> СИЛЫ (${allItems.length})
-    </div>`;
-
-    if (allItems.length === 0) {
-        html += `<div style="font-size: 0.8rem; color: #666; font-style: italic;">Нет благословений или проклятий</div>`;
-    } else {
-        html += `<div style="display: flex; flex-wrap: wrap; gap: 6px;">`;
-        allItems.forEach(item => {
-            const isBlessing = item.id.startsWith('bless:');
-            const itemName = item.value || item.id.split(':')[1];
-            const description = item.description || '';
-            
-            const color = isBlessing ? '#fbc531' : '#c23616';
-            const bgColor = isBlessing ? 'rgba(251, 197, 49, 0.1)' : 'rgba(194, 54, 22, 0.1)';
-            const icon = isBlessing ? '✨' : '💀';
-            
-            html += `
-                <div style="background: ${bgColor}; padding: 4px 8px; border-radius: 4px; border: 1px solid ${color};" 
-                     title="${description}">
-                    <span style="color: ${color}; font-size: 0.75rem;">
-                        ${icon} ${itemName}
-                    </span>
-                </div>
-            `;
-        });
-        html += `</div>`;
-    }
-    
-    container.innerHTML = html;
-}
+// 🚫🚫🚫 Удалены отдельные функции renderInventory, renderSkills, renderRelations, renderBlessingsAndCurses, renderBuffsAndDebuffsList
+// так как их функционал полностью интегрирован в renderAllGameItems для обеспечения строгого порядка.
 
 /**
  * Полная перерисовка интерфейса
@@ -585,7 +660,7 @@ function renderAll() {
         renderScene();
         renderStats();
         renderChoices();
-        renderAllGameItems();
+        renderAllGameItems(); // 🚫🚫🚫 Вызывает новую унифицированную функцию
         renderHistory();
         applyStateEffects();
         updateUIMode();
@@ -867,146 +942,6 @@ function renderChoices() {
 }
 
 /**
- * Отрисовка инвентаря (ФОРМАТ 4.1 - game_items)
- */
-function renderInventory() {
-    let invContainer = document.getElementById('inventoryContainer');
-    
-    if (!invContainer) {
-        invContainer = document.createElement('div');
-        invContainer.id = 'inventoryContainer';
-        invContainer.className = 'inventory-section';
-        if (dom.pers && dom.pers.parentNode) {
-            dom.pers.parentNode.insertBefore(invContainer, dom.pers.nextSibling);
-        }
-    }
-    
-    const inventoryItems = State.getGameItemsByType('inventory:');
-    
-    let html = `<div style="margin-top:15px; font-weight:bold; color:#d4af37; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
-        <i class="fas fa-box-open"></i> ИНВЕНТАРЬ (${inventoryItems.length})
-    </div>`;
-    
-    if (inventoryItems.length === 0) {
-        html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Пусто...</div>`;
-    } else {
-        html += `<div style="display:flex; flex-direction:column; gap:4px;">`;
-        inventoryItems.forEach(item => {
-            const cleanItem = item.value || item.id.split(':')[1];
-            const description = item.description ? 
-                `<div style="font-size:0.7rem; color:#888; margin-top:2px;">${item.description}</div>` : '';
-            
-            html += `
-                <div style="background:rgba(255,255,255,0.08); padding:6px 8px; border-radius:4px; border:1px solid #444;">
-                    <div style="color:#ccc; font-size:0.8rem;">${cleanItem}</div>
-                    ${description}
-                </div>
-            `;
-        });
-        html += `</div>`;
-    }
-    
-    invContainer.innerHTML = html;
-}
-
-/**
- * Отрисовка навыков (ФОРМАТ 4.1 - game_items)
- */
-function renderSkills() {
-    let skillsContainer = document.getElementById('skillsContainer');
-    if (!skillsContainer) {
-        skillsContainer = document.createElement('div');
-        skillsContainer.id = 'skillsContainer';
-        skillsContainer.className = 'skills-section';
-        
-        const pers = document.getElementById('personalityDisplay');
-        if (pers && pers.parentNode) {
-            pers.parentNode.insertBefore(skillsContainer, pers.nextSibling);
-        }
-    }
-    
-    const skillItems = State.getGameItemsByType('skill:');
-    
-    let html = `<div style="margin-top:15px; font-weight:bold; color:#9c88ff; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
-        <i class="fas fa-scroll"></i> НАВЫКИ (${skillItems.length})
-    </div>`;
-    
-    if (skillItems.length === 0) {
-        html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Еще не изучены...</div>`;
-    } else {
-        html += `<div style="display:flex; flex-wrap:wrap; gap:6px;">`;
-        skillItems.forEach(skill => {
-            const cleanSkill = skill.value || skill.id.split(':')[1];
-            const description = skill.description ? 
-                ` title="${skill.description}"` : '';
-            
-            html += `<span style="background:rgba(156, 136, 255, 0.15); padding:3px 8px; border-radius:4px; font-size:0.75rem; border:1px solid rgba(156, 136, 255, 0.3); color:#ccc;"${description}>${cleanSkill}</span>`;
-        });
-        html += `</div>`;
-    }
-    
-    skillsContainer.innerHTML = html;
-}
-
-/**
- * Отрисовка отношений (ФОРМАТ 4.1 - game_items)
- */
-function renderRelations() {
-    let relContainer = document.getElementById('relationsDisplay');
-    if (!relContainer) {
-        relContainer = document.createElement('div');
-        relContainer.id = 'relationsDisplay';
-        relContainer.className = 'relations-section';
-        
-        const invContainer = document.getElementById('inventoryContainer');
-        if (invContainer && invContainer.parentNode) {
-            invContainer.parentNode.insertBefore(relContainer, invContainer.nextSibling);
-        } else if (dom.pers && dom.pers.parentNode) {
-            dom.pers.parentNode.insertBefore(relContainer, dom.pers.nextSibling);
-        }
-    }
-
-    const relationItems = State.getGameItemsByType('relations:');
-    
-    let html = `<div style="margin-top:10px; font-weight:bold; color:#fbc531; border-bottom:1px solid #333; padding-bottom:4px; margin-bottom:5px; font-size:0.85rem;">
-        <i class="fas fa-handshake"></i> ОТНОШЕНИЯ (${relationItems.length})
-    </div>`;
-
-    if (relationItems.length === 0) {
-        html += `<div style="font-size:0.8rem; color:#666; font-style:italic;">Пока нет заметных связей...</div>`;
-    } else {
-        relationItems.sort((a, b) => b.value - a.value);
-        
-        html += `<div style="display:flex; flex-direction:column; gap:4px; font-size:0.75rem;">`;
-        relationItems.forEach(relation => {
-            const npcName = relation.id.split(':')[1].replace(/_/g, ' ');
-            const npcValue = relation.value || 0;
-            
-            let color = '#ccc';
-            if (npcValue >= 60) color = '#4cd137';
-            else if (npcValue >= 20) color = '#9c88ff';
-            else if (npcValue > -20) color = '#fbc531';
-            else if (npcValue > -60) color = '#e84118';
-            else color = '#c23616';
-
-            html += `
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; padding:4px 0; border-bottom:1px solid #222;">
-                    <span style="color:#ccc; max-width:60%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                        ${npcName}
-                    </span>
-                    <span style="color:${color}; font-family:monospace; font-weight:bold; font-size:0.8rem;">
-                        ${npcValue > 0 ? '+' : ''}${npcValue}
-                    </span>
-                </div>
-            `;
-        });
-        html += `</div>`;
-    }
-
-    relContainer.innerHTML = html;
-}
-
-/**
  * Применение визуальных эффектов состояния
  */
 function applyStateEffects() {
@@ -1180,10 +1115,8 @@ export const Render = {
     updateUIMode,
     renderChoices,
     renderStats,
-    renderInventory,
+    renderAllGameItems, // 🚫🚫🚫
     renderHistory,
-    renderSkills,
-    renderRelations,
     renderAll,
     showAlert,
     showErrorAlert,
