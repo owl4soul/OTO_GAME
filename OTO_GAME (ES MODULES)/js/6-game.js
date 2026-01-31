@@ -472,6 +472,7 @@ function toggleChoice(idx) {
     UI.updateActionButtons();
 }
 
+// 🚫🚫🚫 ИЗМЕНЕНО: Добавлена очистка lastTurnStatChanges при начале нового хода
 async function submitTurn(retries = CONFIG.maxRetries) {
     console.log('🔍 submitTurn called');
     
@@ -481,6 +482,9 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         activeAbortController.abort();
         activeAbortController = null;
     }
+    
+    // 🚫🚫🚫 Очищаем изменения статов за предыдущий ход
+    State.setState({ lastTurnStatChanges: null });
     
     let selectedChoicesData = [];
     
@@ -641,18 +645,29 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }
 }
 
+// 🚫🚫🚫 ИЗМЕНЕНО: Полностью переработан метод для корректного расчета и отображения изменений
 function processTurn(data, actionResults, d10) {
     console.log('🔍 processTurn called with:', { data, actionResults, d10 });
     
     const state = State.getState();
     const previousScene = state.gameState.currentScene;
     
+    // 🚫🚫🚫 Сохраняем старые значения статов до применения изменений
+    const oldStats = {
+        will: State.getGameItemValue('stat:will') || 50,
+        stealth: State.getGameItemValue('stat:stealth') || 50,
+        influence: State.getGameItemValue('stat:influence') || 50,
+        sanity: State.getGameItemValue('stat:sanity') || 50
+    };
+    
+    // 🚫🚫🚫 Применяем операции от действий
     actionResults.forEach(result => {
         if (result.operations && Array.isArray(result.operations)) {
             State.applyOperations(result.operations);
         }
     });
     
+    // 🚫🚫🚫 Применяем операции от событий
     if (data.events && Array.isArray(data.events)) {
         const eventOperations = [];
         data.events.forEach(event => {
@@ -666,6 +681,24 @@ function processTurn(data, actionResults, d10) {
             State.applyOperations(eventOperations);
         }
     }
+    
+    // 🚫🚫🚫 Получаем новые значения статов после всех применений
+    const newStats = {
+        will: State.getGameItemValue('stat:will') || 50,
+        stealth: State.getGameItemValue('stat:stealth') || 50,
+        influence: State.getGameItemValue('stat:influence') || 50,
+        sanity: State.getGameItemValue('stat:sanity') || 50
+    };
+    
+    // 🚫🚫🚫 Рассчитываем изменения статов за этот ход
+    const statChanges = {
+        will: newStats.will - oldStats.will,
+        stealth: newStats.stealth - oldStats.stealth,
+        influence: newStats.influence - oldStats.influence,
+        sanity: newStats.sanity - oldStats.sanity
+    };
+    
+    console.log('📊 Изменения статов за ход:', statChanges);
     
     if (data.aiMemory && typeof data.aiMemory === 'object') {
         State.setState({
@@ -705,6 +738,7 @@ function processTurn(data, actionResults, d10) {
         updatedHistory.shift();
     }
     
+    // 🚫🚫🚫 Сохраняем изменения статов в состоянии для использования в рендеринге
     State.setState({
         gameState: {
             ...state.gameState,
@@ -716,7 +750,8 @@ function processTurn(data, actionResults, d10) {
         },
         freeMode: false,
         freeModeText: '',
-        thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : []
+        thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
+        lastTurnStatChanges: statChanges  // 🚫🚫🚫 Сохраняем изменения статов
     });
     
     State.incrementTurnCount();
@@ -743,7 +778,8 @@ function processTurn(data, actionResults, d10) {
     });
     State.emit(State.EVENTS.TURN_COMPLETED, {
         turnCount: state.turnCount,
-        actions: actionResults
+        actions: actionResults,
+        statChanges: statChanges  // 🚫🚫🚫 Добавляем изменения статов в событие
     });
     
     dom.freeInputText.disabled = false;

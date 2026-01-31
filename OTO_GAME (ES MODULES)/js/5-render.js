@@ -10,6 +10,24 @@ import { Audit } from './8-audit.js';
 
 const dom = DOM.getDOM();
 
+// 🚫🚫🚫 ДОБАВЛЕНО: Функция для получения цвета по значению стата (0-100)
+function getStatColor(value) {
+    // Ограничиваем значение от 0 до 100 для градиента
+    const val = Math.max(0, Math.min(100, value));
+    
+    // Градиент от тёмно-красного до белого через 10 промежуточных цветов
+    if (val <= 10) return '#800000'; // тёмно-красный
+    if (val <= 20) return '#FF0000'; // красный
+    if (val <= 30) return '#FF5500'; // оранжевый
+    if (val <= 40) return '#FFAA00'; // оранжево-желтый
+    if (val <= 50) return '#FFD700'; // золотой (жёлтый)
+    if (val <= 60) return '#ADFF2F'; // салатовый
+    if (val <= 70) return '#00FF00'; // зелёный
+    if (val <= 80) return '#20B2AA'; // цвет морской волны
+    if (val <= 90) return '#87CEEB'; // цвет неба
+    return '#FFFFFF'; // белый (100)
+}
+
 // Подписка на события состояния
 function setupStateObservers() {
     console.log('🔍 Настройка подписок на события состояния...');
@@ -381,21 +399,108 @@ function renderScene() {
     }
 }
 
+// 🚫🚫🚫 ИЗМЕНЕНО: Полностью переработан метод renderStats для нового формата отображения
 function renderStats() {
     const state = State.getState();
     
-    const statsData = {
+    // Базовые значения (без временных модификаторов)
+    const baseStats = {
         will: State.getGameItemValue('stat:will') || 50,
         stealth: State.getGameItemValue('stat:stealth') || 50,
         influence: State.getGameItemValue('stat:influence') || 50,
         sanity: State.getGameItemValue('stat:sanity') || 50
     };
     
-    dom.vals.will.textContent = statsData.will;
-    dom.vals.stealth.textContent = statsData.stealth;
-    dom.vals.inf.textContent = statsData.influence;
-    dom.vals.sanity.textContent = statsData.sanity;
+    // Получаем активные баффы и дебаффы для каждого стата
+    const buffs = State.getGameItemsByType('buff:');
+    const debuffs = State.getGameItemsByType('debuff:');
     
+    // Группируем баффы и дебаффы по статам
+    const statBuffs = { will: [], stealth: [], influence: [], sanity: [] };
+    const statDebuffs = { will: [], stealth: [], influence: [], sanity: [] };
+    
+    buffs.forEach(buff => {
+        const [type, statName] = buff.id.split(':');
+        if (statBuffs.hasOwnProperty(statName) && buff.value) {
+            statBuffs[statName].push({
+                value: buff.value,
+                duration: buff.duration || 0
+            });
+        }
+    });
+    
+    debuffs.forEach(debuff => {
+        const [type, statName] = debuff.id.split(':');
+        if (statDebuffs.hasOwnProperty(statName) && debuff.value) {
+            statDebuffs[statName].push({
+                value: debuff.value, // отрицательное значение
+                duration: debuff.duration || 0
+            });
+        }
+    });
+    
+    // Рассчитываем текущие значения и формируем строки для отображения
+    ['will', 'stealth', 'influence', 'sanity'].forEach(stat => {
+        const valElement = dom.vals[stat];
+        if (!valElement) return;
+        
+        const base = baseStats[stat];
+        const buffList = statBuffs[stat] || [];
+        const debuffList = statDebuffs[stat] || [];
+        
+        // Суммируем все временные модификаторы
+        const totalBuff = buffList.reduce((sum, b) => sum + b.value, 0);
+        const totalDebuff = debuffList.reduce((sum, d) => sum + d.value, 0);
+        const current = base + totalBuff + totalDebuff;
+        
+        // Получаем цвет для текущего значения
+        const currentColor = getStatColor(current);
+        
+        // Формируем строку детализации
+        let detailString = '';
+        
+        if (buffList.length > 0 || debuffList.length > 0) {
+            // Начинаем с базового значения
+            detailString = `<span style="color: #888; font-size: 0.8em;">${base}</span>`;
+            
+            // Добавляем баффы
+            buffList.forEach(buff => {
+                if (buff.value > 0) {
+                    detailString += ` <span style="color: #4cd137; font-size: 0.8em;">+${buff.value}[${buff.duration}]</span>`;
+                }
+            });
+            
+            // Добавляем дебаффы
+            debuffList.forEach(debuff => {
+                if (debuff.value < 0) {
+                    const absValue = Math.abs(debuff.value);
+                    detailString += ` <span style="color: #e84118; font-size: 0.8em;">-${absValue}[${debuff.duration}]</span>`;
+                }
+            });
+            
+            // Полный HTML
+            valElement.innerHTML = `
+                <span style="color: ${currentColor}; font-weight: bold;">${current}</span>
+                <span style="font-size: 0.8em;"> (${detailString})</span>
+            `;
+        } else {
+            // Нет временных эффектов - просто показываем значение
+            valElement.innerHTML = `<span style="color: ${currentColor}; font-weight: bold;">${current}</span>`;
+        }
+        
+        // Добавляем вспышку при изменении
+        const changes = state.lastTurnStatChanges || {};
+        const change = changes[stat] || 0;
+        
+        if (change !== 0) {
+            valElement.classList.add(change > 0 ? 'flash-green' : 'flash-red');
+            setTimeout(() => {
+                valElement.classList.remove('flash-green', 'flash-red');
+            }, 1000);
+        }
+    });
+    
+    // Прогресс-бар и степени инициализации (остается без изменений)
     const progressValue = State.getGameItemValue('progress:oto') || 0;
     const maxScore = 110;
     const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
@@ -420,60 +525,6 @@ function renderStats() {
             return `<div class="${cls}">${d.name}</div>`;
         }).join('');
     }
-    
-    renderBuffsAndDebuffsStats(statsData);
-}
-
-function renderBuffsAndDebuffsStats(currentBaseStats) {
-    const buffs = State.getGameItemsByType('buff:');
-    const debuffs = State.getGameItemsByType('debuff:');
-    const allEffects = [...buffs, ...debuffs];
-    
-    const statModifiers = {
-        'will': [],
-        'stealth': [],
-        'influence': [],
-        'sanity': []
-    };
-    
-    allEffects.forEach(effect => {
-        const [type, statName] = effect.id.split(':');
-        if (statModifiers[statName] && effect.value && effect.duration) {
-            statModifiers[statName].push({
-                value: effect.value,
-                duration: effect.duration,
-                type: type
-            });
-        }
-    });
-    
-    Object.entries(statModifiers).forEach(([statName, modifiers]) => {
-        const valElement = document.getElementById(`val${statName.charAt(0).toUpperCase() + statName.slice(1)}`);
-        
-        if (valElement) {
-            const baseValue = currentBaseStats[statName];
-            
-            if (modifiers.length > 0) {
-                const totalMod = modifiers.reduce((sum, mod) => sum + mod.value, 0);
-                const deltasHtml = modifiers.map(m => {
-                    const sign = m.value > 0 ? '+' : '';
-                    const color = m.value > 0 ? '#4cd137' : '#e84118';
-                    return `<span style="color: ${color}; margin-left: 3px; font-size: 0.8em;">(${sign}${m.value} (${m.duration}))</span>`;
-                }).join('');
-                
-                let valueColor = '#fff';
-                if (totalMod > 0) valueColor = '#4cd137';
-                else if (totalMod < 0) valueColor = '#e84118';
-                
-                valElement.innerHTML = `
-                    <span style="color: ${valueColor}; font-weight: bold;">${baseValue}</span>
-                    ${deltasHtml}
-                `;
-            } else {
-                valElement.innerHTML = baseValue;
-            }
-        }
-    });
 }
 
 function renderSectionHTML(title, icon, color, items, renderItemFn) {
@@ -1054,5 +1105,6 @@ export const Render = {
     showAlert,
     showErrorAlert,
     showSuccessAlert,
-    showWarningAlert
+    showWarningAlert,
+    getStatColor // 🚫🚫🚫 ДОБАВЛЕНО: экспортируем функцию для использования в других модулях
 };
