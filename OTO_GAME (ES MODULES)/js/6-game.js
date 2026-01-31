@@ -79,6 +79,7 @@ function getRussianStatName(key) {
     return map[key] || key;
 }
 
+// 🚫🚫🚫 ПЕРЕПИСАНО ПОЛНОСТЬЮ: Функция для создания HTML операций с отображением всех полей
 function createOperationHTML(operation, source) {
     if (!operation || !operation.id || !operation.operation) {
         console.warn('Некорректная операция:', operation);
@@ -93,6 +94,15 @@ function createOperationHTML(operation, source) {
     let valueDisplay = '';
     let color = '#ccc';
     
+    // Используем value для отображения, а не id
+    let displayValue = operation.value || '';
+    
+    // Унифицируем отображение длительности
+    let displayDuration = '';
+    if (operation.duration !== undefined) {
+        displayDuration = `[${operation.duration} ход.]`;
+    }
+    
     switch (type) {
         case 'stat':
             icon = 'fas fa-chart-line';
@@ -102,10 +112,12 @@ function createOperationHTML(operation, source) {
         case 'skill':
             icon = 'fas fa-scroll';
             color = '#9c88ff';
+            displayName = displayValue || name;
             break;
         case 'inventory':
             icon = 'fas fa-box-open';
             color = '#d4af37';
+            displayName = displayValue || name;
             break;
         case 'relations':
             icon = 'fas fa-handshake';
@@ -115,72 +127,116 @@ function createOperationHTML(operation, source) {
         case 'bless':
             icon = 'fas fa-star';
             color = '#fbc531';
+            displayName = displayValue || name;
             break;
         case 'curse':
             icon = 'fas fa-skull-crossbones';
             color = '#c23616';
+            displayName = displayValue || name;
             break;
         case 'buff':
             icon = 'fas fa-arrow-up';
             color = '#4cd137';
+            displayName = getRussianStatName(name);
             break;
         case 'debuff':
             icon = 'fas fa-arrow-down';
             color = '#e84118';
+            displayName = getRussianStatName(name);
             break;
         case 'progress':
             icon = 'fas fa-chart-line';
             color = '#00a8ff';
+            displayName = displayValue || name;
             break;
         case 'personality':
             icon = 'fas fa-brain';
             color = '#1dd1a1';
+            displayName = displayValue || name;
             break;
         case 'initiation_degree':
             icon = 'fas fa-graduation-cap';
             color = '#ff9ff3';
+            displayName = displayValue || name;
             break;
     }
     
+    // Форматируем значение в зависимости от типа операции
     switch (operation.operation) {
         case OPERATION_TYPES.ADD:
             if (type === 'buff' || type === 'debuff') {
                 const sign = operation.value > 0 ? '+' : '';
-                valueDisplay = `<span style="color: ${sourceColor};">+ Добавить: ${sign}${operation.value} на ${operation.duration} ходов</span>`;
+                valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                    ${displayName} ${sign}${operation.value} ${displayDuration}
+                </span>`;
             } else {
-                valueDisplay = `<span style="color: ${sourceColor};">+ Добавить: "${operation.value || 'элемент'}"</span>`;
+                const addedValue = displayValue ? `: "${displayValue}"` : '';
+                valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                    Добавить ${displayName}${addedValue}
+                </span>`;
             }
             break;
+            
         case OPERATION_TYPES.REMOVE:
-            valueDisplay = `<span style="color: ${sourceColor};">- Удалить</span>`;
+            valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                Удалить: ${displayName}
+            </span>`;
             break;
+            
         case OPERATION_TYPES.SET:
-            valueDisplay = `<span style="color: ${sourceColor};">= "${String(operation.value || '').substring(0, 30)}"</span>`;
+            valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                Установить ${displayName}: "${String(displayValue).substring(0, 50)}"
+            </span>`;
             break;
+            
         case OPERATION_TYPES.MODIFY:
             const sign = operation.delta > 0 ? '+' : '';
             const deltaColor = operation.delta > 0 ? '#4cd137' : '#e84118';
-            valueDisplay = `<span style="color: ${deltaColor};">${sign}${operation.delta}</span>`;
+            valueDisplay = `<span style="color: ${deltaColor}; font-weight: bold;">
+                ${displayName} ${sign}${operation.delta}
+            </span>`;
             break;
     }
     
-    const description = operation.description ?
-        `<div style="color: #888; font-size: 0.75rem; margin-top: 2px;">${operation.description}</div>` : '';
+    // Добавляем описание, если есть
+    let description = '';
+    if (operation.description) {
+        description = `<div style="color: #aaa; font-size: 0.75rem; margin-top: 4px; font-style: italic;">
+            ${operation.description}
+        </div>`;
+    }
     
+    // 🚫🚫🚫 ОТОБРАЖЕНИЕ ВСЕХ НЕПУСТЫХ ПОЛЕЙ
+    let extraFields = '';
+    const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta']; // Эти поля уже обработаны выше
+    
+    Object.keys(operation).forEach(key => {
+        if (!ignoredKeys.includes(key)) {
+             const val = operation[key];
+             if (val !== undefined && val !== null && val !== '') {
+                 extraFields += `<div style="color: #666; font-size: 0.7rem;">${key}: ${val}</div>`;
+             }
+        }
+    });
+
     return `
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #333;">
-            <div style="display: flex; align-items: center; gap: 6px; flex: 1;">
-                <i class="${icon}" style="color: ${color}; font-size: 0.8rem;"></i>
-                <span style="color: #ccc; font-size: 0.8rem; min-width: 80px;">${displayName}:</span>
+        <div style="display: flex; align-items: flex-start; padding: 8px 0; border-bottom: 1px dotted #333;">
+            <div style="margin-right: 10px;">
+                <i class="${icon}" style="color: ${color}; font-size: 0.9rem;"></i>
             </div>
-            <div style="margin-left: 10px; text-align: right;">
-                <span style="color: #fff; font-weight: bold; font-size: 0.8rem;">${valueDisplay}</span>
+            <div style="flex: 1;">
+                <div style="color: #ccc; font-size: 0.85rem; margin-bottom: 2px;">${displayName}</div>
+                <div style="font-size: 0.9rem;">
+                    ${valueDisplay}
+                </div>
+                ${description}
+                ${extraFields}
             </div>
         </div>
-        ${description}
     `;
 }
 
+// 🚫🚫🚫 ИСПРАВЛЕНО: Функция для создания HTML изменений за ход
 function createTurnUpdatesHTML(actionResults, events) {
     console.log('🔍 createTurnUpdatesHTML called with:', { actionResults, events });
     
@@ -190,8 +246,8 @@ function createTurnUpdatesHTML(actionResults, events) {
     }
     
     let html = `
-        <div class="turn-updates-container" style="margin: 20px 0; padding: 15px; background: rgba(0, 0, 0, 0.3); border-radius: 8px; border: 1px solid #333;">
-            <div style="color: #d4af37; font-family: 'Roboto Mono', monospace; font-size: 1rem; font-weight: bold; margin-bottom: 15px; letter-spacing: 1px;">
+        <div class="turn-updates-container" style="margin: 20px 0; padding: 15px; background: rgba(0, 0, 0, 0.4); border-radius: 8px; border: 1px solid #444; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+            <div style="color: #d4af37; font-family: 'Roboto Mono', monospace; font-size: 1.1rem; font-weight: bold; margin-bottom: 15px; letter-spacing: 1px; border-bottom: 2px solid #d4af37; padding-bottom: 5px;">
                 <i class="fas fa-clipboard-list"></i> ИЗМЕНЕНИЯ ЗА ХОД
             </div>
     `;
@@ -200,7 +256,7 @@ function createTurnUpdatesHTML(actionResults, events) {
     if (actionResults && actionResults.length > 0) {
         html += `
             <div style="margin-bottom: 20px;">
-                <div style="color: #4cd137; font-size: 0.9rem; font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #4cd137;">
+                <div style="color: #4cd137; font-size: 0.95rem; font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #4cd137;">
                     <i class="fas fa-user-check"></i> По результатам выбранных действий
                 </div>
                 <div style="font-size: 0.85rem;">
@@ -216,18 +272,18 @@ function createTurnUpdatesHTML(actionResults, events) {
             const partialText = result.partial ? ' (частично)' : '';
             
             html += `
-                <div style="margin-bottom: 8px; padding: 8px; background: rgba(0, 0, 0, 0.2); border-radius: 4px; border-left: 3px solid ${successColor};">
-                    <div style="color: ${successColor}; font-weight: bold;">
+                <div style="margin-bottom: 12px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 6px; border-left: 4px solid ${successColor};">
+                    <div style="color: ${successColor}; font-weight: bold; font-size: 0.9rem;">
                         <i class="fas ${successIcon}"></i> Действие ${idx + 1}${partialText}
                     </div>
-                    <div style="color: #ccc; font-size: 0.8rem; margin-top: 4px;">${result.choice_text || 'Действие'}</div>
-                    <div style="color: #888; font-size: 0.75rem; margin-top: 4px;">
+                    <div style="color: #ccc; font-size: 0.85rem; margin-top: 5px;">${result.choice_text || 'Действие'}</div>
+                    <div style="color: #aaa; font-size: 0.8rem; margin-top: 5px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 3px;">
                         ${result.reason || ''} | 🎯 Сложность: ${result.difficulty} | 🎲 d10: ${result.d10}
                     </div>
             `;
             
             if (operations.length > 0) {
-                html += `<div style="margin-top: 6px; padding-left: 15px;">`;
+                html += `<div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid ${successColor};">`;
                 operations.forEach(op => {
                     html += createOperationHTML(op, 'action');
                 });
@@ -238,7 +294,7 @@ function createTurnUpdatesHTML(actionResults, events) {
         });
         
         if (!hasActionOperations) {
-            html += `<div style="color: #888; font-style: italic; text-align: center;">Нет операций от действий</div>`;
+            html += `<div style="color: #888; font-style: italic; text-align: center; padding: 10px;">Нет операций от действий</div>`;
         }
         
         html += `</div></div>`;
@@ -248,7 +304,7 @@ function createTurnUpdatesHTML(actionResults, events) {
     if (events && events.length > 0) {
         html += `
             <div style="margin-bottom: 10px;">
-                <div style="color: #00a8ff; font-size: 0.9rem; font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #00a8ff;">
+                <div style="color: #00a8ff; font-size: 0.95rem; font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #00a8ff;">
                     <i class="fas fa-bolt"></i> По результатам произошедших событий
                 </div>
                 <div style="font-size: 0.85rem;">
@@ -267,19 +323,20 @@ function createTurnUpdatesHTML(actionResults, events) {
             };
             
             const icon = eventTypeIcons[event.type] || 'fa-star';
+            const eventDesc = event.description || 'Событие';
             
             html += `
-                <div style="margin-bottom: 8px; padding: 8px; background: rgba(0, 170, 255, 0.1); border-radius: 4px; border-left: 3px solid #00a8ff;">
-                    <div style="color: #00a8ff; font-weight: bold;">
-                        <i class="fas ${icon}"></i> ${event.type ? event.type.toUpperCase() : 'СОБЫТИЕ'}: ${event.description ? event.description.substring(0, 60) + '...' : 'Событие'}
+                <div style="margin-bottom: 12px; padding: 10px; background: rgba(0, 170, 255, 0.1); border-radius: 6px; border-left: 4px solid #00a8ff;">
+                    <div style="color: #00a8ff; font-weight: bold; font-size: 0.9rem;">
+                        <i class="fas ${icon}"></i> ${event.type ? event.type.toUpperCase() : 'СОБЫТИЕ'}: ${eventDesc.substring(0, 80)}${eventDesc.length > 80 ? '...' : ''}
                     </div>
-                    <div style="color: #888; font-size: 0.75rem; margin-top: 2px;">
-                        <i class="fas fa-info-circle"></i> ${event.reason || ''}
+                    <div style="color: #aaa; font-size: 0.8rem; margin-top: 5px; background: rgba(0,170,255,0.05); padding: 4px 8px; border-radius: 3px;">
+                        <i class="fas fa-info-circle"></i> ${event.reason || 'Нет описания'}
                     </div>
             `;
             
             if (effects.length > 0) {
-                html += `<div style="margin-top: 6px; padding-left: 15px;">`;
+                html += `<div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid #00a8ff;">`;
                 effects.forEach(effect => {
                     html += createOperationHTML(effect, 'event');
                 });
@@ -290,7 +347,7 @@ function createTurnUpdatesHTML(actionResults, events) {
         });
         
         if (!hasEventOperations) {
-            html += `<div style="color: #888; font-style: italic; text-align: center;">Нет операций от событий</div>`;
+            html += `<div style="color: #888; font-style: italic; text-align: center; padding: 10px;">Нет операций от событий</div>`;
         }
         
         html += `</div></div>`;
@@ -472,7 +529,7 @@ function toggleChoice(idx) {
     UI.updateActionButtons();
 }
 
-// 🚫🚫🚫 ИЗМЕНЕНО: Добавлена очистка lastTurnStatChanges при начале нового хода
+// 🚫🚫🚫 ИСПРАВЛЕНО: submitTurn для правильной последовательности применения изменений
 async function submitTurn(retries = CONFIG.maxRetries) {
     console.log('🔍 submitTurn called');
     
@@ -483,7 +540,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         activeAbortController = null;
     }
     
-    // 🚫🚫🚫 Очищаем изменения статов за предыдущий ход
+    // Сбрасываем изменения статов за предыдущий ход
     State.setState({ lastTurnStatChanges: null });
     
     let selectedChoicesData = [];
@@ -553,6 +610,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     
     console.log('📊 Результаты действий:', actionResults);
     
+    // 🚫🚫🚫 ВАЖНО: НЕ применяем изменения тут! Только готовим данные для ИИ
     const selectedActions = actionResults.map(result => ({
         text: result.choice_text,
         difficulty_level: result.difficulty,
@@ -599,6 +657,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         
         console.log('✅ Получен ответ от ИИ:', data);
         
+        // 🚫🚫🚫 Теперь передаем actionResults для правильного применения
         processTurn(data, actionResults, d10);
         
     } catch (e) {
@@ -645,14 +704,14 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }
 }
 
-// 🚫🚫🚫 ИЗМЕНЕНО: Полностью переработан метод для корректного расчета и отображения изменений
+// 🚫🚫🚫 ПЕРЕПИСАНО ПОЛНОСТЬЮ: processTurn для корректного расчета и отображения
 function processTurn(data, actionResults, d10) {
     console.log('🔍 processTurn called with:', { data, actionResults, d10 });
     
     const state = State.getState();
     const previousScene = state.gameState.currentScene;
     
-    // 🚫🚫🚫 Сохраняем старые значения статов до применения изменений
+    // 🚫🚫🚫 Шаг 1: Сохраняем старые значения статов
     const oldStats = {
         will: State.getGameItemValue('stat:will') || 50,
         stealth: State.getGameItemValue('stat:stealth') || 50,
@@ -660,14 +719,20 @@ function processTurn(data, actionResults, d10) {
         sanity: State.getGameItemValue('stat:sanity') || 50
     };
     
-    // 🚫🚫🚫 Применяем операции от действий
+    // 🚫🚫🚫 Шаг 2: Уменьшаем длительность ВСЕХ временных эффектов ПЕРЕД применением новых
+    // Это обеспечивает правильный отсчет: эффект, примененный в этом ходу, будет иметь полную длительность
+    // И это ЕДИНСТВЕННОЕ место, где время идет вперед.
+    decreaseBuffDurations();
+    
+    // 🚫🚫🚫 Шаг 3: Применяем операции от действий
     actionResults.forEach(result => {
         if (result.operations && Array.isArray(result.operations)) {
+            console.log('📦 Применяем операции от действия:', result.operations);
             State.applyOperations(result.operations);
         }
     });
     
-    // 🚫🚫🚫 Применяем операции от событий
+    // 🚫🚫🚫 Шаг 4: Применяем операции от событий
     if (data.events && Array.isArray(data.events)) {
         const eventOperations = [];
         data.events.forEach(event => {
@@ -682,7 +747,7 @@ function processTurn(data, actionResults, d10) {
         }
     }
     
-    // 🚫🚫🚫 Получаем новые значения статов после всех применений
+    // 🚫🚫🚫 Шаг 5: Получаем новые значения статов
     const newStats = {
         will: State.getGameItemValue('stat:will') || 50,
         stealth: State.getGameItemValue('stat:stealth') || 50,
@@ -690,7 +755,7 @@ function processTurn(data, actionResults, d10) {
         sanity: State.getGameItemValue('stat:sanity') || 50
     };
     
-    // 🚫🚫🚫 Рассчитываем изменения статов за этот ход
+    // 🚫🚫🚫 Шаг 6: Рассчитываем изменения статов за этот ход
     const statChanges = {
         will: newStats.will - oldStats.will,
         stealth: newStats.stealth - oldStats.stealth,
@@ -700,6 +765,7 @@ function processTurn(data, actionResults, d10) {
     
     console.log('📊 Изменения статов за ход:', statChanges);
     
+    // Обновляем память ИИ
     if (data.aiMemory && typeof data.aiMemory === 'object') {
         State.setState({
             gameState: {
@@ -709,10 +775,12 @@ function processTurn(data, actionResults, d10) {
         });
     }
     
+    // Добавляем мысли героя
     if (data.thoughts && Array.isArray(data.thoughts)) {
         State.addHeroPhrases(data.thoughts);
     }
     
+    // Обновляем сцену
     const updatedScene = {
         scene: data.scene || state.gameState.currentScene.scene,
         reflection: data.reflection || "",
@@ -721,6 +789,7 @@ function processTurn(data, actionResults, d10) {
         design_notes: data.design_notes || ""
     };
     
+    // Добавляем запись в историю
     const newHistoryEntry = {
         fullText: data.scene || "",
         summary: data.summary || "",
@@ -738,7 +807,7 @@ function processTurn(data, actionResults, d10) {
         updatedHistory.shift();
     }
     
-    // 🚫🚫🚫 Сохраняем изменения статов в состоянии для использования в рендеринге
+    // 🚫🚫🚫 Шаг 7: Сохраняем все изменения в состоянии
     State.setState({
         gameState: {
             ...state.gameState,
@@ -754,8 +823,10 @@ function processTurn(data, actionResults, d10) {
         lastTurnStatChanges: statChanges  // 🚫🚫🚫 Сохраняем изменения статов
     });
     
+    // Увеличиваем счетчик ходов
     State.incrementTurnCount();
     
+    // 🚫🚫🚫 Шаг 8: Создаем и отображаем блок изменений за ход
     const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
     console.log('📄 Созданный HTML изменений:', updatesHTML);
     
@@ -771,26 +842,84 @@ function processTurn(data, actionResults, d10) {
         dom.updates.innerHTML = '';
     }
     
+    // Обновляем UI
     UI.setFreeModeUI(false);
+    
+    // Отправляем события
     State.emit(State.EVENTS.SCENE_CHANGED, {
         scene: updatedScene,
         previousScene: previousScene
     });
+    
     State.emit(State.EVENTS.TURN_COMPLETED, {
         turnCount: state.turnCount,
         actions: actionResults,
-        statChanges: statChanges  // 🚫🚫🚫 Добавляем изменения статов в событие
+        statChanges: statChanges
     });
     
+    // Восстанавливаем UI элементы
     dom.freeInputText.disabled = false;
     dom.freeInputText.style.opacity = '1';
     dom.freeModeToggle.checked = false;
     dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
     UI.updateActionButtons();
     
+    // Сохраняем состояние
     Saveload.saveState();
     
     console.log('✅ processTurn завершен');
+}
+
+// 🚫🚫🚫 ДОБАВЛЕНО: Функция для уменьшения длительности временных эффектов
+function decreaseBuffDurations() {
+    console.log('🕐 Уменьшаем длительность временных эффектов');
+    
+    const state = State.getState();
+    let hasChanges = false;
+    
+    // Обрабатываем баффы
+    const buffs = state.heroState.filter(item => item.id.startsWith('buff:'));
+    buffs.forEach(buff => {
+        if (buff.duration !== undefined && buff.duration > 0) {
+            buff.duration -= 1;
+            hasChanges = true;
+            console.log(`📉 Уменьшаем длительность ${buff.id}: ${buff.duration + 1} → ${buff.duration}`);
+            
+            if (buff.duration <= 0) {
+                // Удаляем истекший эффект
+                const index = state.heroState.findIndex(item => item.id === buff.id);
+                if (index !== -1) {
+                    state.heroState.splice(index, 1);
+                    console.log(`🗑️ Удален истекший бафф: ${buff.id}`);
+                }
+            }
+        }
+    });
+    
+    // Обрабатываем дебаффы
+    const debuffs = state.heroState.filter(item => item.id.startsWith('debuff:'));
+    debuffs.forEach(debuff => {
+        if (debuff.duration !== undefined && debuff.duration > 0) {
+            debuff.duration -= 1;
+            hasChanges = true;
+            console.log(`📉 Уменьшаем длительность ${debuff.id}: ${debuff.duration + 1} → ${debuff.duration}`);
+            
+            if (debuff.duration <= 0) {
+                // Удаляем истекший эффект
+                const index = state.heroState.findIndex(item => item.id === debuff.id);
+                if (index !== -1) {
+                    state.heroState.splice(index, 1);
+                    console.log(`🗑️ Удален истекший дебафф: ${debuff.id}`);
+                }
+            }
+        }
+    });
+    
+    if (hasChanges) {
+        // Сохраняем изменения
+        State.setState({ heroState: state.heroState });
+        console.log('✅ Длительность временных эффектов уменьшена');
+    }
 }
 
 function showEndScreen(title, msg, color, isVictory = false) {
@@ -971,5 +1100,6 @@ export const Game = {
     handleClear,
     handleFreeModeToggle,
     checkRequirements,
-    calculateChoiceResult
+    calculateChoiceResult,
+    decreaseBuffDurations
 };

@@ -50,7 +50,7 @@ const dom = {
     vals: {
         will: document.getElementById('valWill'),
         stealth: document.getElementById('valStealth'),
-        inf: document.getElementById('valInf'),
+        influsion: document.getElementById('valInflusion'),
         sanity: document.getElementById('valSanity')
     },
     

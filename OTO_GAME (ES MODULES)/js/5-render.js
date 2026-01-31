@@ -10,22 +10,21 @@ import { Audit } from './8-audit.js';
 
 const dom = DOM.getDOM();
 
-// 🚫🚫🚫 ДОБАВЛЕНО: Функция для получения цвета по значению стата (0-100)
+// 🚫🚫🚫 ДОБАВЛЕНО: Функция для получения цвета стата по значению
 function getStatColor(value) {
-    // Ограничиваем значение от 0 до 100 для градиента
     const val = Math.max(0, Math.min(100, value));
     
-    // Градиент от тёмно-красного до белого через 10 промежуточных цветов
-    if (val <= 10) return '#800000'; // тёмно-красный
-    if (val <= 20) return '#FF0000'; // красный
-    if (val <= 30) return '#FF5500'; // оранжевый
-    if (val <= 40) return '#FFAA00'; // оранжево-желтый
-    if (val <= 50) return '#FFD700'; // золотой (жёлтый)
-    if (val <= 60) return '#ADFF2F'; // салатовый
-    if (val <= 70) return '#00FF00'; // зелёный
-    if (val <= 80) return '#20B2AA'; // цвет морской волны
-    if (val <= 90) return '#87CEEB'; // цвет неба
-    return '#FFFFFF'; // белый (100)
+    // Плавный градиент от тёмно-красного до белого
+    if (val <= 10) return '#8B0000';      // тёмно-красный
+    if (val <= 20) return '#FF0000';      // красный
+    if (val <= 30) return '#FF8C00';      // оранжевый
+    if (val <= 40) return '#FFD700';      // оранжево-желтый
+    if (val <= 50) return '#FFFF00';      // жёлтый (gold)
+    if (val <= 60) return '#ADFF2F';      // салатовый
+    if (val <= 70) return '#00FF00';      // зелёный
+    if (val <= 80) return '#20B2AA';      // цвет морской волны
+    if (val <= 90) return '#87CEEB';      // цвет неба
+    return '#FFFFFF';                     // белый
 }
 
 // Подписка на события состояния
@@ -399,11 +398,13 @@ function renderScene() {
     }
 }
 
-// 🚫🚫🚫 ИЗМЕНЕНО: Полностью переработан метод renderStats для нового формата отображения
+// 🚫🚫🚫 ПЕРЕПИСАНО ПОЛНОСТЬЮ: Функция renderStats для нового формата
 function renderStats() {
+    console.log('🔍 renderStats called');
+    
     const state = State.getState();
     
-    // Базовые значения (без временных модификаторов)
+    // Базовые значения статов (без временных модификаторов)
     const baseStats = {
         will: State.getGameItemValue('stat:will') || 50,
         stealth: State.getGameItemValue('stat:stealth') || 50,
@@ -411,101 +412,101 @@ function renderStats() {
         sanity: State.getGameItemValue('stat:sanity') || 50
     };
     
-    // Получаем активные баффы и дебаффы для каждого стата
+    // Получаем все активные временные эффекты
     const buffs = State.getGameItemsByType('buff:');
     const debuffs = State.getGameItemsByType('debuff:');
     
-    // Группируем баффы и дебаффы по статам
-    const statBuffs = { will: [], stealth: [], influence: [], sanity: [] };
-    const statDebuffs = { will: [], stealth: [], influence: [], sanity: [] };
+    // Группируем эффекты по статам
+    const statEffects = {
+        will: { buffs: [], debuffs: [] },
+        stealth: { buffs: [], debuffs: [] },
+        influence: { buffs: [], debuffs: [] },
+        sanity: { buffs: [], debuffs: [] }
+    };
     
     buffs.forEach(buff => {
         const [type, statName] = buff.id.split(':');
-        if (statBuffs.hasOwnProperty(statName) && buff.value) {
-            statBuffs[statName].push({
+        if (statEffects[statName] && buff.value !== undefined) {
+            statEffects[statName].buffs.push({
                 value: buff.value,
-                duration: buff.duration || 0
+                duration: buff.duration || 0,
+                name: buff.value ? buff.value : (buff.description || 'Бафф')
             });
         }
     });
     
     debuffs.forEach(debuff => {
         const [type, statName] = debuff.id.split(':');
-        if (statDebuffs.hasOwnProperty(statName) && debuff.value) {
-            statDebuffs[statName].push({
-                value: debuff.value, // отрицательное значение
-                duration: debuff.duration || 0
+        if (statEffects[statName] && debuff.value !== undefined) {
+            statEffects[statName].debuffs.push({
+                value: debuff.value,
+                duration: debuff.duration || 0,
+                name: debuff.value ? debuff.value : (debuff.description || 'Дебафф')
             });
         }
     });
     
-    // Рассчитываем текущие значения и формируем строки для отображения
-    ['will', 'stealth', 'influence', 'sanity'].forEach(stat => {
-        const valElement = dom.vals[stat];
+    // Обрабатываем каждый стат
+    ['will', 'stealth', 'influence', 'sanity'].forEach(statName => {
+        const valElement = dom.vals[statName];
         if (!valElement) return;
         
-        const base = baseStats[stat];
-        const buffList = statBuffs[stat] || [];
-        const debuffList = statDebuffs[stat] || [];
+        const baseValue = baseStats[statName];
+        const { buffs: buffList, debuffs: debuffList } = statEffects[statName];
         
         // Суммируем все временные модификаторы
         const totalBuff = buffList.reduce((sum, b) => sum + b.value, 0);
         const totalDebuff = debuffList.reduce((sum, d) => sum + d.value, 0);
-        const current = base + totalBuff + totalDebuff;
+        const totalModifier = totalBuff + totalDebuff;
+        const currentValue = baseValue + totalModifier;
         
-        // Получаем цвет для текущего значения
-        const currentColor = getStatColor(current);
+        // Определяем цвет для текущего значения
+        const currentColor = getStatColor(currentValue);
         
-        // Формируем строку детализации
-        let detailString = '';
+        // Формируем строку с детализацией в формате: "54 (52 +3[3 ход.] -1[4 ход.])"
+        let detailHtml = '';
         
         if (buffList.length > 0 || debuffList.length > 0) {
             // Начинаем с базового значения
-            detailString = `<span style="color: #888; font-size: 0.8em;">${base}</span>`;
+            detailHtml = `<span style="color: #888; font-size: 0.85em;">${baseValue}</span>`;
             
-            // Добавляем баффы
+            // Добавляем баффы зеленым цветом с унифицированным форматом длительности
             buffList.forEach(buff => {
                 if (buff.value > 0) {
-                    detailString += ` <span style="color: #4cd137; font-size: 0.8em;">+${buff.value}[${buff.duration}]</span>`;
+                    detailHtml += ` <span style="color: #4cd137; font-size: 0.85em;">+${buff.value}[${buff.duration} ход.]</span>`;
                 }
             });
             
-            // Добавляем дебаффы
+            // Добавляем дебаффы красным цветом с унифицированным форматом длительности
             debuffList.forEach(debuff => {
                 if (debuff.value < 0) {
                     const absValue = Math.abs(debuff.value);
-                    detailString += ` <span style="color: #e84118; font-size: 0.8em;">-${absValue}[${debuff.duration}]</span>`;
+                    detailHtml += ` <span style="color: #e84118; font-size: 0.85em;">-${absValue}[${debuff.duration} ход.]</span>`;
                 }
             });
             
-            // Полный HTML
+            // Формируем полный HTML
             valElement.innerHTML = `
-                <span style="color: ${currentColor}; font-weight: bold;">${current}</span>
-                <span style="font-size: 0.8em;"> (${detailString})</span>
+                <span style="color: ${currentColor}; font-weight: bold; font-size: 1.1em;">${currentValue}</span>
+                <span style="font-size: 0.9em; margin-left: 8px; color: #666;">
+                    (${detailHtml})
+                </span>
             `;
         } else {
-            // Нет временных эффектов - просто показываем значение
-            valElement.innerHTML = `<span style="color: ${currentColor}; font-weight: bold;">${current}</span>`;
-        }
-        
-        // Добавляем вспышку при изменении
-        const changes = state.lastTurnStatChanges || {};
-        const change = changes[stat] || 0;
-        
-        if (change !== 0) {
-            valElement.classList.add(change > 0 ? 'flash-green' : 'flash-red');
-            setTimeout(() => {
-                valElement.classList.remove('flash-green', 'flash-red');
-            }, 1000);
+            // Нет временных эффектов
+            valElement.innerHTML = `<span style="color: ${currentColor}; font-weight: bold;">${currentValue}</span>`;
         }
     });
     
-    // Прогресс-бар и степени инициализации (остается без изменений)
+    // Обновляем прогресс-бар
     const progressValue = State.getGameItemValue('progress:oto') || 0;
     const maxScore = 110;
     const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
-    dom.tube.style.height = `${pct}%`;
+    if (dom.tube) {
+        dom.tube.style.height = `${pct}%`;
+    }
     
+    // Обновляем степени инициализации
     const degreeItems = State.getGameItemsByType('initiation_degree:');
     const currentDegreeItem = degreeItems.find(item => item.value && item.value.trim() !== '');
     let currentDegreeIndex = 0;
@@ -525,6 +526,8 @@ function renderStats() {
             return `<div class="${cls}">${d.name}</div>`;
         }).join('');
     }
+    
+    console.log('✅ renderStats completed');
 }
 
 function renderSectionHTML(title, icon, color, items, renderItemFn) {
@@ -542,6 +545,37 @@ function renderSectionHTML(title, icon, color, items, renderItemFn) {
     return html;
 }
 
+// Helper для рендеринга всех непустых полей
+function renderItemExtraFields(item) {
+    let fields = [];
+    
+    // Игнорируем стандартные поля, которые уже могут быть отображены в заголовке
+    const ignoredKeys = ['id', 'value', 'description'];
+    
+    // Если есть описание, добавляем его первым
+    if (item.description) {
+        fields.push(`<div style="color:#888; font-size:0.75rem; margin-top:2px;">${item.description}</div>`);
+    }
+
+    // Если есть длительность, форматируем её стандартно
+    if (item.duration !== undefined) {
+         fields.push(`<div style="color:#aaa; font-size:0.7rem; font-family:monospace;">[${item.duration} ход.]</div>`);
+    }
+    
+    // Перебираем остальные поля
+    Object.keys(item).forEach(key => {
+        if (!ignoredKeys.includes(key) && key !== 'duration') {
+            const val = item[key];
+            if (val !== undefined && val !== null && val !== '') {
+                 fields.push(`<div style="color:#666; font-size:0.7rem;">${key}: ${val}</div>`);
+            }
+        }
+    });
+    
+    return fields.join('');
+}
+
+// 🚫🚫🚫 ИСПРАВЛЕНО: Функция renderAllGameItems теперь отображает ВСЕ непустые поля
 function renderAllGameItems() {
     console.log('🔍 renderAllGameItems called (Unified Order)');
     
@@ -585,6 +619,7 @@ function renderAllGameItems() {
     </div>`;
     fragment.appendChild(typologyDiv);
 
+    // ОТНОШЕНИЯ
     const relationsDiv = document.createElement('div');
     relationsDiv.id = 'relationsDisplay';
     relationsDiv.className = 'relations-section';
@@ -593,25 +628,36 @@ function renderAllGameItems() {
         const npcName = item.id.split(':')[1].replace(/_/g, ' ');
         const val = item.value || 0;
         let color = val >= 60 ? '#4cd137' : val >= 20 ? '#9c88ff' : val > -20 ? '#fbc531' : '#e84118';
+        const extraFields = renderItemExtraFields(item);
+        
         return `
-            <div style="width: 100%; display:flex; justify-content:space-between; align-items:center; gap:6px; padding:4px 0; border-bottom:1px solid #222;">
-                <span style="color:#ccc; font-size:0.75rem;">${npcName}</span>
+            <div style="width: 100%; display:flex; justify-content:space-between; align-items:flex-start; gap:6px; padding:4px 0; border-bottom:1px solid #222;">
+                <div style="flex: 1;">
+                    <div style="color:#ccc; font-size:0.75rem;">${npcName}</div>
+                    ${extraFields}
+                </div>
                 <span style="color:${color}; font-family:monospace; font-weight:bold; font-size:0.8rem;">${val > 0 ? '+' : ''}${val}</span>
             </div>`;
     });
     fragment.appendChild(relationsDiv);
 
+    // НАВЫКИ
     const skillsDiv = document.createElement('div');
     skillsDiv.id = 'skillsContainer';
     skillsDiv.className = 'skills-section';
     const skillItems = State.getGameItemsByType('skill:');
     skillsDiv.innerHTML = renderSectionHTML('НАВЫКИ', 'fa-scroll', '#9c88ff', skillItems, (item) => {
         const name = item.value || item.id.split(':')[1];
-        const desc = item.description ? ` title="${item.description}"` : '';
-        return `<span style="background:rgba(156, 136, 255, 0.15); padding:3px 8px; border-radius:4px; font-size:0.75rem; border:1px solid rgba(156, 136, 255, 0.3); color:#ccc; margin-bottom: 4px;"${desc}>${name}</span>`;
+        const extraFields = renderItemExtraFields(item);
+        return `
+            <div style="background:rgba(156, 136, 255, 0.15); padding:6px 8px; border-radius:4px; border:1px solid rgba(156, 136, 255, 0.3); width: 100%; margin-bottom: 4px;">
+                <div style="color:#ccc; font-size:0.8rem; font-weight:bold;">${name}</div>
+                ${extraFields}
+            </div>`;
     });
     fragment.appendChild(skillsDiv);
 
+    // СИЛЫ (благословения и проклятия)
     const blessDiv = document.createElement('div');
     blessDiv.id = 'blessingsContainer';
     blessDiv.className = 'blessings-section';
@@ -621,16 +667,22 @@ function renderAllGameItems() {
     blessDiv.innerHTML = renderSectionHTML('СИЛЫ', 'fa-star', '#ff9ff3', allPowers, (item) => {
         const isBlessing = item.id.startsWith('bless:');
         const name = item.value || item.id.split(':')[1];
+        const extraFields = renderItemExtraFields(item);
         const color = isBlessing ? '#fbc531' : '#c23616';
         const bgColor = isBlessing ? 'rgba(251, 197, 49, 0.1)' : 'rgba(194, 54, 22, 0.1)';
         const icon = isBlessing ? '✨' : '💀';
+        
         return `
-            <div style="background: ${bgColor}; padding: 4px 8px; border-radius: 4px; border: 1px solid ${color}; width: 100%; margin-bottom: 2px;" title="${item.description || ''}">
-                <span style="color: ${color}; font-size: 0.75rem;">${icon} ${name}</span>
+            <div style="background: ${bgColor}; padding: 8px; border-radius: 4px; border: 1px solid ${color}; width: 100%; margin-bottom: 4px;">
+                <div style="color: ${color}; font-size: 0.8rem; font-weight:bold;">
+                    ${icon} ${name}
+                </div>
+                ${extraFields}
             </div>`;
     });
     fragment.appendChild(blessDiv);
 
+    // ЭФФЕКТЫ (баффы и дебаффы)
     const buffsDiv = document.createElement('div');
     buffsDiv.id = 'buffsContainer';
     buffsDiv.className = 'buffs-section';
@@ -639,31 +691,40 @@ function renderAllGameItems() {
     const allBuffs = [...buffItems, ...debuffItems];
     buffsDiv.innerHTML = renderSectionHTML('ЭФФЕКТЫ', 'fa-sparkles', '#00a8ff', allBuffs, (item) => {
         const isBuff = item.id.startsWith('buff:');
-        const name = item.id.split(':')[1];
+        const [type, statName] = item.id.split(':');
+        const statDisplayName = getRussianStatName(statName);
         const val = item.value || 0;
-        const dur = item.duration || 0;
         const color = isBuff ? '#4cd137' : '#e84118';
         const icon = isBuff ? '📈' : '📉';
         const sign = val > 0 ? '+' : '';
+        const extraFields = renderItemExtraFields(item);
+        
         return `
-            <div style="background: rgba(${isBuff ? '76, 175, 80' : '244, 67, 54'}, 0.1); padding: 4px 8px; border-radius: 4px; border-left: 3px solid ${color}; width: 100%; margin-bottom: 2px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="color: ${color}; font-size: 0.8rem;">${icon} ${name}: ${sign}${val}</div>
-                    <div style="color: #888; font-size: 0.7rem;">(${dur} ход.)</div>
+            <div style="background: rgba(${isBuff ? '76, 175, 80' : '244, 67, 54'}, 0.1); padding: 8px; border-radius: 4px; border-left: 3px solid ${color}; width: 100%; margin-bottom: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="width: 100%">
+                        <div style="color: ${color}; font-size: 0.8rem; font-weight:bold;">
+                            ${icon} ${statDisplayName}: ${sign}${val}
+                        </div>
+                        ${extraFields}
+                    </div>
                 </div>
             </div>`;
     });
     fragment.appendChild(buffsDiv);
     
+    // ИНВЕНТАРЬ
     const invDiv = document.createElement('div');
     invDiv.id = 'inventoryContainer';
     invDiv.className = 'inventory-section';
     const invItems = State.getGameItemsByType('inventory:');
     invDiv.innerHTML = renderSectionHTML('ИНВЕНТАРЬ', 'fa-box-open', '#d4af37', invItems, (item) => {
         const name = item.value || item.id.split(':')[1];
+        const extraFields = renderItemExtraFields(item);
         return `
-            <div style="background:rgba(255,255,255,0.08); padding:6px 8px; border-radius:4px; border:1px solid #444; width: 100%; margin-bottom: 2px;">
-                <div style="color:#ccc; font-size:0.8rem;">${name}</div>
+            <div style="background:rgba(255,255,255,0.08); padding:8px; border-radius:4px; border:1px solid #444; width: 100%; margin-bottom: 4px;">
+                <div style="color:#ccc; font-size:0.8rem; font-weight:bold;">${name}</div>
+                ${extraFields}
             </div>`;
     });
     fragment.appendChild(invDiv);
@@ -842,7 +903,7 @@ function formatCompactOperations(operations, type) {
                 break;
             case 'ADD':
                 if (itemType === 'buff' || itemType === 'debuff') {
-                    display = `${name}+${op.value}`;
+                    display = `${name}+${op.value} (${op.duration} ход.)`;
                 } else {
                     display = `+${name}`;
                 }
@@ -1106,5 +1167,5 @@ export const Render = {
     showErrorAlert,
     showSuccessAlert,
     showWarningAlert,
-    getStatColor // 🚫🚫🚫 ДОБАВЛЕНО: экспортируем функцию для использования в других модулях
+    getStatColor
 };

@@ -329,14 +329,26 @@ function applyOperations(operations) {
             switch (operation.operation) {
                 case 'ADD':
                     if (existingIndex === -1) {
+                        // Сохраняем все поля операции как свойства game_item
                         const newItem = {
                             id: operation.id,
-                            value: operation.value,
-                            ...(operation.duration !== undefined && { duration: operation.duration }),
-                            ...(operation.description && { description: operation.description })
+                            value: operation.value
                         };
+
+                        // Переносим все дополнительные поля из операции в game_item
+                        Object.keys(operation).forEach(key => {
+                            if (key !== 'operation' && key !== 'id' && key !== 'value') {
+                                newItem[key] = operation[key];
+                            }
+                        });
+
                         state.heroState.push(newItem);
-                        eventData = { id: operation.id, value: operation.value, operation: operation };
+                        
+                        eventData = { 
+                            id: operation.id, 
+                            value: operation.value,
+                            operation: operation 
+                        };
                         stateObserver.notify(STATE_EVENTS.HERO_ITEM_ADDED, eventData);
                         console.log(`➕ Добавлен: ${operation.id} = ${operation.value}`);
                         hasChanges = true;
@@ -358,9 +370,14 @@ function applyOperations(operations) {
                     if (existingIndex !== -1) {
                         const oldValue = state.heroState[existingIndex].value;
                         state.heroState[existingIndex].value = operation.value;
-                        if (operation.description) {
-                            state.heroState[existingIndex].description = operation.description;
-                        }
+                        
+                        // Обновляем дополнительные поля, если они есть в операции
+                        Object.keys(operation).forEach(key => {
+                             if (key !== 'operation' && key !== 'id' && key !== 'value') {
+                                state.heroState[existingIndex][key] = operation[key];
+                            }
+                        });
+
                         eventData = { 
                             id: operation.id, 
                             oldValue: oldValue, 
@@ -415,7 +432,8 @@ function applyOperations(operations) {
     });
     
     if (hasChanges) {
-        processDurations();
+        // 🚫🚫🚫 ВАЖНО: Удален вызов processDurations() отсюда.
+        // Уменьшение длительности должно происходить ТОЛЬКО в processTurn в модуле Game.
         
         stateObserver.notify(STATE_EVENTS.HERO_CHANGED, {
             operations: operationResults,
@@ -423,28 +441,10 @@ function applyOperations(operations) {
         });
         
         Saveload.saveState();
-        console.log('✅ Состояние обновлено');
+        console.log('✅ Состояние обновлено (applyOperations)');
     } else {
         console.log('⚠️ Не было изменений для применения');
     }
-}
-
-function processDurations() {
-    const buffs = state.heroState.filter(item => item.id.startsWith('buff:') || item.id.startsWith('debuff:'));
-    
-    buffs.forEach(buff => {
-        if (buff.duration !== undefined) {
-            buff.duration--;
-            if (buff.duration <= 0) {
-                const index = state.heroState.findIndex(item => item.id === buff.id);
-                if (index !== -1) {
-                    state.heroState.splice(index, 1);
-                    stateObserver.notify(STATE_EVENTS.HERO_ITEM_REMOVED, { id: buff.id });
-                    console.log(`🕐 Удален истекший: ${buff.id}`);
-                }
-            }
-        }
-    });
 }
 
 function getGameItem(id) {
