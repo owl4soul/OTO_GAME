@@ -9,6 +9,7 @@ import { Game } from './6-game.js';
 import { Audit } from './8-audit.js';
 
 const dom = DOM.getDOM();
+let thoughtsOfHeroInterval = null;
 
 // 🚫🚫🚫 ДОБАВЛЕНО: Функция для получения цвета по значению стата (0-100)
 function getStatColor(value) {
@@ -1110,6 +1111,90 @@ function formatDurationWithText(duration) {
     return `${duration} ход.`;
 }
 
+
+/**
+ * Запуск показа фраз героя на подложке
+ */
+function startThoughtsOfHeroDisplay() {
+    if (thoughtsOfHeroInterval) clearInterval(thoughtsOfHeroInterval);
+    showThoughtsOfHeroLayout();
+    
+    thoughtsOfHeroInterval = setInterval(() => {
+        let phrase = null;
+        
+        // Пробуем взять фразу из основного списка
+        if (State.getHeroPhrasesCount() > 0) {
+            phrase = State.getHeroPhrase();
+        }
+        // Если список пуст, берем фразу из заглушек
+        else if (CONFIG.thoughtsOfHeroFakes.length > 0) {
+            const fakePhrases = CONFIG.thoughtsOfHeroFakes;
+            phrase = fakePhrases[Math.floor(Math.random() * fakePhrases.length)];
+        }
+        
+        if (phrase) {
+            updateThoughtsOfHeroText(phrase);
+        }
+    }, 5000);
+    
+    // Показываем первую фразу сразу
+    setTimeout(() => {
+        let phrase = null;
+        
+        if (State.getHeroPhrasesCount() > 0) {
+            phrase = State.getHeroPhrase();
+        } else if (CONFIG.thoughtsOfHeroFakes.length > 0) {
+            const fakePhrases = CONFIG.thoughtsOfHeroFakes;
+            phrase = fakePhrases[Math.floor(Math.random() * fakePhrases.length)];
+        }
+        
+        if (phrase) {
+            updateThoughtsOfHeroText(phrase);
+        }
+    }, 100);
+}
+
+/**
+ * Остановка показа фраз героя
+ */
+function stopThoughtsOfHeroDisplay() {
+    if (thoughtsOfHeroInterval) {
+        clearInterval(thoughtsOfHeroInterval);
+        thoughtsOfHeroInterval = null;
+    }
+    
+    // Скрываем подложку
+    hideThoughtsOfHeroLayout();
+}
+
+/**
+ * Показ подложки для фраз героя
+ */
+function showThoughtsOfHeroLayout() {
+    if (dom.thoughtsOfHeroLayout) {
+        dom.thoughtsOfHeroLayout.style.display = 'flex';
+    }
+}
+
+/**
+ * Скрытие подложки для фраз героя
+ */
+function hideThoughtsOfHeroLayout() {
+    if (dom.thoughtsOfHeroLayout) {
+        dom.thoughtsOfHeroLayout.style.display = 'none';
+    }
+}
+
+/**
+ * Обновление текста на подложке фраз героя
+ * @param {string} text - Текст для отображения
+ */
+function updateThoughtsOfHeroText(text) {
+    if (dom.thoughtsOfHeroText) {
+        dom.thoughtsOfHeroText.textContent = text;
+    }
+}
+
 setupStateObservers();
 
 export const Render = {
@@ -1120,6 +1205,8 @@ export const Render = {
     updateLogCount,
     renderAuditList,
     renderScene,
+    startThoughtsOfHeroDisplay,
+    stopThoughtsOfHeroDisplay,
     getRussianStatName,
     updateUIMode,
     renderChoices,
@@ -1133,5 +1220,5 @@ export const Render = {
     showWarningAlert,
     formatDuration,
     formatDurationWithText,
-    getStatColor // 🚫🚫🚫 ДОБАВЛЕНО: экспортируем функцию для использования в других модулях
+    getStatColor
 };

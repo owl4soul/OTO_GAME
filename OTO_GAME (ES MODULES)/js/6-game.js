@@ -59,7 +59,6 @@ function setupGameObservers() {
 // Переменные состояния
 let matrixInterval = null;
 let activeAbortController = null;
-let thoughtsOfHeroInterval = null;
 
 // Операции над game_item
 const OPERATION_TYPES = {
@@ -640,6 +639,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     
     try {
         console.log('📡 Отправляем запрос к ИИ...');
+        Render.startThoughtsOfHeroDisplay();
         const data = await API.sendAIRequest(state, selectedActions, activeAbortController, d10);
         
         clearTimeout(timeoutId);
@@ -663,6 +663,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     } catch (e) {
         clearTimeout(timeoutId);
         activeAbortController = null;
+        Render.stopThoughtsOfHeroDisplay();
         
         if (e.name === 'AbortError') {
             console.log('Запрос отменен');
@@ -707,6 +708,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
 // 🚫🚫🚫 ПЕРЕПИСАНО ПОЛНОСТЬЮ: processTurn для корректного расчета и отображения
 function processTurn(data, actionResults, d10) {
     console.log('🔍 processTurn called with:', { data, actionResults, d10 });
+    Render.stopThoughtsOfHeroDisplay();
     
     const state = State.getState();
     const previousScene = state.gameState.currentScene;
