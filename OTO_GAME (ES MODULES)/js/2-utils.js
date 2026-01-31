@@ -3,14 +3,13 @@
 
 import { CONFIG } from './1-config.js';
 
+
 /**
  * Пытается починить обрезанный JSON (Auto-Heal)
- * Восстанавливает закрывающие кавычки и скобки.
+ * Восстанавливает закрывающие кавычки и скобки, включая обрезанные строки в массивах.
  * @param {string} text - Битая JSON строка
  * @returns {string} - Потенциально валидная JSON строка
  */
-// В 2-utils.js заменяем функцию repairTruncatedJSON на более надежную версию:
-
 /**
  * Пытается починить обрезанный JSON (Auto-Heal)
  * Восстанавливает закрывающие кавычки и скобки, включая обрезанные строки в массивах.
@@ -20,45 +19,56 @@ import { CONFIG } from './1-config.js';
 function repairTruncatedJSON(text) {
     let repaired = text.trim();
     
-    // 1. Если обрыв внутри строки (нечетное кол-во кавычек), закрываем кавычку
-    let quoteCount = 0;
+    // 1. Сначала исправляем неэкранированные символы новой строки и кавычки внутри строк
     let inString = false;
     let escapeNext = false;
+    let result = '';
     
     for (let i = 0; i < repaired.length; i++) {
         const char = repaired[i];
         
         if (escapeNext) {
+            result += char;
             escapeNext = false;
             continue;
         }
         
         if (char === '\\') {
             escapeNext = true;
+            result += char;
             continue;
         }
         
         if (char === '"') {
-            if (!inString) {
-                inString = true;
-                quoteCount++;
+            inString = !inString;
+            result += char;
+            continue;
+        }
+        
+        if (inString) {
+            // Экранируем проблемные символы внутри строк
+            if (char === '\n') {
+                result += '\\n';
+            } else if (char === '\r') {
+                result += '\\r';
+            } else if (char === '\t') {
+                result += '\\t';
+            } else if (char === '"') {
+                // Это не должно случиться, так как мы уже обрабатываем кавычки выше
+                result += '\\"';
+            } else if (char === '\\') {
+                result += '\\\\';
             } else {
-                inString = false;
-                quoteCount++;
+                result += char;
             }
+        } else {
+            result += char;
         }
     }
     
-    // Если строка не закрыта, добавляем закрывающую кавычку
-    if (inString || quoteCount % 2 !== 0) {
-        // Если обрыв произошел прямо на экранирующем слеше, убираем его
-        if (repaired.endsWith('\\')) {
-            repaired = repaired.slice(0, -1);
-        }
-        repaired += '"';
-    }
+    repaired = result;
     
-    // 2. Балансируем скобки и кавычки в массивах
+    // 2. Теперь балансируем скобки и кавычки
     let openCurly = 0, closeCurly = 0;
     let openSquare = 0, closeSquare = 0;
     let inString2 = false;
@@ -101,7 +111,6 @@ function repairTruncatedJSON(text) {
     }
     
     // 3. Особый случай: обрыв в середине массива thoughts
-    // Ищем незакрытые строки в массивах
     const arrayMatches = repaired.matchAll(/"thoughts"\s*:\s*\[/g);
     for (const match of arrayMatches) {
         const start = match.index + match[0].length;
@@ -152,7 +161,6 @@ function repairTruncatedJSON(text) {
     return repaired;
 }
 
-
 function fixCommonAIJsonErrors(text) {
     if (!text || typeof text !== 'string') return text;
     
@@ -161,15 +169,21 @@ function fixCommonAIJsonErrors(text) {
     // 1. Исправляем двойное экранирование: \\\" -> \"
     fixed = fixed.replace(/\\\\\"/g, '"');
     
-    // 2. Удаляем лишние кавычки в конце строковых значений
-    // Паттерн: "ключ": "значение"" (лишняя кавычка)
+    // 2. Исправляем незакрытые строки с переносами
+    fixed = fixed.replace(/"([^"\\]*(?:\\.[^"\\]*)*)\n/g, '"$1\\n');
+    fixed = fixed.replace(/\n([^"\\]*(?:\\.[^"\\]*)*")/g, '\\n$1');
+    
+    // 3. Удаляем лишние кавычки в конце строковых значений
     fixed = fixed.replace(/\"(\s*:\s*\"[^\"]*)\"\"(\s*[,\}])/g, '"$1"$2');
     
-    // 3. Исправляем одиночные обратные слэши перед кавычками
+    // 4. Исправляем одиночные обратные слэши перед кавычками
     fixed = fixed.replace(/([^\\])\\\"/g, '$1\"');
     
-    // 4. Убираем висячие кавычки после значений
+    // 5. Убираем висячие кавычки после значений
     fixed = fixed.replace(/\"\"([,\}\]])/g, '"$1');
+    
+    // 6. Заменяем неэкранированные переносы строк внутри строк
+    fixed = fixed.replace(/"([^"\\]*(?:\\.[^"\\]*)*?)(?<!\\)\n(?!\\)([^"\\]*(?:\\.[^"\\]*)*)"/g, '"$1\\n$2"');
     
     return fixed;
 }
@@ -185,28 +199,30 @@ function robustJsonParse(rawContent) {
     let text = rawContent.trim();
     
     // Удаляем обертки markdown
-        // Удаляем обертки markdown
     text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
     text = text.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
     
-    // Шаг 0. Исправляем типичные ошибки ИИ
+    // Шаг 0. Предварительная обработка для экранирования символов
+    text = preprocessJson(text);
+    
+    // Шаг 1. Исправляем типичные ошибки ИИ
     text = fixCommonAIJsonErrors(text);
     
-    // Шаг 1. Сначала пробуем стандартный парсинг
+    // Шаг 2. Сначала пробуем стандартный парсинг
     try {
         return JSON.parse(text);
     } catch (e) {
         console.warn('Стандартный JSON.parse не удался, пытаемся починить JSON:', e.message);
     }
     
-    // Шаг2. Пробуем починить и распарсить
+    // Шаг 3. Пробуем починить и распарсить
     try {
         const repaired = repairTruncatedJSON(text);
         return JSON.parse(repaired);
     } catch (e) {
         console.warn('Парсинг починенного JSON не удался, переходим к агрессивному парсингу:', e.message);
     }
-    
+
     // Шаг 3: Агрессивный парсинг для извлечения хотя бы сцены
     const result = {
         design_notes: "",
@@ -647,16 +663,79 @@ function parseHeroPhrases(text) {
  * @param {string} text - Текст с escape-последовательностями
  * @returns {string} Декодированный текст
  */
+/**
+ * Декодирует Unicode escape-последовательности в читаемые символы
+ * @param {string} text - Текст с escape-последовательностями
+ * @returns {string} Декодированный текст
+ */
 function decodeUnicodeEscapes(text) {
     if (!text || typeof text !== 'string') return text;
     
     return text.replace(/\\u[\dA-F]{4}/gi, function(match) {
-        try {
-            return String.fromCharCode(parseInt(match.replace(/\\u/g, ''), 16));
-        } catch (e) {
-            return match;
+            try {
+                return String.fromCharCode(parseInt(match.replace(/\\u/g, ''), 16));
+            } catch (e) {
+                return match;
+            }
+        }).replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+}
+
+/**
+ * Предварительная обработка JSON: экранирует неэкранированные символы внутри строк
+ * @param {string} jsonText - JSON текст
+ * @returns {string} Обработанный JSON текст
+ */
+function preprocessJson(jsonText) {
+    let result = '';
+    let inString = false;
+    let escapeNext = false;
+    
+    for (let i = 0; i < jsonText.length; i++) {
+        const char = jsonText[i];
+        
+        if (escapeNext) {
+            result += char;
+            escapeNext = false;
+            continue;
         }
-    });
+        
+        if (char === '\\') {
+            escapeNext = true;
+            result += char;
+            continue;
+        }
+        
+        if (char === '"') {
+            inString = !inString;
+            result += char;
+            continue;
+        }
+        
+        if (inString) {
+            // Экранируем проблемные символы
+            if (char === '\n') {
+                result += '\\n';
+            } else if (char === '\r') {
+                result += '\\r';
+            } else if (char === '\t') {
+                result += '\\t';
+            } else if (char === '"') {
+                result += '\\"';
+            } else if (char === '\\') {
+                result += '\\\\';
+            } else {
+                result += char;
+            }
+        } else {
+            result += char;
+        }
+    }
+    
+    return result;
 }
 
 /**

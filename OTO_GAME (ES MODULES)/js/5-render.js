@@ -219,7 +219,7 @@ function renderAuditList() {
     
     if (!list) return;
     
-    const displayLog = state.auditLog.slice(-20).reverse();
+    const displayLog = state.auditLog.slice(-20);
     
     list.innerHTML = displayLog.map(entry => {
         let statusColor = '#888';
