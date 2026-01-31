@@ -72,7 +72,7 @@ const OPERATION_TYPES = {
 function getRussianStatName(key) {
     const map = {
         'will': 'Воля',
-        'stealth': 'Скрыт.',
+        'stealth': 'Скрытность',
         'influence': 'Влияние',
         'sanity': 'Разум'
     };
