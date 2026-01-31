@@ -10,7 +10,65 @@ import { Audit } from './8-audit.js';
 
 const dom = DOM.getDOM();
 
-// Вспомогательные функции для работы с game_item
+// Подписка на события состояния
+function setupStateObservers() {
+    console.log('🔍 Настройка подписок на события состояния...');
+    
+    State.onHeroChange((data) => {
+        console.log('🎯 Событие: hero:changed', data);
+        renderStats();
+        renderAllGameItems();
+    });
+    
+    State.onSceneChange((data) => {
+        console.log('🎯 Событие: scene:changed', data);
+        renderScene();
+        renderChoices();
+    });
+    
+    State.onTurnComplete((data) => {
+        console.log('🎯 Событие: turn:completed', data);
+        renderHistory();
+        if (dom.turnCounter) {
+            dom.turnCounter.innerHTML = `ХОДЫ: <span style="color: #888; font-family: monospace;">${State.getTurnCount()}</span>`;
+        }
+    });
+    
+    State.onSettingsChange(() => {
+        updateApiKeyFields();
+        renderModelSelectorByProvider();
+        updateModelDetails();
+    });
+    
+    State.on(State.EVENTS.UI_STATE_CHANGED, () => {
+        updateUIMode();
+    });
+    
+    State.on(State.EVENTS.SCALE_CHANGED, (data) => {
+        console.log('🎯 Событие: scale:changed', data);
+    });
+    
+    State.on(State.EVENTS.HERO_STATS_UPDATED, (data) => {
+        if (data.id && data.id.startsWith('stat:')) {
+            renderStats();
+        }
+    });
+    
+    State.on(State.EVENTS.HERO_ITEM_ADDED, (data) => {
+        if (data.id.startsWith('inventory:')) {
+            renderAllGameItems();
+        }
+    });
+    
+    State.on(State.EVENTS.HERO_ITEM_REMOVED, (data) => {
+        if (data.id.startsWith('inventory:')) {
+            renderAllGameItems();
+        }
+    });
+    
+    console.log('✅ Подписки на события настроены');
+}
+
 function getGameItemIcon(id) {
     if (!id) return '❓';
     const [type] = id.split(':');
@@ -42,18 +100,13 @@ function getGameItemName(id) {
     return name;
 }
 
-/**
- * Обновление полей API ключей в зависимости от выбранного провайдера
- */
 function updateApiKeyFields() {
     const state = State.getState();
     
-    // Скрываем все поля
     Object.values(dom.keyFields).forEach(field => {
         field.classList.remove('active');
     });
     
-    // Показываем нужное поле
     if (state.settings.apiProvider === 'openrouter') {
         dom.keyFields.openrouter.classList.add('active');
     } else if (state.settings.apiProvider === 'vsegpt') {
@@ -61,9 +114,6 @@ function updateApiKeyFields() {
     }
 }
 
-/**
- * Обновление списка моделей в зависимости от провайдера
- */
 function renderModelSelectorByProvider() {
     const state = State.getState();
     const select = dom.inputs.model;
@@ -71,7 +121,6 @@ function renderModelSelectorByProvider() {
     
     select.innerHTML = '';
     
-    // Фильтруем модели по провайдеру
     const filteredModels = state.models.filter(m => m.provider === currentProvider);
     
     if (filteredModels.length === 0) {
@@ -79,7 +128,6 @@ function renderModelSelectorByProvider() {
         return;
     }
     
-    // Добавляем опции для каждой модели
     filteredModels.forEach(model => {
         const opt = document.createElement('option');
         opt.value = model.id;
@@ -87,7 +135,6 @@ function renderModelSelectorByProvider() {
         select.appendChild(opt);
     });
     
-    // Устанавливаем выбранную модель
     const modelExists = filteredModels.some(m => m.id === state.settings.model);
     if (modelExists) {
         select.value = state.settings.model;
@@ -97,9 +144,6 @@ function renderModelSelectorByProvider() {
     }
 }
 
-/**
- * Обновление деталей выбранной модели
- */
 function updateModelDetails() {
     const state = State.getState();
     const modelId = dom.inputs.model.value;
@@ -129,9 +173,6 @@ function updateModelDetails() {
     }
 }
 
-/**
- * Обновление статистики моделей
- */
 function updateModelStats() {
     const stats = State.getModelStats();
     
@@ -146,9 +187,6 @@ function updateModelStats() {
     if (untestedElem) untestedElem.textContent = stats.untested;
 }
 
-/**
- * Обновление счетчика записей в логе
- */
 function updateLogCount() {
     const state = State.getState();
     const logCountElem = document.getElementById('logCount');
@@ -157,16 +195,12 @@ function updateLogCount() {
     }
 }
 
-/**
- * Отрисовка списка аудита
- */
 function renderAuditList() {
     const state = State.getState();
     const list = document.getElementById('auditList');
     
     if (!list) return;
     
-    // Показываем последние 20 записей
     const displayLog = state.auditLog.slice(-20).reverse();
     
     list.innerHTML = displayLog.map(entry => {
@@ -297,10 +331,6 @@ function renderAuditList() {
     }
 }
 
-/**
- * Отрисовка текущей сцены
- * 🚫🚫🚫 ИЗМЕНЕНО: Добавлен вывод Типологии под рефлексией и принудительное перемещение блока изменений наверх
- */
 function renderScene() {
     const state = State.getState();
     
@@ -312,9 +342,7 @@ function renderScene() {
     
     const currentScene = state.gameState.currentScene;
     
-    // 🚫🚫🚫 ГЛОБАЛЬНАЯ ЗАДАЧА: Весь блок изменений перенести наверх
     if (dom.updates && dom.sceneText && dom.sceneText.parentNode) {
-        // Перемещаем блок updates перед sceneText в DOM
         dom.sceneText.parentNode.insertBefore(dom.updates, dom.sceneText);
     }
     
@@ -333,7 +361,6 @@ function renderScene() {
         dom.sceneText.innerHTML = PROMPTS.initialGameState.scene;
     }
     
-    // 🚫🚫🚫 ГЛОБАЛЬНАЯ ЗАДАЧА: Типологию отобразить под рефлексией
     let reflectionAndTypologyHtml = '';
     
     if (currentScene.reflection) {
@@ -354,14 +381,9 @@ function renderScene() {
     }
 }
 
-/**
- * Отрисовка характеристик героя, прогресса и степеней (ФОРМАТ 4.1)
- * 🚫🚫🚫 ИЗМЕНЕНО: Изменена логика отображения статов (цвет значения + дельта с ходами)
- */
 function renderStats() {
     const state = State.getState();
     
-    // 1. Получаем значения статов из game_items
     const statsData = {
         will: State.getGameItemValue('stat:will') || 50,
         stealth: State.getGameItemValue('stat:stealth') || 50,
@@ -369,21 +391,16 @@ function renderStats() {
         sanity: State.getGameItemValue('stat:sanity') || 50
     };
     
-    // Обновляем значения характеристик (базовые)
     dom.vals.will.textContent = statsData.will;
     dom.vals.stealth.textContent = statsData.stealth;
     dom.vals.inf.textContent = statsData.influence;
     dom.vals.sanity.textContent = statsData.sanity;
     
-    // 2. Обновляем описание личности (отображается в нижней секции в renderAllGameItems)
-    
-    // 3. Обновляем прогресс-бар
     const progressValue = State.getGameItemValue('progress:oto') || 0;
     const maxScore = 110;
     const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
     dom.tube.style.height = `${pct}%`;
     
-    // 4. Отрисовываем список степеней
     const degreeItems = State.getGameItemsByType('initiation_degree:');
     const currentDegreeItem = degreeItems.find(item => item.value && item.value.trim() !== '');
     let currentDegreeIndex = 0;
@@ -404,14 +421,9 @@ function renderStats() {
         }).join('');
     }
     
-    // 5. 🚫🚫🚫 ГЛОБАЛЬНАЯ ЗАДАЧА: Баффы/Дебаффы отображать рядом со значениями статов с дельтой и ходами
     renderBuffsAndDebuffsStats(statsData);
 }
 
-/**
- * Отображение баффов/дебаффов рядом со статами
- * 🚫🚫🚫 ИЗМЕНЕНО: Реализован формат (val +/-delta (turns)) и окрашивание значения
- */
 function renderBuffsAndDebuffsStats(currentBaseStats) {
     const buffs = State.getGameItemsByType('buff:');
     const debuffs = State.getGameItemsByType('debuff:');
@@ -424,19 +436,17 @@ function renderBuffsAndDebuffsStats(currentBaseStats) {
         'sanity': []
     };
     
-    // Группируем модификаторы по статам
     allEffects.forEach(effect => {
         const [type, statName] = effect.id.split(':');
         if (statModifiers[statName] && effect.value && effect.duration) {
             statModifiers[statName].push({
                 value: effect.value,
                 duration: effect.duration,
-                type: type // 'buff' or 'debuff'
+                type: type
             });
         }
     });
     
-    // Рендерим для каждого стата
     Object.entries(statModifiers).forEach(([statName, modifiers]) => {
         const valElement = document.getElementById(`val${statName.charAt(0).toUpperCase() + statName.slice(1)}`);
         
@@ -444,37 +454,28 @@ function renderBuffsAndDebuffsStats(currentBaseStats) {
             const baseValue = currentBaseStats[statName];
             
             if (modifiers.length > 0) {
-                // Считаем сумму модификаторов
                 const totalMod = modifiers.reduce((sum, mod) => sum + mod.value, 0);
-                // Формируем строку дельт: (+5 (3)) (-2 (1))
                 const deltasHtml = modifiers.map(m => {
                     const sign = m.value > 0 ? '+' : '';
                     const color = m.value > 0 ? '#4cd137' : '#e84118';
                     return `<span style="color: ${color}; margin-left: 3px; font-size: 0.8em;">(${sign}${m.value} (${m.duration}))</span>`;
                 }).join('');
                 
-                // Цвет основного значения зависит от суммы модификаторов
-                let valueColor = '#fff'; // белый по умолчанию
-                if (totalMod > 0) valueColor = '#4cd137'; // зеленый
-                else if (totalMod < 0) valueColor = '#e84118'; // красный
+                let valueColor = '#fff';
+                if (totalMod > 0) valueColor = '#4cd137';
+                else if (totalMod < 0) valueColor = '#e84118';
                 
-                // Финальный рендер строки стата
                 valElement.innerHTML = `
                     <span style="color: ${valueColor}; font-weight: bold;">${baseValue}</span>
                     ${deltasHtml}
                 `;
             } else {
-                // Если нет модификаторов, просто значение
                 valElement.innerHTML = baseValue;
             }
         }
     });
 }
 
-/**
- * Вспомогательная функция для рендеринга секции в левой панели
- * 🚫🚫🚫 НОВАЯ ФУНКЦИЯ: Стандартизирует заголовки и плейсхолдеры
- */
 function renderSectionHTML(title, icon, color, items, renderItemFn) {
     let html = `<div style="margin-top: 15px; font-weight: bold; color: ${color}; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; font-size: 0.85rem;">
         <i class="fas ${icon}"></i> ${title} ${items.length > 0 ? `(${items.length})` : ''}
@@ -490,20 +491,9 @@ function renderSectionHTML(title, icon, color, items, renderItemFn) {
     return html;
 }
 
-/**
- * Отображение всех game_items в нижней секции
- * 🚫🚫🚫 ИЗМЕНЕНО: Полностью переписана для обеспечения строгого порядка вывода блоков
- */
 function renderAllGameItems() {
     console.log('🔍 renderAllGameItems called (Unified Order)');
     
-    // Целевой контейнер - родитель элемента Personality.
-    // Мы будем добавлять блоки после dom.pers (элемента личности)
-    // Но чтобы соблюсти порядок, лучше очистить контейнер (кроме прогресс-бара, если он там) или 
-    // создать единый контейнер для инфо-блоков.
-    
-    // Предполагаем структуру: Parent -> [PersonalityDiv, ..., OtherDivs]
-    // Чтобы не ломать верстку, найдем контейнер, где лежит personalityDisplay
     const personalityEl = document.getElementById('personalityDisplay');
     if (!personalityEl || !personalityEl.parentNode) {
         console.error('❌ Cannot find personalityDisplay container');
@@ -512,19 +502,16 @@ function renderAllGameItems() {
     
     const container = personalityEl.parentNode;
     
-    // 1. Отрисовка ЛИЧНОСТИ (всегда первая)
     const personalityVal = State.getGameItemValue('personality:hero') || "Описание отсутствует";
     personalityEl.textContent = personalityVal;
     
-    // Удаляем все предыдущие динамические контейнеры, чтобы пересоздать их в правильном порядке
-    // Идентификаторы контейнеров, которые мы управляем:
     const managedIds = [
         'typologyContainer', 
         'relationsDisplay', 
         'skillsContainer', 
         'blessingsContainer', 
         'buffsContainer',
-        'inventoryContainer' // Инвентарь тоже, хотя в задаче про него не сказано явно в списке порядка, но он есть в коде
+        'inventoryContainer'
     ];
     
     managedIds.forEach(id => {
@@ -532,11 +519,8 @@ function renderAllGameItems() {
         if (el) el.remove();
     });
     
-    // Создаем фрагмент для вставки в нужном порядке
     const fragment = document.createDocumentFragment();
     
-    // 2. ТИПОЛОГИЯ (Typology)
-    // Глобальная задача: Типология (последняя переданная не пустая)
     const state = State.getState();
     const typologyVal = state.gameState.currentScene ? state.gameState.currentScene.typology : null;
     
@@ -550,7 +534,6 @@ function renderAllGameItems() {
     </div>`;
     fragment.appendChild(typologyDiv);
 
-    // 3. ОТНОШЕНИЯ (Relations)
     const relationsDiv = document.createElement('div');
     relationsDiv.id = 'relationsDisplay';
     relationsDiv.className = 'relations-section';
@@ -567,7 +550,6 @@ function renderAllGameItems() {
     });
     fragment.appendChild(relationsDiv);
 
-    // 4. НАВЫКИ (Skills)
     const skillsDiv = document.createElement('div');
     skillsDiv.id = 'skillsContainer';
     skillsDiv.className = 'skills-section';
@@ -579,7 +561,6 @@ function renderAllGameItems() {
     });
     fragment.appendChild(skillsDiv);
 
-    // 5. БЛАГОСЛОВЕНИЯ/ПРОКЛЯТИЯ (Blessings/Curses)
     const blessDiv = document.createElement('div');
     blessDiv.id = 'blessingsContainer';
     blessDiv.className = 'blessings-section';
@@ -599,7 +580,6 @@ function renderAllGameItems() {
     });
     fragment.appendChild(blessDiv);
 
-    // 6. БАФФЫ/ДЕБАФФЫ (Buffs/Debuffs)
     const buffsDiv = document.createElement('div');
     buffsDiv.id = 'buffsContainer';
     buffsDiv.className = 'buffs-section';
@@ -624,7 +604,6 @@ function renderAllGameItems() {
     });
     fragment.appendChild(buffsDiv);
     
-    // 7. ИНВЕНТАРЬ (Inventory) - добавляем в конец, чтобы не потерять
     const invDiv = document.createElement('div');
     invDiv.id = 'inventoryContainer';
     invDiv.className = 'inventory-section';
@@ -638,8 +617,6 @@ function renderAllGameItems() {
     });
     fragment.appendChild(invDiv);
 
-    // Вставляем все созданные блоки после personalityEl
-    // Используем insertBefore с nextSibling, чтобы вставить сразу после Personality
     if (personalityEl.nextSibling) {
         container.insertBefore(fragment, personalityEl.nextSibling);
     } else {
@@ -647,12 +624,6 @@ function renderAllGameItems() {
     }
 }
 
-// 🚫🚫🚫 Удалены отдельные функции renderInventory, renderSkills, renderRelations, renderBlessingsAndCurses, renderBuffsAndDebuffsList
-// так как их функционал полностью интегрирован в renderAllGameItems для обеспечения строгого порядка.
-
-/**
- * Полная перерисовка интерфейса
- */
 function renderAll() {
     console.info(`⚠️   RENDER ALL (формат 4.1)   ⚠️`);
     
@@ -660,7 +631,7 @@ function renderAll() {
         renderScene();
         renderStats();
         renderChoices();
-        renderAllGameItems(); // 🚫🚫🚫 Вызывает новую унифицированную функцию
+        renderAllGameItems();
         renderHistory();
         applyStateEffects();
         updateUIMode();
@@ -675,9 +646,6 @@ function renderAll() {
     }
 }
 
-/**
- * Обновление режима ввода
- */
 function updateUIMode() {
     const state = State.getState();
     
@@ -715,9 +683,6 @@ function updateUIMode() {
     }
 }
 
-/**
- * Нормализует название характеристики к стандартному ключу
- */
 function normalizeStatKey(statName) {
     if (!statName) return '';
     
@@ -737,9 +702,6 @@ function normalizeStatKey(statName) {
     return lowerStat;
 }
 
-/**
- * Получает иконку для стандартного ключа характеристики
- */
 function getStatIcon(statKey) {
     const icons = {
         'will': '<i class="fas fa-brain" style="color: #ffcc00;"></i>',
@@ -750,9 +712,6 @@ function getStatIcon(statKey) {
     return icons[statKey] || '<i class="fas fa-question" style="color: #888;"></i>';
 }
 
-/**
- * Получение русского названия стата
- */
 function getRussianStatName(key) {
     const map = { 
         'will': 'Воля', 
@@ -763,9 +722,6 @@ function getRussianStatName(key) {
     return map[key] || key;
 }
 
-/**
- * Компактный формат требований (ФОРМАТ 4.1)
- */
 function formatCompactRequirements(requirements) {
     if (!Array.isArray(requirements) || requirements.length === 0) {
         return '';
@@ -813,9 +769,6 @@ function formatCompactRequirements(requirements) {
     return `<div style="font-size:0.75rem; margin-top:3px; color:#888; opacity: 0.3">🔒 Треб: ${items.join(', ')}</div>`;
 }
 
-/**
- * Компактный формат операций (ФОРМАТ 4.1)
- */
 function formatCompactOperations(operations, type) {
     if (!Array.isArray(operations) || operations.length === 0) {
         return '';
@@ -866,9 +819,6 @@ function formatCompactOperations(operations, type) {
     </div>`;
 }
 
-/**
- * Отрисовка вариантов выбора (ФОРМАТ 4.1)
- */
 function renderChoices() {
     console.log('🔍 renderChoices called');
     
@@ -941,9 +891,6 @@ function renderChoices() {
     console.log('✅ Choices rendered');
 }
 
-/**
- * Применение визуальных эффектов состояния
- */
 function applyStateEffects() {
     const state = State.getState();
     const body = document.body;
@@ -962,9 +909,6 @@ function applyStateEffects() {
     }
 }
 
-/**
- * Отрисовка истории ходов
- */
 function renderHistory() {
     const state = State.getState();
     
@@ -1002,9 +946,6 @@ function renderHistory() {
     });
 }
 
-/**
- * Показать уведомление
- */
 function showAlert(title, message, details = null, type = 'error') {
     const alertModal = document.getElementById('alertModal');
     const alertModalContent = document.getElementById('alertModalContent');
@@ -1081,28 +1022,20 @@ function showAlert(title, message, details = null, type = 'error') {
     };
 }
 
-/**
- * Показать уведомление о предупреждении
- */
 function showWarningAlert(title, message, details = null) {
     showAlert(title, message, details, 'warning');
 }
 
-/**
- * Показать уведомление об ошибке
- */
 function showErrorAlert(title, message, details = null) {
     showAlert(title, message, details, 'error');
 }
 
-/**
- * Показать уведомление об успехе
- */
 function showSuccessAlert(title, message, details = null) {
     showAlert(title, message, details, 'success');
 }
 
-// Публичный интерфейс модуля
+setupStateObservers();
+
 export const Render = {
     updateApiKeyFields,
     renderModelSelectorByProvider,
@@ -1115,7 +1048,7 @@ export const Render = {
     updateUIMode,
     renderChoices,
     renderStats,
-    renderAllGameItems, // 🚫🚫🚫
+    renderAllGameItems,
     renderHistory,
     renderAll,
     showAlert,

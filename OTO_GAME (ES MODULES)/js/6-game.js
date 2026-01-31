@@ -12,6 +12,50 @@ import { UI } from './ui.js';
 
 const dom = DOM.getDOM();
 
+// Подписка на события состояния
+function setupGameObservers() {
+    console.log('🔍 Настройка игровых подписок...');
+    
+    // Обработка ритуалов
+    State.on(State.EVENTS.RITUAL_STARTED, (data) => {
+        console.log('🕯️ Начался ритуал:', data);
+        document.body.classList.add('ritual-mode');
+    });
+    
+    State.on(State.EVENTS.RITUAL_PROGRESS, (data) => {
+        const ritualProgress = document.getElementById('ritualProgress');
+        if (ritualProgress) {
+            ritualProgress.style.width = `${data.progress}%`;
+        }
+    });
+    
+    State.on(State.EVENTS.DEGREE_UPGRADED, (data) => {
+        console.log(`🎓 Повышение степени: ${data.oldDegree} → ${data.newDegree}`);
+        Render.showSuccessAlert('🎓 Новый ранг!', 
+            `Вы достигли степени: ${data.degreeName}. Получен бонус ко всем характеристикам!`);
+    });
+    
+    // Подписка на мысли героя
+    State.on(State.EVENTS.THOUGHTS_UPDATED, (data) => {
+        const thoughtsContainer = document.getElementById('heroThoughts');
+        if (thoughtsContainer && data.thoughts) {
+            thoughtsContainer.innerHTML = data.thoughts
+                .map(t => `<div class="thought">💭 ${t}</div>`)
+                .join('');
+        }
+    });
+    
+    // Подписка на смерть героя
+    State.on(State.EVENTS.HERO_DEATH, (data) => {
+        showEndScreen("ПОРАЖЕНИЕ", "Твоя воля иссякла, рассудок померк, скрытность раскрыта, влияние утрачено.", "#800");
+    });
+    
+    // Подписка на победу
+    State.on(State.EVENTS.VICTORY, () => {
+        showEndScreen("ПОБЕДА", "Ты достиг высшей степени посвящения. Орден признал тебя равным.", "#d4af37", true);
+    });
+}
+
 // Переменные состояния
 let matrixInterval = null;
 let activeAbortController = null;
@@ -25,20 +69,16 @@ const OPERATION_TYPES = {
     MODIFY: 'MODIFY'
 };
 
-// Функция для получения русского названия стата
 function getRussianStatName(key) {
-    const map = { 
-        'will': 'Воля', 
-        'stealth': 'Скрыт.', 
-        'influence': 'Влияние', 
-        'sanity': 'Разум' 
+    const map = {
+        'will': 'Воля',
+        'stealth': 'Скрыт.',
+        'influence': 'Влияние',
+        'sanity': 'Разум'
     };
     return map[key] || key;
 }
 
-/**
- * Создание HTML для отдельной операции (ФОРМАТ 4.1)
- */
 function createOperationHTML(operation, source) {
     if (!operation || !operation.id || !operation.operation) {
         console.warn('Некорректная операция:', operation);
@@ -124,7 +164,7 @@ function createOperationHTML(operation, source) {
             break;
     }
     
-    const description = operation.description ? 
+    const description = operation.description ?
         `<div style="color: #888; font-size: 0.75rem; margin-top: 2px;">${operation.description}</div>` : '';
     
     return `
@@ -141,13 +181,10 @@ function createOperationHTML(operation, source) {
     `;
 }
 
-/**
- * Формирование HTML для отображения изменений за ход (ФОРМАТ 4.1)
- */
 function createTurnUpdatesHTML(actionResults, events) {
     console.log('🔍 createTurnUpdatesHTML called with:', { actionResults, events });
     
-    if ((!actionResults || actionResults.length === 0) && 
+    if ((!actionResults || actionResults.length === 0) &&
         (!events || events.length === 0)) {
         return '';
     }
@@ -159,7 +196,6 @@ function createTurnUpdatesHTML(actionResults, events) {
             </div>
     `;
     
-    // Раздел 1: Результаты выбранных действий
     let hasActionOperations = false;
     if (actionResults && actionResults.length > 0) {
         html += `
@@ -208,7 +244,6 @@ function createTurnUpdatesHTML(actionResults, events) {
         html += `</div></div>`;
     }
     
-    // Раздел 2: Результаты произошедших событий
     let hasEventOperations = false;
     if (events && events.length > 0) {
         html += `
@@ -265,9 +300,6 @@ function createTurnUpdatesHTML(actionResults, events) {
     return html;
 }
 
-/**
- * Расчет результата одного действия (ФОРМАТ 4.1)
- */
 function calculateChoiceResult(choice, d10) {
     console.log('🔍 calculateChoiceResult:', { choice, d10 });
     
@@ -276,7 +308,6 @@ function calculateChoiceResult(choice, d10) {
         return null;
     }
     
-    // 🚫🚫🚫 ИЗМЕНЕНО: Если сложность 0 (свободный ввод), считаем это автоматическим успехом
     if (choice.difficulty_level === 0) {
         return {
             success: true,
@@ -305,9 +336,8 @@ function calculateChoiceResult(choice, d10) {
             reason: reason,
             d10: d10,
             difficulty: difficulty,
-            operations: success ? 
-                (choice.success_rewards || []) : 
-                (choice.fail_penalties || [])
+            operations: success ?
+                (choice.success_rewards || []) : (choice.fail_penalties || [])
         };
     }
     
@@ -366,17 +396,14 @@ function calculateChoiceResult(choice, d10) {
     };
 }
 
-/**
- * Модификация операций для частичного результата (ФОРМАТ 4.1)
- */
 function modifyOperationsForPartialResult(operations) {
     if (!Array.isArray(operations)) return [];
     
     return operations.map(op => {
         if (op.operation === 'MODIFY' && typeof op.delta === 'number') {
             const modifiedDelta = Math.ceil(op.delta * 0.5);
-            const finalDelta = modifiedDelta === 0 ? 
-                (op.delta > 0 ? 1 : -1) : 
+            const finalDelta = modifiedDelta === 0 ?
+                (op.delta > 0 ? 1 : -1) :
                 modifiedDelta;
             
             return {
@@ -389,9 +416,6 @@ function modifyOperationsForPartialResult(operations) {
     });
 }
 
-/**
- * Проверка требований для выбора действия (ФОРМАТ 4.1)
- */
 function checkRequirements(requirements) {
     if (!Array.isArray(requirements) || requirements.length === 0) {
         return { success: true, missing: [], stats: [] };
@@ -424,9 +448,6 @@ function checkRequirements(requirements) {
     };
 }
 
-/**
- * Переключение выбора варианта
- */
 function toggleChoice(idx) {
     const state = State.getState();
     const selectedActions = [...state.gameState.selectedActions];
@@ -451,9 +472,6 @@ function toggleChoice(idx) {
     UI.updateActionButtons();
 }
 
-/**
- * Отправка хода игры (ФОРМАТ 4.1) - ИСПРАВЛЕННАЯ ВЕРСИЯ
- */
 async function submitTurn(retries = CONFIG.maxRetries) {
     console.log('🔍 submitTurn called');
     
@@ -473,10 +491,9 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             return;
         }
         
-        // 🚫🚫🚫 ИЗМЕНЕНО: Для свободного ввода ставим сложность 0, чтобы гарантировать успех
         selectedChoicesData = [{
             text: requestText,
-            difficulty_level: 0, 
+            difficulty_level: 0,
             requirements: [],
             success_rewards: [],
             fail_penalties: []
@@ -532,9 +549,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     
     console.log('📊 Результаты действий:', actionResults);
     
-    // 🚫🚫🚫 ИЗМЕНЕНО: Исправлен ключ с choice_text на text для корректной передачи в API Prompt
     const selectedActions = actionResults.map(result => ({
-        text: result.choice_text, // WAS: choice_text
+        text: result.choice_text,
         difficulty_level: result.difficulty,
         requirements: selectedChoicesData.find(c => c.text === result.choice_text)?.requirements || [],
         success: result.success,
@@ -625,22 +641,18 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }
 }
 
-/**
- * Обработка ответа ИИ (ФОРМАТ 4.1)
- */
 function processTurn(data, actionResults, d10) {
     console.log('🔍 processTurn called with:', { data, actionResults, d10 });
     
     const state = State.getState();
+    const previousScene = state.gameState.currentScene;
     
-    // 1. Применяем операции от действий
     actionResults.forEach(result => {
         if (result.operations && Array.isArray(result.operations)) {
             State.applyOperations(result.operations);
         }
     });
     
-    // 2. Применяем операции от событий
     if (data.events && Array.isArray(data.events)) {
         const eventOperations = [];
         data.events.forEach(event => {
@@ -655,7 +667,6 @@ function processTurn(data, actionResults, d10) {
         }
     }
     
-    // 3. Обновляем память ИИ
     if (data.aiMemory && typeof data.aiMemory === 'object') {
         State.setState({
             gameState: {
@@ -665,22 +676,18 @@ function processTurn(data, actionResults, d10) {
         });
     }
     
-    // 4. Обновляем мысли героя
     if (data.thoughts && Array.isArray(data.thoughts)) {
         State.addHeroPhrases(data.thoughts);
     }
     
-    // 5. Обновляем текущую сцену
     const updatedScene = {
         scene: data.scene || state.gameState.currentScene.scene,
         reflection: data.reflection || "",
         choices: data.choices || state.gameState.currentScene.choices,
-        typology: data.typology || "", // 🚫🚫🚫 Важно: сохраняем типологию для отображения
+        typology: data.typology || "",
         design_notes: data.design_notes || ""
     };
     
-    // 6. Добавляем в историю
-    // 🚫🚫🚫 ИЗМЕНЕНО: Добавляем actionResults для корректного отображения в контексте следующего хода
     const newHistoryEntry = {
         fullText: data.scene || "",
         summary: data.summary || "",
@@ -698,7 +705,6 @@ function processTurn(data, actionResults, d10) {
         updatedHistory.shift();
     }
     
-    // 7. Обновляем общее состояние
     State.setState({
         gameState: {
             ...state.gameState,
@@ -715,8 +721,6 @@ function processTurn(data, actionResults, d10) {
     
     State.incrementTurnCount();
     
-    // 8. Создаем и показываем блок изменений за ход
-    // В renderScene (File 5) этот блок будет перемещен наверх
     const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
     console.log('📄 Созданный HTML изменений:', updatesHTML);
     
@@ -732,54 +736,27 @@ function processTurn(data, actionResults, d10) {
         dom.updates.innerHTML = '';
     }
     
-    // 9. Обновляем интерфейс
-    Render.renderAll();
     UI.setFreeModeUI(false);
+    State.emit(State.EVENTS.SCENE_CHANGED, {
+        scene: updatedScene,
+        previousScene: previousScene
+    });
+    State.emit(State.EVENTS.TURN_COMPLETED, {
+        turnCount: state.turnCount,
+        actions: actionResults
+    });
+    
     dom.freeInputText.disabled = false;
     dom.freeInputText.style.opacity = '1';
     dom.freeModeToggle.checked = false;
     dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
     UI.updateActionButtons();
     
-    // 10. Проверяем смерть героя
-    checkHeroDeath();
-    
-    // 11. Проверяем победу
-    checkVictory();
-    
-    // 12. Сохраняем состояние
     Saveload.saveState();
     
     console.log('✅ processTurn завершен');
 }
 
-/**
- * Проверка смерти героя (любой стат = 0)
- */
-function checkHeroDeath() {
-    const state = State.getState();
-    const stats = State.getGameItemsByType('stat:');
-    const deadStats = stats.filter(stat => stat.value <= 0);
-    
-    if (deadStats.length > 0) {
-        console.warn('☠️ Герой мертв! Статы достигли 0:', deadStats.map(s => s.id));
-        showEndScreen("ПОРАЖЕНИЕ", "Твоя воля иссякла, рассудок померк, скрытность раскрыта, влияние утрачено.", "#800");
-    }
-}
-
-/**
- * Проверка достижения победы (прогресс = 100)
- */
-function checkVictory() {
-    const progress = State.getGameItemValue('progress:oto');
-    if (progress >= 100) {
-        showEndScreen("ПОБЕДА", "Ты достиг высшей степени посвящения. Орден признал тебя равным.", "#d4af37", true);
-    }
-}
-
-/**
- * Показать экран окончания игры
- */
 function showEndScreen(title, msg, color, isVictory = false) {
     console.log("showEndScreen called");
     
@@ -891,9 +868,6 @@ function showEndScreen(title, msg, color, isVictory = false) {
     dom.overlay.style.display = 'block';
 }
 
-/**
- * Продолжение игры после победы
- */
 function continueGame() {
     dom.overlay.style.display = 'none';
     if (matrixInterval) {
@@ -902,9 +876,6 @@ function continueGame() {
     }
 }
 
-/**
- * Начать заново игру после победы/поражения
- */
 function restartGame() {
     if (confirm("Начать путь заново?")) {
         if (matrixInterval) {
@@ -917,9 +888,6 @@ function restartGame() {
     }
 }
 
-/**
- * Очистка выбранных вариантов или свободного ввода
- */
 function handleClear() {
     const state = State.getState();
     
@@ -941,9 +909,6 @@ function handleClear() {
     UI.updateActionButtons();
 }
 
-/**
- * Обработчик переключения режима ввода
- */
 function handleFreeModeToggle(e) {
     const state = State.getState();
     const isFreeMode = e.target.checked;
@@ -956,9 +921,12 @@ function handleFreeModeToggle(e) {
     UI.setFreeModeUI(isFreeMode);
     UI.updateActionButtons();
     Saveload.saveState();
+    
+    State.emit(State.EVENTS.MODE_CHANGED, { mode: isFreeMode ? 'free' : 'choices' });
 }
 
-// Публичный интерфейс модуля
+setupGameObservers();
+
 export const Game = {
     toggleChoice,
     submitTurn,

@@ -7,39 +7,117 @@ import { Saveload } from './9-saveload.js';
 import { PROMPTS } from './prompts.js';
 
 // ========================
+// ПАТТЕРН OBSERVER (НАБЛЮДАТЕЛЬ)
+// ========================
+
+class StateObserver {
+    constructor() {
+        this.observers = new Map(); // eventName -> Set<callback>
+    }
+
+    /**
+     * Подписаться на событие
+     */
+    subscribe(event, callback) {
+        if (!this.observers.has(event)) {
+            this.observers.set(event, new Set());
+        }
+        this.observers.get(event).add(callback);
+        
+        return () => this.unsubscribe(event, callback);
+    }
+
+    /**
+     * Отписаться от события
+     */
+    unsubscribe(event, callback) {
+        if (this.observers.has(event)) {
+            this.observers.get(event).delete(callback);
+        }
+    }
+
+    /**
+     * Уведомить всех подписчиков события
+     */
+    notify(event, data = null) {
+        if (this.observers.has(event)) {
+            this.observers.get(event).forEach(callback => {
+                try {
+                    callback(data, event);
+                } catch (error) {
+                    console.error(`❌ Ошибка в обработчике события ${event}:`, error);
+                }
+            });
+        }
+    }
+
+    /**
+     * Удалить все подписки события
+     */
+    clear(event = null) {
+        if (event) {
+            this.observers.delete(event);
+        } else {
+            this.observers.clear();
+        }
+    }
+}
+
+// Создаем глобальный экземпляр наблюдателя
+const stateObserver = new StateObserver();
+
+// События состояния
+const STATE_EVENTS = {
+    INITIALIZED: 'state:initialized',
+    LOADED: 'state:loaded',
+    SAVED: 'state:saved',
+    HERO_CHANGED: 'hero:changed',
+    HERO_STATS_UPDATED: 'hero:stats:updated',
+    HERO_ITEM_ADDED: 'hero:item:added',
+    HERO_ITEM_REMOVED: 'hero:item:removed',
+    HERO_ITEM_MODIFIED: 'hero:item:modified',
+    SCENE_CHANGED: 'scene:changed',
+    TURN_COMPLETED: 'turn:completed',
+    CHOICES_CHANGED: 'choices:changed',
+    HISTORY_UPDATED: 'history:updated',
+    UI_STATE_CHANGED: 'ui:changed',
+    SCALE_CHANGED: 'scale:changed',
+    MODE_CHANGED: 'mode:changed',
+    SETTINGS_CHANGED: 'settings:changed',
+    MODEL_CHANGED: 'model:changed',
+    RITUAL_STARTED: 'ritual:started',
+    RITUAL_PROGRESS: 'ritual:progress',
+    DEGREE_UPGRADED: 'degree:upgraded',
+    STATE_EXPORTED: 'state:exported',
+    STATE_IMPORTED: 'state:imported',
+    HERO_DEATH: 'hero:death',
+    VICTORY: 'victory',
+    THOUGHTS_UPDATED: 'thoughts:updated'
+};
+
+// ========================
 // КОНСТАНТЫ И ДЕФОЛТНЫЕ ЗНАЧЕНИЯ
 // ========================
 
-// Дефолтное состояние героя как массив GAME_ITEM
 const DEFAULT_HERO_STATE = [
-  // Обязательные статы (все 0-100)
   { "id": "stat:will", "value": 50 },
   { "id": "stat:sanity", "value": 50 },
   { "id": "stat:stealth", "value": 50 },
   { "id": "stat:influence", "value": 50 },
-  
-  // Прогресс и посвящение
   { "id": "progress:oto", "value": 0 },
   { "id": "initiation_degree:oto_0", "value": "0° — Минервал (кандидат)" },
-  
-  // Личность
   {
     "id": "personality:hero",
     "value": "Молодой Минервал, полный идеалов, но не испытанный тьмой. Ищет знание и силу в запрещённых учениях."
   }
 ];
 
-// Дефолтное состояние игры (новая структура)
 const DEFAULT_STATE = {
   version: '4.1.0',
   gameId: Utils.generateUniqueId(),
   lastSaveTime: new Date().toISOString(),
   turnCount: 0,
-  
-  // Состояние героя (УНИФИЦИРОВАННАЯ СИСТЕМА GAME_ITEM)
   heroState: [...DEFAULT_HERO_STATE],
-  
-  // Состояние игры
   gameState: {
     summary: "",
     history: [],
@@ -47,8 +125,6 @@ const DEFAULT_STATE = {
     currentScene: { ...PROMPTS.initialGameState },
     selectedActions: [],
   },
-  
-  // UI и настройки
   ui: {
     hTop: 50,
     hMid: 30,
@@ -58,8 +134,6 @@ const DEFAULT_STATE = {
     hBotBeforeCollapse: 20,
     isAutoCollapsed: false
   },
-  
-  // Настройки приложения
   settings: {
     apiProvider: 'openrouter',
     apiKeyOpenrouter: '',
@@ -68,66 +142,43 @@ const DEFAULT_STATE = {
     scale: CONFIG.scaleSteps[CONFIG.defaultScaleIndex],
     scaleIndex: CONFIG.defaultScaleIndex
   },
-  
-  // Логи и аудит
   auditLog: [],
-  
-  // Статусы моделей
   models: [...aiModels],
-  
-  // Флаги состояния
   isRitualActive: false,
   ritualProgress: 0,
   ritualTarget: null,
-  
-  // Режимы ввода
   freeMode: false,
   freeModeText: '',
-  
-  // Хранение HTML-строки последних изменений за ход
   lastTurnUpdates: "",
-  
-  // Мысли героя
   thoughtsOfHero: [],
-  
-  // Активный запрос
   pendingRequest: null
 };
 
-// Глобальная переменная состояния
 let state = null;
 
 // ========================
 // ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЯ
 // ========================
 
-/**
- * Инициализация состояния игры
- */
 function initializeState() {
   try {
     console.log('🔍 Инициализация состояния (формат 4.1)...');
     
-    // 1. Начинаем с дефолтного состояния
     state = { ...DEFAULT_STATE };
     
-    // 2. Пытаемся загрузить из localStorage
     const savedState = localStorage.getItem('oto_v4_state');
     
     if (savedState) {
       try {
         const parsed = JSON.parse(savedState);
         
-        // Проверяем версию состояния
         if (parsed.version !== '4.1.0') {
           console.error('❌ Неподдерживаемая версия состояния:', parsed.version);
           throw new Error(`Неподдерживаемая версия состояния: ${parsed.version}. Требуется версия 4.1.0`);
         }
         
-        // Безопасно мержим сохраненные данные с дефолтными
         for (const [key, defaultValue] of Object.entries(DEFAULT_STATE)) {
           if (parsed[key] !== undefined) {
-            // Особые обработки для разных типов данных
             if (key === 'heroState' && Array.isArray(parsed[key])) {
               state.heroState = parsed[key];
             } else if (key === 'gameState' && typeof parsed[key] === 'object') {
@@ -142,17 +193,16 @@ function initializeState() {
           }
         }
         
-        // Гарантируем наличие текущей сцены
         if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
           console.warn('⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
           state.gameState.currentScene = { ...PROMPTS.initialGameState };
         }
         
         console.log('✅ Состояние загружено из localStorage (формат 4.1)');
+        stateObserver.notify(STATE_EVENTS.LOADED, { gameId: state.gameId });
         
       } catch (parseError) {
         console.error('❌ Ошибка парсинга сохраненного состояния:', parseError);
-        // При ошибке парсинга используем дефолтное состояние
         state = { ...DEFAULT_STATE };
         state.gameId = Utils.generateUniqueId();
       }
@@ -162,30 +212,25 @@ function initializeState() {
       state.gameId = Utils.generateUniqueId();
     }
     
-    // 3. Проверяем смерть героя
     checkHeroDeath();
-    
-    // 4. Синхронизируем степень
     syncDegree();
     
-    // 5. Применяем масштаб
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
     document.documentElement.style.fontSize = `${state.settings.scale * 16}px`;
     
     console.log('✅ Состояние полностью инициализировано (формат 4.1)');
-    console.log('   Game ID:', state.gameId);
-    console.log('   Turn Count:', state.turnCount);
-    console.log('   Hero Items:', state.heroState.length);
-    console.log('   Current Scene:', state.gameState.currentScene ? 'Есть' : 'Нет');
+    stateObserver.notify(STATE_EVENTS.INITIALIZED, {
+      gameId: state.gameId,
+      turnCount: state.turnCount,
+      heroItems: state.heroState.length
+    });
     
   } catch (error) {
     console.error('❌ Критическая ошибка инициализации состояния:', error);
-    // Аварийное восстановление: полный сброс к дефолту
     state = { ...DEFAULT_STATE };
     state.gameId = Utils.generateUniqueId();
     state.models = [...aiModels];
     
-    // Пытаемся сохранить аварийное состояние
     try {
       localStorage.setItem('oto_v4_state', JSON.stringify(state));
     } catch (saveError) {
@@ -194,21 +239,19 @@ function initializeState() {
   }
 }
 
-/**
- * Проверка смерти героя (любой стат = 0)
- */
 function checkHeroDeath() {
   const stats = state.heroState.filter(item => item.id.startsWith('stat:'));
   const deadStats = stats.filter(stat => stat.value <= 0);
   
   if (deadStats.length > 0) {
     console.warn('☠️ Герой мертв! Статы достигли 0:', deadStats.map(s => s.id));
+    stateObserver.notify(STATE_EVENTS.HERO_DEATH, {
+      deadStats: deadStats.map(s => s.id),
+      heroState: state.heroState
+    });
   }
 }
 
-/**
- * Синхронизация степени посвящения с прогрессом
- */
 function syncDegree() {
   const progressItem = state.heroState.find(item => item.id === 'progress:oto');
   const progress = progressItem ? progressItem.value : 0;
@@ -218,25 +261,20 @@ function syncDegree() {
     if (progress >= d.threshold) newDegreeIndex = i;
   });
   
-  // Получаем текущую степень
   const currentDegreeItem = state.heroState.find(item => item.id.startsWith('initiation_degree:'));
   const currentDegreeIndex = currentDegreeItem ?
     parseInt(currentDegreeItem.id.split('_').pop()) || 0 : 0;
   
-  // Если степень повысилась
   if (newDegreeIndex > currentDegreeIndex) {
-    // Обновляем степень
     const newDegreeId = `initiation_degree:oto_${newDegreeIndex}`;
     const newDegreeValue = CONFIG.degrees[newDegreeIndex].name;
     
-    // Удаляем старую степень и добавляем новую
     state.heroState = state.heroState.filter(item => !item.id.startsWith('initiation_degree:'));
     state.heroState.push({
       id: newDegreeId,
       value: newDegreeValue
     });
     
-    // Бонус за новую степень (+1 ко всем статам)
     state.heroState = state.heroState.map(item => {
       if (item.id.startsWith('stat:')) {
         return { ...item, value: Math.min(100, item.value + 1) };
@@ -244,12 +282,16 @@ function syncDegree() {
       return item;
     });
     
-    // Активируем ритуал
     state.isRitualActive = true;
     state.ritualProgress = 0;
     state.ritualTarget = newDegreeIndex;
     
     console.log(`🎓 Повышение степени: ${currentDegreeIndex} → ${newDegreeIndex}`);
+    stateObserver.notify(STATE_EVENTS.DEGREE_UPGRADED, {
+      oldDegree: currentDegreeIndex,
+      newDegree: newDegreeIndex,
+      degreeName: newDegreeValue
+    });
   }
 }
 
@@ -257,9 +299,6 @@ function syncDegree() {
 // ОПЕРАЦИИ НАД GAME_ITEM
 // ========================
 
-/**
- * Применение операций к game_items (ФОРМАТ 4.1) - ИСПРАВЛЕННАЯ ВЕРСИЯ
- */
 function applyOperations(operations) {
     console.log('🔧 applyOperations called with:', operations);
     
@@ -268,13 +307,13 @@ function applyOperations(operations) {
         return;
     }
     
-    // Гарантируем наличие heroState как массива
     if (!Array.isArray(state.heroState)) {
         console.error('❌ heroState не является массивом');
         return;
     }
     
     let hasChanges = false;
+    const operationResults = [];
     
     operations.forEach(operation => {
         if (!operation || !operation.id || !operation.operation) {
@@ -285,6 +324,8 @@ function applyOperations(operations) {
         const existingIndex = state.heroState.findIndex(item => item && item.id === operation.id);
         
         try {
+            let eventData = null;
+            
             switch (operation.operation) {
                 case 'ADD':
                     if (existingIndex === -1) {
@@ -295,6 +336,8 @@ function applyOperations(operations) {
                             ...(operation.description && { description: operation.description })
                         };
                         state.heroState.push(newItem);
+                        eventData = { id: operation.id, value: operation.value, operation: operation };
+                        stateObserver.notify(STATE_EVENTS.HERO_ITEM_ADDED, eventData);
                         console.log(`➕ Добавлен: ${operation.id} = ${operation.value}`);
                         hasChanges = true;
                     }
@@ -302,7 +345,10 @@ function applyOperations(operations) {
                     
                 case 'REMOVE':
                     if (existingIndex !== -1) {
+                        const removedItem = state.heroState[existingIndex];
                         state.heroState.splice(existingIndex, 1);
+                        eventData = { id: operation.id, operation: operation };
+                        stateObserver.notify(STATE_EVENTS.HERO_ITEM_REMOVED, eventData);
                         console.log(`➖ Удален: ${operation.id}`);
                         hasChanges = true;
                     }
@@ -310,10 +356,18 @@ function applyOperations(operations) {
                     
                 case 'SET':
                     if (existingIndex !== -1) {
+                        const oldValue = state.heroState[existingIndex].value;
                         state.heroState[existingIndex].value = operation.value;
                         if (operation.description) {
                             state.heroState[existingIndex].description = operation.description;
                         }
+                        eventData = { 
+                            id: operation.id, 
+                            oldValue: oldValue, 
+                            newValue: operation.value, 
+                            operation: operation 
+                        };
+                        stateObserver.notify(STATE_EVENTS.HERO_ITEM_MODIFIED, eventData);
                         console.log(`✏️ Установлен: ${operation.id} = ${operation.value}`);
                         hasChanges = true;
                     }
@@ -323,32 +377,51 @@ function applyOperations(operations) {
                     if (existingIndex !== -1) {
                         const currentItem = state.heroState[existingIndex];
                         if (typeof currentItem.value === 'number') {
-                            const newValue = currentItem.value + (operation.delta || 0);
+                            const oldValue = currentItem.value;
+                            const newValue = operation.id.startsWith('stat:') 
+                                ? Math.max(0, Math.min(100, oldValue + (operation.delta || 0)))
+                                : oldValue + (operation.delta || 0);
                             
-                            // Для статов ограничиваем 0-100
+                            state.heroState[existingIndex].value = newValue;
+                            
+                            eventData = { 
+                                id: operation.id, 
+                                delta: operation.delta || 0,
+                                oldValue: oldValue,
+                                newValue: newValue,
+                                operation: operation 
+                            };
+                            
                             if (operation.id.startsWith('stat:')) {
-                                state.heroState[existingIndex].value = Math.max(0, Math.min(100, newValue));
+                                stateObserver.notify(STATE_EVENTS.HERO_STATS_UPDATED, eventData);
                             } else {
-                                state.heroState[existingIndex].value = newValue;
+                                stateObserver.notify(STATE_EVENTS.HERO_ITEM_MODIFIED, eventData);
                             }
                             
-                            console.log(`📊 Модифицирован: ${operation.id} ${currentItem.value} → ${state.heroState[existingIndex].value}`);
+                            console.log(`📊 Модифицирован: ${operation.id} ${oldValue} → ${newValue}`);
                             hasChanges = true;
                         }
                     }
                     break;
             }
+            
+            if (eventData) {
+                operationResults.push(eventData);
+            }
+            
         } catch (error) {
             console.error(`❌ Ошибка при обработке операции ${JSON.stringify(operation)}:`, error);
         }
     });
     
-    // Обновляем состояние только если были изменения
     if (hasChanges) {
-        // Сбрасываем duration для баффов/дебаффов
         processDurations();
         
-        // Сохраняем состояние
+        stateObserver.notify(STATE_EVENTS.HERO_CHANGED, {
+            operations: operationResults,
+            heroState: state.heroState
+        });
+        
         Saveload.saveState();
         console.log('✅ Состояние обновлено');
     } else {
@@ -356,9 +429,6 @@ function applyOperations(operations) {
     }
 }
 
-/**
- * Обработка длительности баффов/дебаффов
- */
 function processDurations() {
     const buffs = state.heroState.filter(item => item.id.startsWith('buff:') || item.id.startsWith('debuff:'));
     
@@ -366,10 +436,10 @@ function processDurations() {
         if (buff.duration !== undefined) {
             buff.duration--;
             if (buff.duration <= 0) {
-                // Удаляем истекший бафф/дебафф
                 const index = state.heroState.findIndex(item => item.id === buff.id);
                 if (index !== -1) {
                     state.heroState.splice(index, 1);
+                    stateObserver.notify(STATE_EVENTS.HERO_ITEM_REMOVED, { id: buff.id });
                     console.log(`🕐 Удален истекший: ${buff.id}`);
                 }
             }
@@ -377,30 +447,18 @@ function processDurations() {
     });
 }
 
-/**
- * Получение game_item по ID
- */
 function getGameItem(id) {
     return state.heroState.find(item => item.id === id);
 }
 
-/**
- * Получение всех game_items определенного типа
- */
 function getGameItemsByType(typePrefix) {
     return state.heroState.filter(item => item.id.startsWith(typePrefix));
 }
 
-/**
- * Проверка наличия game_item
- */
 function hasGameItem(id) {
     return state.heroState.some(item => item.id === id);
 }
 
-/**
- * Получение значения game_item
- */
 function getGameItemValue(id) {
     const item = getGameItem(id);
     return item ? item.value : null;
@@ -410,21 +468,14 @@ function getGameItemValue(id) {
 // СБРОС И ПЕРЕЗАПУСК
 // ========================
 
-/**
- * Сброс только игрового прогресса (без настроек)
- */
 function resetGameProgress() {
   if (confirm("[SOFT RESET] Сбросить прогресс текущей игры?")) {
-    // Создаем новое состояние с сохранением настроек
     const currentSettings = state.settings;
     const currentUI = state.ui;
     const currentModels = state.models;
     const currentAuditLog = state.auditLog;
     
-    // Сбрасываем heroState к дефолтному
     state.heroState = [...DEFAULT_HERO_STATE];
-    
-    // Сбрасываем gameState к начальной сцене
     state.gameState = {
       summary: "",
       history: [],
@@ -432,14 +483,10 @@ function resetGameProgress() {
       currentScene: { ...PROMPTS.initialGameState },
       selectedActions: [],
     };
-    
-    // Сохраняем настройки
     state.settings = currentSettings;
     state.ui = currentUI;
     state.models = currentModels;
     state.auditLog = currentAuditLog;
-    
-    // Сбрасываем счетчики и флаги
     state.turnCount = 0;
     state.isRitualActive = false;
     state.ritualProgress = 0;
@@ -451,31 +498,23 @@ function resetGameProgress() {
     state.gameId = Utils.generateUniqueId();
     state.lastSaveTime = new Date().toISOString();
     
-    // Синхронизируем степень
     syncDegree();
     
-    // Сохраняем
+    stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
+    stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
+    
     Saveload.saveState();
     
-    // Перезагружаем страницу для полного обновления UI
     setTimeout(() => {
       location.reload();
     }, 100);
   }
 }
 
-/**
- * Полный сброс игры (включая настройки)
- */
 function resetFullGame() {
   if (confirm("[HARD RESET] Сбросить ВСЮ игру, включая настройки?")) {
-    // Полностью очищаем localStorage
     localStorage.clear();
-    
-    // Принудительно сбрасываем состояние в памяти
     state = null;
-    
-    // Перезагружаем страницу
     setTimeout(() => {
       location.reload();
     }, 100);
@@ -486,9 +525,6 @@ function resetFullGame() {
 // ЭКСПОРТ/ИМПОРТ
 // ========================
 
-/**
- * Экспорт полного состояния игры
- */
 function exportFullState() {
   const exportData = {
     version: '4.1.0',
@@ -507,33 +543,27 @@ function exportFullState() {
     }
   };
   
+  stateObserver.notify(STATE_EVENTS.STATE_EXPORTED, { data: exportData });
   return exportData;
 }
 
-/**
- * Импорт полного состояния игры
- */
 function importFullState(importData) {
   if (!importData || typeof importData !== 'object') {
     throw new Error('Некорректные данные импорта');
   }
   
-  // Проверяем версию
   if (importData.version !== '4.1.0') {
     throw new Error(`Неподдерживаемая версия импорта: ${importData.version}. Требуется версия 4.1.0`);
   }
   
-  // Импортируем heroState
   if (Array.isArray(importData.heroState)) {
     state.heroState = importData.heroState;
   }
   
-  // Импортируем gameState
   if (importData.gameState && typeof importData.gameState === 'object') {
     state.gameState = { ...state.gameState, ...importData.gameState };
   }
   
-  // Импортируем настройки (кроме API ключей)
   if (importData.settings && typeof importData.settings === 'object') {
     const currentApiKeys = {
       apiKeyOpenrouter: state.settings.apiKeyOpenrouter,
@@ -545,22 +575,20 @@ function importFullState(importData) {
     state.settings.apiKeyVsegpt = currentApiKeys.apiKeyVsegpt;
   }
   
-  // Импортируем метаданные
   if (importData.gameId) state.gameId = importData.gameId;
   if (importData.exportTime) state.lastSaveTime = importData.exportTime;
   
-  // Синхронизируем степень
   syncDegree();
   
-  // Сохраняем
+  stateObserver.notify(STATE_EVENTS.STATE_IMPORTED, { data: importData });
+  stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'import', heroState: state.heroState });
+  stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
+  
   Saveload.saveState();
   
   return true;
 }
 
-/**
- * Экспорт всех данных приложения (без API ключей)
- */
 function exportAllAppData() {
   const exportData = {
     version: '4.1.0',
@@ -585,9 +613,6 @@ function exportAllAppData() {
   return exportData;
 }
 
-/**
- * Импорт всех данных приложения
- */
 function importAllAppData(importData) {
   if (!importData || typeof importData !== 'object') {
     throw new Error('Некорректные данные импорта');
@@ -601,7 +626,6 @@ function importAllAppData(importData) {
     throw new Error('Отсутствуют данные приложения');
   }
   
-  // Импортируем настройки (кроме API ключей)
   if (importData.appData.settings) {
     const currentApiKeys = {
       apiKeyOpenrouter: state.settings.apiKeyOpenrouter,
@@ -617,28 +641,25 @@ function importAllAppData(importData) {
     state.settings.apiKeyVsegpt = currentApiKeys.apiKeyVsegpt;
   }
   
-  // Импортируем модели
   if (importData.appData.models) {
     state.models = importData.appData.models;
   }
   
-  // Импортируем аудит-логи
   if (importData.appData.auditLog) {
     state.auditLog = importData.appData.auditLog;
   }
   
-  // Импортируем метаданные
   if (importData.appData.metadata) {
     state.gameId = importData.appData.metadata.gameId || state.gameId;
     state.lastSaveTime = importData.appData.metadata.lastSaveTime || state.lastSaveTime;
   }
   
+  stateObserver.notify(STATE_EVENTS.SETTINGS_CHANGED);
+  stateObserver.notify(STATE_EVENTS.MODEL_CHANGED);
+  
   return true;
 }
 
-/**
- * Расчет общего времени игры
- */
 function calculateTotalPlayTime() {
   const startTime = localStorage.getItem('oto_first_play_time');
   if (!startTime) return 0;
@@ -648,7 +669,6 @@ function calculateTotalPlayTime() {
   return Math.floor((now - start) / 1000);
 }
 
-// Сохранение времени первого запуска
 if (!localStorage.getItem('oto_first_play_time')) {
   localStorage.setItem('oto_first_play_time', new Date().toISOString());
 }
@@ -668,6 +688,7 @@ function addHeroPhrases(phrases) {
   if (Array.isArray(phrases)) {
     state.thoughtsOfHero = state.thoughtsOfHero.concat(phrases);
     localStorage.setItem('oto_thoughts_of_hero', JSON.stringify(state.thoughtsOfHero));
+    stateObserver.notify(STATE_EVENTS.THOUGHTS_UPDATED, { thoughts: phrases });
   }
 }
 
@@ -688,11 +709,9 @@ function needsHeroPhrases() {
 // ПУБЛИЧНЫЙ ИНТЕРФЕЙС
 // ========================
 
-// Вызываем инициализацию при загрузке модуля
 initializeState();
 
 export const State = {
-  // Получение и установка состояния
   getState: () => {
     if (!state || typeof state !== 'object') {
       console.error('❌ State is corrupted! Reinitializing...');
@@ -707,12 +726,9 @@ export const State = {
       initializeState();
     }
     state = { ...state, ...newState };
-    
-    // Сохраняем изменения в localStorage
     Saveload.saveState();
   },
   
-  // UI функции
   getHBotBeforeCollapse: () => state.ui.hBotBeforeCollapse,
   setHBotBeforeCollapse: (value) => {
     state.ui.hBotBeforeCollapse = value;
@@ -722,39 +738,32 @@ export const State = {
     localStorage.setItem('oto_ui_pref', JSON.stringify(state.ui));
   },
   
-  // Операции с game_items
   applyOperations,
   getGameItem,
   getGameItemsByType,
   hasGameItem,
   getGameItemValue,
   
-  // Синхронизация
   syncDegree,
   
-  // Сброс и рестарт
   resetGameProgress,
   resetFullGame,
   
-  // Экспорт/импорт
   exportFullState,
   importFullState,
   exportAllAppData,
   importAllAppData,
   
-  // Мысли героя
   getHeroPhrase,
   addHeroPhrases,
   getHeroPhrasesCount,
   clearHeroPhrases,
   needsHeroPhrases,
   
-  // Управление запросами
   setPendingRequest: (controller) => { state.pendingRequest = controller; },
   clearPendingRequest: () => { state.pendingRequest = null; },
   getPendingRequest: () => state.pendingRequest,
   
-  // Счетчик ходов
   incrementTurnCount: () => {
     state.turnCount++;
     localStorage.setItem('oto_turn_count', state.turnCount.toString());
@@ -762,7 +771,6 @@ export const State = {
   },
   getTurnCount: () => state.turnCount,
   
-  // Масштабирование UI
   updateScale: (newScaleIndex) => {
     newScaleIndex = Math.max(0, Math.min(CONFIG.scaleSteps.length - 1, newScaleIndex));
     
@@ -774,11 +782,16 @@ export const State = {
     
     localStorage.setItem('oto_scale', state.settings.scale.toString());
     localStorage.setItem('oto_scale_index', newScaleIndex.toString());
+    
+    stateObserver.notify(STATE_EVENTS.SCALE_CHANGED, {
+      scaleIndex: newScaleIndex,
+      scale: state.settings.scale
+    });
+    
     return state.settings.scale;
   },
   getScaleIndex: () => state.settings.scaleIndex,
   
-  // Аудит и логирование
   addAuditLogEntry: (entry) => {
     entry.timestamp = Utils.formatMoscowTime(new Date());
     state.auditLog.unshift(entry);
@@ -788,7 +801,6 @@ export const State = {
     }
   },
   
-  // Статистика моделей
   getModelStats: () => {
     const models = state.models || [];
     const total = models.length;
@@ -797,5 +809,24 @@ export const State = {
     const untested = total - success - error;
     
     return { total, success, error, untested };
-  }
+  },
+  
+  // Observer API
+  on: (event, callback) => stateObserver.subscribe(event, callback),
+  off: (event, callback) => stateObserver.unsubscribe(event, callback),
+  once: (event, callback) => {
+    const unsubscribe = stateObserver.subscribe(event, (...args) => {
+      unsubscribe();
+      callback(...args);
+    });
+    return unsubscribe;
+  },
+  emit: (event, data) => stateObserver.notify(event, data),
+  
+  onHeroChange: (callback) => stateObserver.subscribe(STATE_EVENTS.HERO_CHANGED, callback),
+  onSceneChange: (callback) => stateObserver.subscribe(STATE_EVENTS.SCENE_CHANGED, callback),
+  onTurnComplete: (callback) => stateObserver.subscribe(STATE_EVENTS.TURN_COMPLETED, callback),
+  onSettingsChange: (callback) => stateObserver.subscribe(STATE_EVENTS.SETTINGS_CHANGED, callback),
+  
+  EVENTS: STATE_EVENTS
 };

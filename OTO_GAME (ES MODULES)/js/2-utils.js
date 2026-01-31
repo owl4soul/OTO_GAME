@@ -9,19 +9,48 @@ import { CONFIG } from './1-config.js';
  * @param {string} text - Битая JSON строка
  * @returns {string} - Потенциально валидная JSON строка
  */
+// В 2-utils.js заменяем функцию repairTruncatedJSON на более надежную версию:
+
+/**
+ * Пытается починить обрезанный JSON (Auto-Heal)
+ * Восстанавливает закрывающие кавычки и скобки, включая обрезанные строки в массивах.
+ * @param {string} text - Битая JSON строка
+ * @returns {string} - Потенциально валидная JSON строка
+ */
 function repairTruncatedJSON(text) {
     let repaired = text.trim();
     
     // 1. Если обрыв внутри строки (нечетное кол-во кавычек), закрываем кавычку
-    // Считаем неэкранированные кавычки
     let quoteCount = 0;
+    let inString = false;
+    let escapeNext = false;
+    
     for (let i = 0; i < repaired.length; i++) {
-        if (repaired[i] === '"' && (i === 0 || repaired[i - 1] !== '\\')) {
-            quoteCount++;
+        const char = repaired[i];
+        
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        
+        if (char === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        
+        if (char === '"') {
+            if (!inString) {
+                inString = true;
+                quoteCount++;
+            } else {
+                inString = false;
+                quoteCount++;
+            }
         }
     }
     
-    if (quoteCount % 2 !== 0) {
+    // Если строка не закрыта, добавляем закрывающую кавычку
+    if (inString || quoteCount % 2 !== 0) {
         // Если обрыв произошел прямо на экранирующем слеше, убираем его
         if (repaired.endsWith('\\')) {
             repaired = repaired.slice(0, -1);
@@ -29,28 +58,120 @@ function repairTruncatedJSON(text) {
         repaired += '"';
     }
     
-    // 2. Удаляем "висячую" запяту в конце (частая проблема обрыва массивов/объектов)
-    // Например: {"items": ["key",], -> {"items": ["key"]}
-    repaired = repaired.replace(/,\s*([}\]]*)$/, '$1');
+    // 2. Балансируем скобки и кавычки в массивах
+    let openCurly = 0, closeCurly = 0;
+    let openSquare = 0, closeSquare = 0;
+    let inString2 = false;
+    let escapeNext2 = false;
     
-    // 3. Балансируем скобки
-    // Считаем фигурные { и }
-    const openCurly = (repaired.match(/\{/g) || []).length;
-    const closeCurly = (repaired.match(/\}/g) || []).length;
-    // Считаем квадратные [ и ]
-    const openSquare = (repaired.match(/\[/g) || []).length;
-    const closeSquare = (repaired.match(/\]/g) || []).length;
+    for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        
+        if (escapeNext2) {
+            escapeNext2 = false;
+            continue;
+        }
+        
+        if (char === '\\') {
+            escapeNext2 = true;
+            continue;
+        }
+        
+        if (char === '"') {
+            inString2 = !inString2;
+            continue;
+        }
+        
+        if (!inString2) {
+            if (char === '{') openCurly++;
+            if (char === '}') closeCurly++;
+            if (char === '[') openSquare++;
+            if (char === ']') closeSquare++;
+        }
+    }
     
-    // Добавляем недостающие закрывающие скобки.
-    // Эвристика: обычно в JSON сначала закрывают массивы, потом объекты.
+    // Добавляем недостающие закрывающие скобки для массивов
     if (openSquare > closeSquare) {
         repaired += ']'.repeat(openSquare - closeSquare);
     }
+    
+    // Добавляем недостающие закрывающие скобки для объектов
     if (openCurly > closeCurly) {
         repaired += '}'.repeat(openCurly - closeCurly);
     }
     
+    // 3. Особый случай: обрыв в середине массива thoughts
+    // Ищем незакрытые строки в массивах
+    const arrayMatches = repaired.matchAll(/"thoughts"\s*:\s*\[/g);
+    for (const match of arrayMatches) {
+        const start = match.index + match[0].length;
+        let depth = 1;
+        let i = start;
+        let inString3 = false;
+        let escapeNext3 = false;
+        
+        while (i < repaired.length && depth > 0) {
+            const char = repaired[i];
+            
+            if (escapeNext3) {
+                escapeNext3 = false;
+                i++;
+                continue;
+            }
+            
+            if (char === '\\') {
+                escapeNext3 = true;
+                i++;
+                continue;
+            }
+            
+            if (char === '"') {
+                inString3 = !inString3;
+            }
+            
+            if (!inString3) {
+                if (char === '[') depth++;
+                if (char === ']') depth--;
+            }
+            
+            i++;
+        }
+        
+        // Если массив не закрыт, добавляем закрывающую скобку
+        if (depth > 0) {
+            repaired += ']';
+        }
+    }
+    
+    // 4. Удаляем "висячую" запятую в конце (частая проблема обрыва массивов/объектов)
+    repaired = repaired.replace(/,\s*([}\]]*)$/, '$1');
+    
+    // 5. Удаляем возможные повторяющиеся закрывающие скобки
+    repaired = repaired.replace(/\}\}/g, '}').replace(/\]\]/g, ']');
+    
     return repaired;
+}
+
+
+function fixCommonAIJsonErrors(text) {
+    if (!text || typeof text !== 'string') return text;
+    
+    let fixed = text;
+    
+    // 1. Исправляем двойное экранирование: \\\" -> \"
+    fixed = fixed.replace(/\\\\\"/g, '"');
+    
+    // 2. Удаляем лишние кавычки в конце строковых значений
+    // Паттерн: "ключ": "значение"" (лишняя кавычка)
+    fixed = fixed.replace(/\"(\s*:\s*\"[^\"]*)\"\"(\s*[,\}])/g, '"$1"$2');
+    
+    // 3. Исправляем одиночные обратные слэши перед кавычками
+    fixed = fixed.replace(/([^\\])\\\"/g, '$1\"');
+    
+    // 4. Убираем висячие кавычки после значений
+    fixed = fixed.replace(/\"\"([,\}\]])/g, '"$1');
+    
+    return fixed;
 }
 
 /**
@@ -64,17 +185,29 @@ function robustJsonParse(rawContent) {
     let text = rawContent.trim();
     
     // Удаляем обертки markdown
+        // Удаляем обертки markdown
     text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
     text = text.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
     
-    // Пытаемся стандартный парсинг
+    // Шаг 0. Исправляем типичные ошибки ИИ
+    text = fixCommonAIJsonErrors(text);
+    
+    // Шаг 1. Сначала пробуем стандартный парсинг
     try {
         return JSON.parse(text);
     } catch (e) {
-        console.warn('Стандартный JSON.parse не удался, переходим к агрессивному парсингу:', e.message);
+        console.warn('Стандартный JSON.parse не удался, пытаемся починить JSON:', e.message);
     }
     
-    // Агрессивный парсинг для ФОРМАТА 4.1
+    // Шаг2. Пробуем починить и распарсить
+    try {
+        const repaired = repairTruncatedJSON(text);
+        return JSON.parse(repaired);
+    } catch (e) {
+        console.warn('Парсинг починенного JSON не удался, переходим к агрессивному парсингу:', e.message);
+    }
+    
+    // Шаг 3: Агрессивный парсинг для извлечения хотя бы сцены
     const result = {
         design_notes: "",
         scene: "",
@@ -87,61 +220,25 @@ function robustJsonParse(rawContent) {
         summary: ""
     };
     
-    // Извлекаем основные поля через regex для ФОРМАТ 4.1
-    const designNotesMatch = text.match(/"design_notes"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (designNotesMatch) {
-        result.design_notes = designNotesMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-    }
-    
-    const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (sceneMatch) {
+    // Извлекаем сцену - это самое важное
+    const sceneRegex = /"scene"\s*:\s*"((?:[^"\\]|\\.|\\n)*)"/i;
+    const sceneMatch = text.match(sceneRegex);
+    if (sceneMatch && sceneMatch[1]) {
         result.scene = sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
     } else {
-        result.scene = "Сцена не сгенерирована";
+        // Если не нашли scene, создаем дефолтную сцену с ошибкой
+        result.scene = `<p>⚠️ <b>ОШИБКА ПАРСИНГА</b></p><p>Ответ ИИ был обрезан, но мы продолжаем игру.</p>`;
     }
     
-    const reflectionMatch = text.match(/"reflection"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (reflectionMatch) {
-        result.reflection = reflectionMatch[1].replace(/\\"/g, '"');
-    }
-    
-    const typologyMatch = text.match(/"typology"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (typologyMatch) {
-        result.typology = typologyMatch[1].replace(/\\"/g, '"');
-    }
-    
-    const summaryMatch = text.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (summaryMatch) {
-        result.summary = summaryMatch[1].replace(/\\"/g, '"');
-    }
-    
-    // Парсинг thoughts
-    const thoughtsMatch = text.match(/"thoughts"\s*:\s*\[(.*?)\]/s);
-    if (thoughtsMatch) {
-        try {
-            result.thoughts = JSON.parse(`[${thoughtsMatch[1]}]`);
-        } catch (e) {
-            // Ручной парсинг массива строк
-            const thoughtsText = thoughtsMatch[1];
-            const thoughtRegex = /"((?:[^"\\]|\\.)*)"/g;
-            let match;
-            while ((match = thoughtRegex.exec(thoughtsText)) !== null) {
-                result.thoughts.push(match[1].replace(/\\"/g, '"'));
-            }
-        }
-    }
-    
-    // Парсинг choices (новый формат)
-    const choicesStartMatch = text.match(/"choices"\s*:\s*\[/);
-    if (choicesStartMatch) {
-        const startIdx = choicesStartMatch.index + choicesStartMatch[0].length;
+    // Пытаемся извлечь choices
+    const choicesStart = text.indexOf('"choices":[');
+    if (choicesStart !== -1) {
         let choicesText = '';
         let bracketCount = 1;
         let inString = false;
         let escapeNext = false;
         
-        // Извлекаем содержимое массива choices
-        for (let i = startIdx; i < text.length; i++) {
+        for (let i = choicesStart + 10; i < text.length; i++) {
             const char = text[i];
             
             if (escapeNext) {
@@ -174,27 +271,59 @@ function robustJsonParse(rawContent) {
             choicesText += char;
         }
         
-        // Парсим объекты choices из извлеченного текста
+        // Пытаемся распарсить choices
         try {
-            result.choices = JSON.parse(`[${choicesText}]`);
+            const choicesArray = JSON.parse(`[${choicesText}]`);
+            if (Array.isArray(choicesArray)) {
+                result.choices = choicesArray.slice(0, 5).map(choice => {
+                    if (typeof choice !== 'object') return createDefaultChoice();
+                    
+                    return {
+                        text: choice.text || "Действие",
+                        difficulty_level: typeof choice.difficulty_level === 'number' ?
+                            Math.max(1, Math.min(10, choice.difficulty_level)) : 5,
+                        requirements: Array.isArray(choice.requirements) ?
+                            choice.requirements.filter(req => typeof req === 'string') : [],
+                        success_rewards: [],
+                        fail_penalties: []
+                    };
+                });
+            }
         } catch (e) {
             console.warn('Не удалось распарсить choices:', e.message);
-            // Создаем дефолтные choices
-            result.choices = [
-                {
-                    text: "Продолжить...",
-                    difficulty_level: 5,
-                    requirements: [],
-                    success_rewards: [],
-                    fail_penalties: []
-                }
-            ];
         }
+    }
+    
+    // Если choices пустой, добавляем хотя бы один дефолтный
+    if (result.choices.length === 0) {
+        result.choices = [createDefaultChoice()];
+    }
+    
+    // Пытаемся извлечь summary
+    const summaryRegex = /"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/i;
+    const summaryMatch = text.match(summaryRegex);
+    if (summaryMatch && summaryMatch[1]) {
+        result.summary = summaryMatch[1].replace(/\\"/g, '"');
+    } else {
+        // Генерируем summary из сцены
+        result.summary = result.scene
+            .replace(/<[^>]*>/g, ' ')
+            .substring(0, 100)
+            .trim() + '...';
     }
     
     return result;
 }
 
+function createDefaultChoice() {
+    return {
+        text: "Продолжить...",
+        difficulty_level: 5,
+        requirements: [],
+        success_rewards: [],
+        fail_penalties: []
+    };
+}
 /**
  * Безопасный парсинг ответа ИИ
  * Обертка над robustJsonParse с дополнительным извлечением фраз
