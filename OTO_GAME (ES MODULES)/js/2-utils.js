@@ -10,157 +10,6 @@ import { CONFIG } from './1-config.js';
  * @param {string} text - Битая JSON строка
  * @returns {string} - Потенциально валидная JSON строка
  */
-/**
- * Пытается починить обрезанный JSON (Auto-Heal)
- * Восстанавливает закрывающие кавычки и скобки, включая обрезанные строки в массивах.
- * @param {string} text - Битая JSON строка
- * @returns {string} - Потенциально валидная JSON строка
- */
-function repairTruncatedJSON(text) {
-    let repaired = text.trim();
-    
-    // 1. Сначала исправляем неэкранированные символы новой строки и кавычки внутри строк
-    let inString = false;
-    let escapeNext = false;
-    let result = '';
-    
-    for (let i = 0; i < repaired.length; i++) {
-        const char = repaired[i];
-        
-        if (escapeNext) {
-            result += char;
-            escapeNext = false;
-            continue;
-        }
-        
-        if (char === '\\') {
-            escapeNext = true;
-            result += char;
-            continue;
-        }
-        
-        if (char === '"') {
-            inString = !inString;
-            result += char;
-            continue;
-        }
-        
-        if (inString) {
-            // Экранируем проблемные символы внутри строк
-            if (char === '\n') {
-                result += '\\n';
-            } else if (char === '\r') {
-                result += '\\r';
-            } else if (char === '\t') {
-                result += '\\t';
-            } else if (char === '"') {
-                // Это не должно случиться, так как мы уже обрабатываем кавычки выше
-                result += '\\"';
-            } else if (char === '\\') {
-                result += '\\\\';
-            } else {
-                result += char;
-            }
-        } else {
-            result += char;
-        }
-    }
-    
-    repaired = result;
-    
-    // 2. Теперь балансируем скобки и кавычки
-    let openCurly = 0, closeCurly = 0;
-    let openSquare = 0, closeSquare = 0;
-    let inString2 = false;
-    let escapeNext2 = false;
-    
-    for (let i = 0; i < repaired.length; i++) {
-        const char = repaired[i];
-        
-        if (escapeNext2) {
-            escapeNext2 = false;
-            continue;
-        }
-        
-        if (char === '\\') {
-            escapeNext2 = true;
-            continue;
-        }
-        
-        if (char === '"') {
-            inString2 = !inString2;
-            continue;
-        }
-        
-        if (!inString2) {
-            if (char === '{') openCurly++;
-            if (char === '}') closeCurly++;
-            if (char === '[') openSquare++;
-            if (char === ']') closeSquare++;
-        }
-    }
-    
-    // Добавляем недостающие закрывающие скобки для массивов
-    if (openSquare > closeSquare) {
-        repaired += ']'.repeat(openSquare - closeSquare);
-    }
-    
-    // Добавляем недостающие закрывающие скобки для объектов
-    if (openCurly > closeCurly) {
-        repaired += '}'.repeat(openCurly - closeCurly);
-    }
-    
-    // 3. Особый случай: обрыв в середине массива thoughts
-    const arrayMatches = repaired.matchAll(/"thoughts"\s*:\s*\[/g);
-    for (const match of arrayMatches) {
-        const start = match.index + match[0].length;
-        let depth = 1;
-        let i = start;
-        let inString3 = false;
-        let escapeNext3 = false;
-        
-        while (i < repaired.length && depth > 0) {
-            const char = repaired[i];
-            
-            if (escapeNext3) {
-                escapeNext3 = false;
-                i++;
-                continue;
-            }
-            
-            if (char === '\\') {
-                escapeNext3 = true;
-                i++;
-                continue;
-            }
-            
-            if (char === '"') {
-                inString3 = !inString3;
-            }
-            
-            if (!inString3) {
-                if (char === '[') depth++;
-                if (char === ']') depth--;
-            }
-            
-            i++;
-        }
-        
-        // Если массив не закрыт, добавляем закрывающую скобку
-        if (depth > 0) {
-            repaired += ']';
-        }
-    }
-    
-    // 4. Удаляем "висячую" запятую в конце (частая проблема обрыва массивов/объектов)
-    repaired = repaired.replace(/,\s*([}\]]*)$/, '$1');
-    
-    // 5. Удаляем возможные повторяющиеся закрывающие скобки
-    repaired = repaired.replace(/\}\}/g, '}').replace(/\]\]/g, ']');
-    
-    return repaired;
-}
-
 function fixCommonAIJsonErrors(text) {
     if (!text || typeof text !== 'string') return text;
     
@@ -191,8 +40,158 @@ function fixCommonAIJsonErrors(text) {
 /**
  * Надежный парсинг JSON из ответа ИИ (ФОРМАТ 4.1)
  */
+// УЛУЧШЕННЫЕ ФУНКЦИИ ПАРСИНГА для модуля 2-utils.js
+// Вставьте эти функции вместо существующих repairTruncatedJSON и robustJsonParse
+
+/**
+ * УЛУЧШЕННАЯ ВЕРСИЯ: Пытается починить обрезанный JSON (Auto-Heal)
+ * Восстанавливает закрывающие кавычки и скобки, включая обрезанные строки в массивах.
+ * @param {string} text - Битая JSON строка
+ * @returns {string} - Потенциально валидная JSON строка
+ */
+function repairTruncatedJSON(text) {
+    let repaired = text.trim();
+    
+    console.log(`🔧 [JSON Repair] Начинаем ремонт JSON (длина: ${repaired.length} символов)`);
+    
+    // 1. Убираем возможные markdown обертки
+    repaired = repaired.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+    repaired = repaired.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
+    
+    // 2. Проверяем, не обрывается ли JSON в середине строки
+    let inString = false;
+    let escapeNext = false;
+    let lastQuoteIndex = -1;
+    
+    for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        
+        if (char === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        
+        if (char === '"') {
+            inString = !inString;
+            lastQuoteIndex = i;
+        }
+    }
+    
+    // Если мы закончили внутри строки, закрываем её
+    if (inString) {
+        console.log('⚠️ [JSON Repair] Обнаружена незакрытая строка, закрываем');
+        repaired += '"';
+    }
+    
+    // 3. Балансируем скобки
+    let openCurly = 0, closeCurly = 0;
+    let openSquare = 0, closeSquare = 0;
+    inString = false;
+    escapeNext = false;
+    
+    for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        
+        if (char === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        
+        if (char === '"') {
+            inString = !inString;
+            continue;
+        }
+        
+        if (!inString) {
+            if (char === '{') openCurly++;
+            if (char === '}') closeCurly++;
+            if (char === '[') openSquare++;
+            if (char === ']') closeSquare++;
+        }
+    }
+    
+    console.log(`📊 [JSON Repair] Баланс скобок: { ${openCurly}/${closeCurly} } [ ${openSquare}/${closeSquare} ]`);
+    
+    // 4. Удаляем "висячие" запятые и незакрытые конструкции перед добавлением скобок
+    // Ищем последнюю запятую вне строки
+    let lastCommaIndex = -1;
+    inString = false;
+    escapeNext = false;
+    
+    for (let i = repaired.length - 1; i >= 0; i--) {
+        const char = repaired[i];
+        
+        if (!inString && char === ',') {
+            lastCommaIndex = i;
+            break;
+        }
+        
+        if (char === '"' && !escapeNext) {
+            inString = !inString;
+        }
+        
+        escapeNext = (char === '\\' && !escapeNext);
+    }
+    
+    // Если последняя запятая находится близко к концу (в пределах 50 символов), удаляем её
+    if (lastCommaIndex > 0 && (repaired.length - lastCommaIndex) < 50) {
+        const afterComma = repaired.substring(lastCommaIndex + 1).trim();
+        // Проверяем, что после запятой нет значимого контента
+        if (!afterComma || afterComma.match(/^[\s\}\]]*$/)) {
+            console.log('⚠️ [JSON Repair] Удаляем висячую запятую');
+            repaired = repaired.substring(0, lastCommaIndex) + repaired.substring(lastCommaIndex + 1);
+        }
+    }
+    
+    // 5. Закрываем массивы (сначала массивы, потом объекты - важно!)
+    if (openSquare > closeSquare) {
+        const missing = openSquare - closeSquare;
+        console.log(`🔧 [JSON Repair] Добавляем ${missing} закрывающих скобок для массивов`);
+        repaired += ']'.repeat(missing);
+        closeSquare = openSquare;
+    }
+    
+    // 6. Закрываем объекты
+    if (openCurly > closeCurly) {
+        const missing = openCurly - closeCurly;
+        console.log(`🔧 [JSON Repair] Добавляем ${missing} закрывающих скобок для объектов`);
+        repaired += '}'.repeat(missing);
+        closeCurly = openCurly;
+    }
+    
+    // 7. Финальная очистка - удаляем дублирующиеся закрывающие скобки
+    let cleaned = '';
+    let prevChar = '';
+    for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        // Не добавляем дублирующиеся } или ]
+        if ((char === '}' && prevChar === '}') || (char === ']' && prevChar === ']')) {
+            continue;
+        }
+        cleaned += char;
+        prevChar = char;
+    }
+    
+    console.log(`✅ [JSON Repair] Ремонт завершён (новая длина: ${cleaned.length} символов)`);
+    return cleaned;
+}
+
+/**
+ * УЛУЧШЕННАЯ ВЕРСИЯ: Надежный парсинг JSON из ответа ИИ (ФОРМАТ 4.1)
+ * Многоуровневая система восстановления данных
+ */
 function robustJsonParse(rawContent) {
-    if (!rawContent) {
+    if (!rawContent || typeof rawContent !== 'string') {
         throw new Error('Пустой ответ от ИИ');
     }
     
@@ -202,28 +201,30 @@ function robustJsonParse(rawContent) {
     text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
     text = text.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
     
-    // Шаг 0. Предварительная обработка для экранирования символов
-    text = preprocessJson(text);
+    console.log(`📝 [Robust Parse] Попытка парсинга JSON (длина: ${text.length} символов)`);
     
-    // Шаг 1. Исправляем типичные ошибки ИИ
-    text = fixCommonAIJsonErrors(text);
-    
-    // Шаг 2. Сначала пробуем стандартный парсинг
+    // УРОВЕНЬ 1: Стандартный парсинг
     try {
-        return JSON.parse(text);
+        const result = JSON.parse(text);
+        console.log('✅ [Robust Parse] Стандартный JSON.parse успешен');
+        return result;
     } catch (e) {
-        console.warn('Стандартный JSON.parse не удался, пытаемся починить JSON:', e.message);
+        console.warn(`⚠️ [Robust Parse] Стандартный парсинг не удался: ${e.message}`);
     }
     
-    // Шаг 3. Пробуем починить и распарсить
+    // УРОВЕНЬ 2: Парсинг с предварительным ремонтом
     try {
         const repaired = repairTruncatedJSON(text);
-        return JSON.parse(repaired);
+        const result = JSON.parse(repaired);
+        console.log('✅ [Robust Parse] Парсинг после ремонта успешен');
+        return result;
     } catch (e) {
-        console.warn('Парсинг починенного JSON не удался, переходим к агрессивному парсингу:', e.message);
+        console.warn(`⚠️ [Robust Parse] Парсинг после ремонта не удался: ${e.message}`);
     }
-
-    // Шаг 3: Агрессивный парсинг для извлечения хотя бы сцены
+    
+    // УРОВЕНЬ 3: Агрессивное извлечение данных через regex
+    console.warn('🚨 [Robust Parse] Переход к агрессивному извлечению данных');
+    
     const result = {
         design_notes: "",
         scene: "",
@@ -236,101 +237,297 @@ function robustJsonParse(rawContent) {
         summary: ""
     };
     
-    // Извлекаем сцену - это самое важное
-    const sceneRegex = /"scene"\s*:\s*"((?:[^"\\]|\\.|\\n)*)"/i;
-    const sceneMatch = text.match(sceneRegex);
-    if (sceneMatch && sceneMatch[1]) {
-        result.scene = sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-    } else {
-        // Если не нашли scene, создаем дефолтную сцену с ошибкой
-        result.scene = `<p>⚠️ <b>ОШИБКА ПАРСИНГА</b></p><p>Ответ ИИ был обрезан, но мы продолжаем игру.</p>`;
+    // 3.1. Извлекаем scene (КРИТИЧЕСКИ ВАЖНО)
+    const scenePatterns = [
+        /"scene"\s*:\s*"((?:[^"\\]|\\["\\\/bfnrt]|\\u[0-9a-fA-F]{4})*)"/s,
+        /"scene"\s*:\s*"([^"]*)"/s,  // Более простой паттерн
+        /"scene"\s*:\s*"([\s\S]*?)(?:"|$)/s  // Максимально агрессивный
+    ];
+    
+    for (const pattern of scenePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            result.scene = match[1]
+                .replace(/\\"/g, '"')
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\\r/g, '\r')
+                .replace(/\\\\/g, '\\');
+            console.log(`✅ [Robust Parse] Scene извлечена (длина: ${result.scene.length})`);
+            break;
+        }
     }
     
-    // Пытаемся извлечь choices
-    const choicesStart = text.indexOf('"choices":[');
+    if (!result.scene) {
+        console.error('❌ [Robust Parse] Не удалось извлечь scene - это критическая ошибка');
+        result.scene = '<p><b>Критическая ошибка:</b> Не удалось извлечь сцену из ответа ИИ.</p>';
+    }
+    
+    // 3.2. Извлекаем остальные текстовые поля
+    const extractTextField = (fieldName, defaultValue = "") => {
+        const pattern = new RegExp(`"${fieldName}"\\s*:\\s*"([^"]*)"`, 's');
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            return match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+        }
+        return defaultValue;
+    };
+    
+    result.design_notes = extractTextField('design_notes');
+    result.reflection = extractTextField('reflection');
+    result.typology = extractTextField('typology');
+    result.summary = extractTextField('summary');
+    
+    // 3.3. Извлекаем choices (МАКСИМАЛЬНО АГРЕССИВНО)
+    console.log('🔍 [Robust Parse] Извлечение choices...');
+    
+    // Ищем начало массива choices
+    const choicesStart = text.indexOf('"choices"');
     if (choicesStart !== -1) {
-        let choicesText = '';
-        let bracketCount = 1;
-        let inString = false;
-        let escapeNext = false;
-        
-        for (let i = choicesStart + 10; i < text.length; i++) {
-            const char = text[i];
+        const arrayStart = text.indexOf('[', choicesStart);
+        if (arrayStart !== -1) {
+            // Пытаемся найти конец массива
+            let depth = 0;
+            let inString = false;
+            let escapeNext = false;
+            let arrayEnd = -1;
             
-            if (escapeNext) {
-                choicesText += char;
-                escapeNext = false;
-                continue;
-            }
-            
-            if (char === '\\') {
-                choicesText += char;
-                escapeNext = true;
-                continue;
-            }
-            
-            if (char === '"') {
-                inString = !inString;
-            }
-            
-            if (!inString) {
-                if (char === '[') {
-                    bracketCount++;
-                } else if (char === ']') {
-                    bracketCount--;
-                    if (bracketCount === 0) {
-                        break;
+            for (let i = arrayStart; i < text.length; i++) {
+                const char = text[i];
+                
+                if (escapeNext) {
+                    escapeNext = false;
+                    continue;
+                }
+                
+                if (char === '\\') {
+                    escapeNext = true;
+                    continue;
+                }
+                
+                if (char === '"') {
+                    inString = !inString;
+                    continue;
+                }
+                
+                if (!inString) {
+                    if (char === '[') depth++;
+                    if (char === ']') {
+                        depth--;
+                        if (depth === 0) {
+                            arrayEnd = i;
+                            break;
+                        }
                     }
                 }
             }
             
-            choicesText += char;
-        }
-        
-        // Пытаемся распарсить choices
-        try {
-            const choicesArray = JSON.parse(`[${choicesText}]`);
-            if (Array.isArray(choicesArray)) {
-                result.choices = choicesArray.slice(0, 5).map(choice => {
-                    if (typeof choice !== 'object') return createDefaultChoice();
-                    
-                    return {
-                        text: choice.text || "Действие",
-                        difficulty_level: typeof choice.difficulty_level === 'number' ?
-                            Math.max(1, Math.min(10, choice.difficulty_level)) : 5,
-                        requirements: Array.isArray(choice.requirements) ?
-                            choice.requirements.filter(req => typeof req === 'string') : [],
-                        success_rewards: [],
-                        fail_penalties: []
-                    };
-                });
+            // Если нашли конец, пытаемся парсить массив
+            if (arrayEnd > arrayStart) {
+                const choicesText = text.substring(arrayStart, arrayEnd + 1);
+                console.log(`📋 [Robust Parse] Найден массив choices (длина: ${choicesText.length})`);
+                
+                try {
+                    const choicesArray = JSON.parse(choicesText);
+                    if (Array.isArray(choicesArray)) {
+                        // Фильтруем и нормализуем каждый choice
+                        choicesArray.forEach((choice, idx) => {
+                            if (choice && typeof choice === 'object' && choice.text) {
+                                result.choices.push({
+                                    text: choice.text,
+                                    difficulty_level: typeof choice.difficulty_level === 'number' ?
+                                        Math.max(1, Math.min(10, choice.difficulty_level)) : 5,
+                                    requirements: Array.isArray(choice.requirements) ?
+                                        choice.requirements.filter(r => typeof r === 'string' && r.includes(':')) : [],
+                                    success_rewards: Array.isArray(choice.success_rewards) ?
+                                        choice.success_rewards.filter(op => op && op.operation && op.id) : [],
+                                    fail_penalties: Array.isArray(choice.fail_penalties) ?
+                                        choice.fail_penalties.filter(op => op && op.operation && op.id) : []
+                                });
+                            }
+                        });
+                        console.log(`✅ [Robust Parse] Извлечено ${result.choices.length} choices из массива`);
+                    }
+                } catch (e) {
+                    console.warn(`⚠️ [Robust Parse] Парсинг массива choices не удался: ${e.message}`);
+                }
+            } else {
+                console.warn('⚠️ [Robust Parse] Не найден конец массива choices');
             }
-        } catch (e) {
-            console.warn('Не удалось распарсить choices:', e.message);
+            
+            // Если парсинг массива не удался, пытаемся извлечь хотя бы text полей
+            if (result.choices.length === 0) {
+                console.log('🔍 [Robust Parse] Попытка извлечь choices через regex поиск text полей...');
+                const textMatches = text.matchAll(/"text"\s*:\s*"([^"]+)"/g);
+                let count = 0;
+                for (const match of textMatches) {
+                    if (match[1] && count < 10) { // Ограничиваем 10 choices
+                        result.choices.push({
+                            text: match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'),
+                            difficulty_level: 5,
+                            requirements: [],
+                            success_rewards: [],
+                            fail_penalties: []
+                        });
+                        count++;
+                    }
+                }
+                console.log(`✅ [Robust Parse] Извлечено ${result.choices.length} choices через regex`);
+            }
         }
     }
     
-    // Если choices пустой, добавляем хотя бы один дефолтный
+    // Если choices пустой, добавляем дефолтные
     if (result.choices.length === 0) {
-        result.choices = [createDefaultChoice()];
+        console.warn('⚠️ [Robust Parse] Choices пустой, добавляем дефолтные');
+        result.choices = [
+            {
+                text: "Осмотреться",
+                difficulty_level: 3,
+                requirements: [],
+                success_rewards: [],
+                fail_penalties: []
+            },
+            {
+                text: "Подумать",
+                difficulty_level: 2,
+                requirements: [],
+                success_rewards: [],
+                fail_penalties: []
+            },
+            {
+                text: "Действовать",
+                difficulty_level: 5,
+                requirements: [],
+                success_rewards: [],
+                fail_penalties: []
+            }
+        ];
     }
     
-    // Пытаемся извлечь summary
-    const summaryRegex = /"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/i;
-    const summaryMatch = text.match(summaryRegex);
-    if (summaryMatch && summaryMatch[1]) {
-        result.summary = summaryMatch[1].replace(/\\"/g, '"');
-    } else {
-        // Генерируем summary из сцены
-        result.summary = result.scene
-            .replace(/<[^>]*>/g, ' ')
-            .substring(0, 100)
-            .trim() + '...';
+    // 3.4. Извлекаем thoughts
+    console.log('🔍 [Robust Parse] Извлечение thoughts...');
+    const thoughtsStart = text.indexOf('"thoughts"');
+    if (thoughtsStart !== -1) {
+        const arrayStart = text.indexOf('[', thoughtsStart);
+        if (arrayStart !== -1) {
+            // Ищем строки в массиве thoughts
+            const thoughtMatches = text.substring(arrayStart).matchAll(/"([^"]+)"/g);
+            for (const match of thoughtMatches) {
+                if (match[1] && result.thoughts.length < 20) {
+                    const thought = match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
+                    if (thought.length > 0) {
+                        result.thoughts.push(thought);
+                    }
+                }
+            }
+            console.log(`✅ [Robust Parse] Извлечено ${result.thoughts.length} thoughts`);
+        }
     }
+    
+    // Добавляем дефолтные thoughts если мало
+    if (result.thoughts.length < 5) {
+        console.warn(`⚠️ [Robust Parse] Мало thoughts (${result.thoughts.length}), добавляем дефолтные`);
+        const defaultThoughts = [
+            "Что здесь происходит?",
+            "Нужно разобраться в ситуации",
+            "Каждое решение имеет последствия",
+            "Я чувствую странное напряжение",
+            "Что-то здесь не так"
+        ];
+        result.thoughts = result.thoughts.concat(defaultThoughts).slice(0, 10);
+    }
+    
+    // 3.5. Извлекаем events (если есть)
+    console.log('🔍 [Robust Parse] Извлечение events...');
+    const eventsStart = text.indexOf('"events"');
+    if (eventsStart !== -1) {
+        const arrayStart = text.indexOf('[', eventsStart);
+        if (arrayStart !== -1) {
+            try {
+                // Пытаемся найти конец массива events
+                let depth = 0;
+                let inString = false;
+                let escapeNext = false;
+                let arrayEnd = -1;
+                
+                for (let i = arrayStart; i < text.length; i++) {
+                    const char = text[i];
+                    
+                    if (escapeNext) {
+                        escapeNext = false;
+                        continue;
+                    }
+                    
+                    if (char === '\\') {
+                        escapeNext = true;
+                        continue;
+                    }
+                    
+                    if (char === '"') {
+                        inString = !inString;
+                        continue;
+                    }
+                    
+                    if (!inString) {
+                        if (char === '[') depth++;
+                        if (char === ']') {
+                            depth--;
+                            if (depth === 0) {
+                                arrayEnd = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (arrayEnd > arrayStart) {
+                    const eventsText = text.substring(arrayStart, arrayEnd + 1);
+                    const eventsArray = JSON.parse(eventsText);
+                    if (Array.isArray(eventsArray)) {
+                        eventsArray.forEach((event, idx) => {
+                            if (event && typeof event === 'object' && event.description) {
+                                result.events.push({
+                                    type: event.type || "world_event",
+                                    description: event.description,
+                                    effects: Array.isArray(event.effects) ?
+                                        event.effects.filter(op => op && op.operation && op.id) : [],
+                                    reason: event.reason || ""
+                                });
+                            }
+                        });
+                        console.log(`✅ [Robust Parse] Извлечено ${result.events.length} events`);
+                    }
+                }
+            } catch (e) {
+                console.warn(`⚠️ [Robust Parse] Парсинг events не удался: ${e.message}`);
+            }
+        }
+    }
+    
+    // 3.6. Извлекаем aiMemory (если есть)
+    const memoryMatch = text.match(/"aiMemory"\s*:\s*\{([^}]*)\}/s);
+    if (memoryMatch) {
+        try {
+            result.aiMemory = JSON.parse(`{${memoryMatch[1]}}`);
+            console.log('✅ [Robust Parse] Извлечена aiMemory');
+        } catch (e) {
+            console.warn('⚠️ [Robust Parse] Парсинг aiMemory не удался');
+        }
+    }
+    
+    // Генерируем summary если пустой
+    if (!result.summary && result.scene) {
+        result.summary = result.scene.replace(/<[^>]*>/g, ' ').substring(0, 200).trim() + '...';
+    }
+    
+    console.log('✅ [Robust Parse] Агрессивное извлечение завершено');
+    console.log(`📊 [Robust Parse] Результат: scene=${!!result.scene}, choices=${result.choices.length}, events=${result.events.length}, thoughts=${result.thoughts.length}`);
     
     return result;
 }
 
+// Используйте эти функции вместо существующих в модуле 2-utils.js
 function createDefaultChoice() {
     return {
         text: "Продолжить...",
