@@ -77,45 +77,7 @@ ${e.stack || 'Нет стека'}
 2. Очистите localStorage в DevTools (Application → Storage → Local Storage)
 3. Перезагрузите страницу (Ctrl+F5)
 `;
-
-        // Показываем ошибку с кнопкой принудительного сброса
-        const errorModal = document.createElement('div');
-        errorModal.innerHTML = `
-            <div class="modal active">
-                <div class="modal-overlay"></div>
-                <div class="modal-content" style="max-width: 600px;">
-                    <div class="modal-header error">
-                        <h2><i class="fas fa-exclamation-triangle"></i> Критическая ошибка инициализации</h2>
-                    </div>
-                    <div class="modal-body">
-                        <h3>${e.message}</h3>
-                        <p>Игра не может быть запущена из-за критической ошибки.</p>
-                        <pre style="background: #1a1a1a; padding: 10px; border-radius: 5px; overflow: auto; max-height: 200px; font-size: 0.8rem;">${errorDetails}</pre>
-                    </div>
-                    <div class="modal-footer">
-                        <button id="forceResetBtn" class="btn btn-danger" style="margin-right: 10px;">
-                            <i class="fas fa-bomb"></i> Принудительный сброс игры
-                        </button>
-                        <button id="reloadBtn" class="btn btn-secondary">
-                            <i class="fas fa-redo"></i> Перезагрузить страницу
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(errorModal);
-        
-        // Обработчики для кнопок
-        document.getElementById('forceResetBtn').onclick = () => {
-            if (confirm('ВНИМАНИЕ! Это удалит ВСЕ сохранения и настройки. Продолжить?')) {
-                Saveload.forceResetToInitial();
-            }
-        };
-        
-        document.getElementById('reloadBtn').onclick = () => {
-            location.reload();
-        };
+        console.error(errorDetails);
     }
 }
 
@@ -336,7 +298,7 @@ function setupSettingsModalEvents() {
             
             try {
                 const sceneData = Utils.safeParseAIResponse(text);
-                if (!sceneData.scene || !sceneData.choices) throw new Error("JSON должен содержать 'scene' и 'choices'.");
+               // if (!sceneData.scene && !sceneData.choices) throw new Error("JSON должен содержать 'scene' и 'choices'.");
                 
                 State.resetGameProgress();
                 const state = State.getState();
@@ -360,14 +322,7 @@ function setupSettingsModalEvents() {
                     state.personality = sceneData.personality_change;
                 }
                 
-                state.history.push({
-                    sceneSnippet: "--- НОВЫЙ СЮЖЕТ ---",
-                    fullText: "Инициализация новой ветки сюжета.",
-                    choice: "Сюжет принят",
-                    changes: "Перезапуск сцены",
-                    d10: 0
-                });
-                
+       
                 State.setState({
                     currentScene: state.currentScene,
                     stats: state.stats,
