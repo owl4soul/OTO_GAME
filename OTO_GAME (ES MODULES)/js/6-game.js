@@ -31,7 +31,7 @@ function setupGameObservers() {
     
     State.on(State.EVENTS.DEGREE_UPGRADED, (data) => {
         console.log(`🎓 Повышение степени: ${data.oldDegree} → ${data.newDegree}`);
-        Render.showSuccessAlert('🎓 Новый ранг!', 
+        Render.showSuccessAlert('🎓 Новый ранг!',
             `Вы достигли степени: ${data.degreeName}. Получен бонус ко всем характеристикам!`);
     });
     
@@ -211,13 +211,13 @@ function createOperationHTML(operation, source) {
     
     Object.keys(operation).forEach(key => {
         if (!ignoredKeys.includes(key)) {
-             const val = operation[key];
-             if (val !== undefined && val !== null && val !== '') {
-                 extraFields += `<div style="color: #666; font-size: 0.7rem;">${key}: ${val}</div>`;
-             }
+            const val = operation[key];
+            if (val !== undefined && val !== null && val !== '') {
+                extraFields += `<div style="color: #666; font-size: 0.7rem;">${key}: ${val}</div>`;
+            }
         }
     });
-
+    
     return `
         <div style="display: flex; align-items: flex-start; padding: 8px 0; border-bottom: 1px dotted #333;">
             <div style="margin-right: 10px;">
@@ -657,6 +657,29 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         
         console.log('✅ Получен ответ от ИИ:', data);
         
+        // Проверяем, что данные от ИИ валидны
+if (!data) {
+    throw new Error("Ответ от ИИ пустой");
+}
+
+if (!data.scene || typeof data.scene !== 'string' || data.scene.trim() === '') {
+    console.warn('⚠️ Ответ ИИ не содержит сцены:', data);
+    // Пытаемся исправить
+    data.scene = data.scene || "Сцена не была сгенерирована. Пожалуйста, попробуйте еще раз.";
+}
+
+if (!data.choices || !Array.isArray(data.choices)) {
+    console.warn('⚠️ Ответ ИИ не содержит choices или это не массив:', data);
+    data.choices = data.choices || [];
+}
+
+console.log('✅ Данные от ИИ проверены:', {
+    hasScene: !!data.scene,
+    sceneLength: data.scene ? data.scene.length : 0,
+    choicesCount: data.choices ? data.choices.length : 0
+});
+
+
         // 🚫🚫🚫 Теперь передаем actionResults для правильного применения
         processTurn(data, actionResults, d10);
         
@@ -767,15 +790,10 @@ function processTurn(data, actionResults, d10) {
     
     console.log('📊 Изменения статов за ход:', statChanges);
     
-    // Обновляем память ИИ
-    if (data.aiMemory && typeof data.aiMemory === 'object') {
-        State.setState({
-            gameState: {
-                ...state.gameState,
-                aiMemory: { ...state.gameState.aiMemory, ...data.aiMemory }
-            }
-        });
-    }
+    // Обновляем память ИИ (заменяем только непустым значением)
+const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && Object.keys(data.aiMemory).length > 0) 
+    ? data.aiMemory 
+    : state.gameState.aiMemory;
     
     // Добавляем мысли героя
     if (data.thoughts && Array.isArray(data.thoughts)) {
@@ -784,12 +802,17 @@ function processTurn(data, actionResults, d10) {
     
     // Обновляем сцену
     const updatedScene = {
-        scene: data.scene || state.gameState.currentScene.scene,
-        reflection: data.reflection || "",
-        choices: data.choices || state.gameState.currentScene.choices,
-        typology: data.typology || "",
-        design_notes: data.design_notes || ""
-    };
+    scene: data.scene || state.gameState.currentScene.scene,
+    reflection: data.reflection || "",
+    choices: data.choices || state.gameState.currentScene.choices,
+    typology: data.typology || "",
+    design_notes: data.design_notes || "",
+    aiMemory: updatedAiMemory,
+    thoughts: data.thoughts || [],
+    summary: data.summary || ""
+};
+    
+
     
     // Добавляем запись в историю
     const newHistoryEntry = {
@@ -809,55 +832,61 @@ function processTurn(data, actionResults, d10) {
         updatedHistory.shift();
     }
     
-    // 🚫🚫🚫 Шаг 7: Сохраняем все изменения в состоянии
-    State.setState({
-        gameState: {
-            ...state.gameState,
-            currentScene: updatedScene,
-            history: updatedHistory,
-            summary: data.summary || state.gameState.summary,
-            selectedActions: [],
-            turnCount: state.turnCount + 1
-        },
-        freeMode: false,
-        freeModeText: '',
-        thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
-        lastTurnStatChanges: statChanges  // 🚫🚫🚫 Сохраняем изменения статов
-    });
-    
-    // Увеличиваем счетчик ходов
-    State.incrementTurnCount();
-    
-    // 🚫🚫🚫 Шаг 8: Создаем и отображаем блок изменений за ход
+    // ------------------------------------------------------------------
+    // ВАЖНО: СНАЧАЛА создаем HTML изменений, ПОТОМ используем!
+    // ------------------------------------------------------------------
+    // 🚫🚫🚫 Шаг 7: Создаем и отображаем блок изменений за ход
     const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
     console.log('📄 Созданный HTML изменений:', updatesHTML);
     
     if (updatesHTML && updatesHTML.trim() !== '') {
         dom.updates.style.display = 'block';
         dom.updates.innerHTML = updatesHTML;
-        
-        State.setState({
-            lastTurnUpdates: updatesHTML
-        });
     } else {
         dom.updates.style.display = 'none';
         dom.updates.innerHTML = '';
     }
     
+    // 🚫🚫🚫 Шаг 8: Сохраняем все изменения в состоянии (ТЕПЕРЬ updatesHTML уже создан!)
+    State.setState({
+    gameState: {
+        ...state.gameState,
+        currentScene: updatedScene,
+        history: updatedHistory,
+        summary: data.summary || state.gameState.summary,
+        selectedActions: [],
+        aiMemory: updatedAiMemory
+    },
+    thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
+    lastTurnStatChanges: statChanges,
+    lastTurnUpdates: updatesHTML
+});
+    
+    // Увеличиваем счетчик ходов
+    State.incrementTurnCount();
+    
     // Обновляем UI
     UI.setFreeModeUI(false);
     
     // Отправляем события
-    State.emit(State.EVENTS.SCENE_CHANGED, {
-        scene: updatedScene,
-        previousScene: previousScene
-    });
-    
-    State.emit(State.EVENTS.TURN_COMPLETED, {
-        turnCount: state.turnCount,
-        actions: actionResults,
-        statChanges: statChanges
-    });
+// В начале игры previousScene не существует
+const safePreviousScene = previousScene || {
+    scene: "В начале игры предыдущая сцена отсутствует.",
+    choices: []
+};
+
+// Отправляем событие изменения сцены
+State.emit(State.EVENTS.SCENE_CHANGED, {
+    scene: updatedScene,
+    previousScene: safePreviousScene
+});
+
+// Отправляем событие завершения хода
+State.emit(State.EVENTS.TURN_COMPLETED, {
+    turnCount: state.turnCount,
+    actions: actionResults,
+    statChanges: statChanges
+});
     
     // Восстанавливаем UI элементы
     dom.freeInputText.disabled = false;
@@ -1092,6 +1121,72 @@ function handleFreeModeToggle(e) {
     State.emit(State.EVENTS.MODE_CHANGED, { mode: isFreeMode ? 'free' : 'choices' });
 }
 
+
+/**
+ * Упрощенный блок для Истории ходов: без детализации операций, только статусы действий и итоги
+ */
+
+/**
+ * Упрощенный блок для Истории ходов: без детализации операций, только статусы действий и итоги
+ */
+function createSimplifiedTurnUpdatesHTML(actionResults, events) {
+    console.log('🔍 createSimplifiedTurnUpdatesHTML called');
+    
+    if ((!actionResults || actionResults.length === 0) &&
+        (!events || events.length === 0)) {
+        return '';
+    }
+    
+    let html = `
+        <div style="margin: 10px 0; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 4px; border: 1px solid #444;">
+            <div style="color: #d4af37; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #d4af37; padding-bottom: 3px;">
+                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ
+            </div>
+    `;
+    
+    // Действия (только статус)
+    if (actionResults && actionResults.length > 0) {
+        actionResults.forEach((result, idx) => {
+            const statusIcon = result.success ? '✅' : result.partial ? '⚠️' : '❌';
+            const statusText = result.success ? 'УСПЕХ' : result.partial ? 'ЧАСТИЧНО' : 'ПРОВАЛ';
+            const statusColor = result.success ? '#4cd137' : result.partial ? '#fbc531' : '#e84118';
+            
+            html += `
+                <div style="margin-bottom: 5px; padding: 5px; background: rgba(0,0,0,0.2); border-left: 3px solid ${statusColor}; border-radius: 3px;">
+                    <span style="color: ${statusColor}; font-weight: bold;">${statusIcon} Действие ${idx + 1}:</span>
+                    <span style="color: #ccc; margin-left: 5px;">"${result.choice_text}"</span>
+                    <span style="color: ${statusColor}; font-weight: bold; margin-left: 10px;">${statusText}</span>
+                </div>
+            `;
+        });
+    }
+    
+    // События (только название)
+    if (events && events.length > 0) {
+        events.forEach((event, idx) => {
+            html += `
+                <div style="margin-bottom: 5px; padding: 5px; background: rgba(0,170,255,0.1); border-left: 3px solid #00a8ff; border-radius: 3px;">
+                    <span style="color: #00a8ff; font-weight: bold;">⚡ Событие:</span>
+                    <span style="color: #ccc; margin-left: 5px;">${event.description.substring(0, 60)}${event.description.length > 60 ? '...' : ''}</span>
+                </div>
+            `;
+        });
+    }
+    
+    // ИТОГИ (без детализации операций)
+    html += `
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
+            <div style="color: #fbc531; font-weight: bold; margin-bottom: 5px;">ИТОГИ:</div>
+            <div style="color: #ccc; font-size: 0.9em;">
+                Характеристики героя изменились
+            </div>
+        </div>
+    `;
+    
+    html += `</div>`;
+    return html;
+}
+
 setupGameObservers();
 
 export const Game = {
@@ -1103,5 +1198,7 @@ export const Game = {
     handleFreeModeToggle,
     checkRequirements,
     calculateChoiceResult,
-    decreaseBuffDurations
+    decreaseBuffDurations,
+    createTurnUpdatesHTML,
+    createSimplifiedTurnUpdatesHTML
 };

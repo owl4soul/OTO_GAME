@@ -29,6 +29,7 @@ function saveState() {
         freeMode: state.freeMode,
         freeModeText: state.freeModeText,
         lastTurnUpdates: state.lastTurnUpdates,
+        lastTurnStatChanges: state.lastTurnStatChanges,
         thoughtsOfHero: [...state.thoughtsOfHero],
         pendingRequest: null // Не сохраняем активные запросы
     };

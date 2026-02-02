@@ -1,4 +1,18 @@
-// Модуль 5: RENDER - Отрисовка интерфейса (ФОРМАТ 4.1)
+// Модуль 5: RENDER - Отрисовка интерфейса (ФОРМАТ 4.1) - УЛУЧШЕННАЯ ВЕРСИЯ
+// СТРУКТУРА ВЕРХНЕЙ СЕКЦИИ:
+// (основной текст сцены выводится всегда, остальные блоки показываем только при наличии данных в ответе, а для изменений за ход - при наличии в state):
+// design_notes → Заметки дизайнера
+// aiMemory → Память ГМ
+// summary → Сводка
+// lastTurnUpdates → ИЗМЕНЕНИЯ ЗА ПОСЛЕДНИЙ ХОД
+// scene → основной текст сцены
+// reflection → Рефлексия
+// personality → Изменения личности
+// typology
+// 2. Нижняя секция слева: Новый порядок блоков с измененными цветами
+// 3. История: Улучшенный аккордеон с полной информацией
+// 4. Блок изменений за ход: По образцу эталонного примера с добавлением итогов
+
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -11,25 +25,39 @@ import { Audit } from './8-audit.js';
 const dom = DOM.getDOM();
 let thoughtsOfHeroInterval = null;
 
-// ========== НОВЫЕ ФУНКЦИИ - НАЧАЛО ==========
-
 // ====================================================================
-// УЛУЧШЕННЫЕ ФУНКЦИИ ДЛЯ 5-render.js
-// Версия: 2.0 - Blood Gothic + Industrial + Steampunk
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ЦВЕТОВ И ОПИСАНИЙ
 // ====================================================================
 
-// ====================================================================
-// НОВАЯ ФУНКЦИЯ: Получение цвета для диапазона -100 до 100
-// ====================================================================
+/**
+ * Получение цвета для диапазона -100 до 100 (для отношений)
+ */
 function getRelationColor(value) {
-    // Мапим -100...100 на 0...100 для использования существующей палитры
     const normalized = Math.max(0, Math.min(100, (value + 100) / 2));
     return getStatColor(normalized);
 }
 
-// ====================================================================
-// НОВАЯ ФУНКЦИЯ: Получение описания стата по значению
-// ====================================================================
+/**
+ * Получение цвета по значению стата (0-100)
+ */
+function getStatColor(value) {
+    const val = Math.max(0, Math.min(100, value));
+    
+    if (val <= 10) return '#800000'; // тёмно-красный
+    if (val <= 20) return '#FF0000'; // красный
+    if (val <= 30) return '#FF5500'; // оранжевый
+    if (val <= 40) return '#FFAA00'; // оранжево-желтый
+    if (val <= 50) return '#FFD700'; // золотой
+    if (val <= 60) return '#ADFF2F'; // салатовый
+    if (val <= 70) return '#00FF00'; // зелёный
+    if (val <= 80) return '#20B2AA'; // цвет морской волны
+    if (val <= 90) return '#87CEEB'; // цвет неба
+    return '#FFFFFF'; // белый
+}
+
+/**
+ * Получение описания стата по значению
+ */
 function getStatDescription(statName, value) {
     const descriptions = {
         will: {
@@ -89,195 +117,67 @@ function getStatDescription(statName, value) {
     const statDescriptions = descriptions[statName];
     if (!statDescriptions) return "Характеристика неизвестна";
     
-    // Находим ближайший диапазон
     const val = Math.max(0, Math.min(100, value));
     const bracket = Math.floor(val / 10) * 10;
     
     return statDescriptions[bracket] || statDescriptions[50];
 }
 
-// ====================================================================
-// УЛУЧШЕННАЯ ФУНКЦИЯ: renderStats с анимацией изменений
-// ====================================================================
-function renderStats() {
-    console.log('🔍 renderStats called');
+/**
+ * Получение русского названия стата
+ */
+function getRussianStatName(key) {
+    const map = { 
+        'will': 'Воля', 
+        'stealth': 'Скрытность', 
+        'influence': 'Влияние', 
+        'sanity': 'Разум' 
+    };
+    return map[key] || key;
+}
+
+/**
+ * Получение иконки для game_item
+ */
+function getGameItemIcon(itemId) {
+    if (!itemId) return '📌';
     
-    const state = State.getState();
-    
-    // Сохраняем предыдущие значения для анимации изменений
-    if (!window.previousBaseStats) {
-        window.previousBaseStats = {};
-    }
-    
-    // Базовые значения статов (без временных модификаторов)
-    const baseStats = {
-        will: State.getGameItemValue('stat:will') || 50,
-        stealth: State.getGameItemValue('stat:stealth') || 50,
-        influence: State.getGameItemValue('stat:influence') || 50,
-        sanity: State.getGameItemValue('stat:sanity') || 50
+    const type = itemId.split(':')[0];
+    const icons = {
+        'stat': '📊',
+        'skill': '📜',
+        'inventory': '🎒',
+        'relations': '👤',
+        'bless': '✨',
+        'curse': '💀',
+        'buff': '⬆️',
+        'debuff': '⬇️',
+        'initiation_degree': '🎓',
+        'progress': '📈',
+        'personality': '🧠',
+        'effect': '⚡',
+        'status': '🔘',
+        'ability': '💫',
+        'trait': '🎭',
+        'item': '🎁',
+        'ritual': '🕯️',
+        'knowledge': '📚',
+        'secret': '🔐',
+        'location': '📍',
+        'event': '📅',
+        'quest': '🎯'
     };
     
-    // Получаем все активные временные эффекты
-    const buffs = State.getGameItemsByType('buff:');
-    const debuffs = State.getGameItemsByType('debuff:');
-    
-    // Группируем эффекты по статам
-    const statEffects = {
-        will: { buffs: [], debuffs: [] },
-        stealth: { buffs: [], debuffs: [] },
-        influence: { buffs: [], debuffs: [] },
-        sanity: { buffs: [], debuffs: [] }
-    };
-    
-    buffs.forEach(buff => {
-        const [type, statName] = buff.id.split(':');
-        if (statEffects[statName] && buff.value !== undefined) {
-            statEffects[statName].buffs.push({
-                value: buff.value,
-                duration: buff.duration || 0,
-                name: buff.description || 'Бафф'
-            });
-        }
-    });
-    
-    debuffs.forEach(debuff => {
-        const [type, statName] = debuff.id.split(':');
-        if (statEffects[statName] && debuff.value !== undefined) {
-            statEffects[statName].debuffs.push({
-                value: debuff.value,
-                duration: debuff.duration || 0,
-                name: debuff.description || 'Дебафф'
-            });
-        }
-    });
-    
-    // Обрабатываем каждый стат
-    ['will', 'stealth', 'influence', 'sanity'].forEach(statName => {
-        const valElement = dom.vals[statName];
-        if (!valElement) return;
-        
-        const baseValue = baseStats[statName];
-        const previousBase = window.previousBaseStats[statName] || baseValue;
-        const { buffs: buffList, debuffs: debuffList } = statEffects[statName];
-        
-        // Суммируем все временные модификаторы
-        const totalBuff = buffList.reduce((sum, b) => sum + b.value, 0);
-        const totalDebuff = debuffList.reduce((sum, d) => sum + d.value, 0);
-        const totalModifier = totalBuff + totalDebuff;
-        const currentValue = baseValue + totalModifier;
-        
-        // Определяем цвет для текущего значения
-        const currentColor = getStatColor(currentValue);
-        
-        // НОВАЯ ФИЧА: Анимация изменения (только для перманентных)
-        const delta = baseValue - previousBase;
-        if (delta !== 0) {
-            showStatChangeAnimation(valElement, delta, currentColor);
-        }
-        
-        // Сохраняем текущее значение для следующего раза
-        window.previousBaseStats[statName] = baseValue;
-        
-        // Формируем строку с детализацией
-        let detailHtml = '';
-        
-        if (buffList.length > 0 || debuffList.length > 0) {
-            // Начинаем с базового значения
-            detailHtml = `<span style="color: #888; font-size: 0.8em;">${baseValue}</span>`;
-            
-            // Добавляем баффы зеленым цветом
-            buffList.forEach(buff => {
-                if (buff.value > 0) {
-                    detailHtml += ` <span style="color: #4cd137; font-size: 0.8em;">+${buff.value}[${buff.duration}]</span>`;
-                }
-            });
-            
-            // Добавляем дебаффы красным цветом
-            debuffList.forEach(debuff => {
-                if (debuff.value < 0) {
-                    const absValue = Math.abs(debuff.value);
-                    detailHtml += ` <span style="color: #e84118; font-size: 0.8em;">-${absValue}[${debuff.duration}]</span>`;
-                }
-            });
-            
-            // Формат для статов с временными модификаторами: две строки (компактно)
-            valElement.innerHTML = `
-                <div class="stat-container" style="display: flex; flex-direction: column; align-items: center; line-height: 1.1; gap: 1px; position: relative;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                        <span style="color: #999; font-size: 0.85em; white-space: nowrap;">${getRussianStatName(statName)}:</span>
-                        <span class="stat-value-clickable" 
-                              data-stat="${statName}" 
-                              data-value="${currentValue}"
-                              style="color: ${currentColor}; font-weight: bold; font-size: 1em; margin-left: 3px; cursor: help; text-shadow: 0 0 3px ${currentColor}40;">
-                            ${currentValue}
-                        </span>
-                    </div>
-                    <div style="font-size: 0.7em; color: #777; text-align: center; width: 100%; font-style: italic;">
-                        ${detailHtml}
-                    </div>
-                </div>
-            `;
-        } else {
-            // Формат для статов без временных модификаторов: одна строка (компактно)
-            valElement.innerHTML = `
-                <div class="stat-container" style="display: flex; justify-content: space-between; align-items: center; width: 100%; line-height: 1.1; min-height: 1.3em; position: relative;">
-                    <span style="color: #999; font-size: 0.85em; white-space: nowrap;">${getRussianStatName(statName)}:</span>
-                    <span class="stat-value-clickable" 
-                          data-stat="${statName}" 
-                          data-value="${currentValue}"
-                          style="color: ${currentColor}; font-weight: bold; font-size: 1em; margin-left: 3px; cursor: help; text-shadow: 0 0 3px ${currentColor}40;">
-                        ${currentValue}
-                    </span>
-                </div>
-            `;
-        }
-        
-        // Добавляем обработчики кликов для тултипов
-        const clickableElements = valElement.querySelectorAll('.stat-value-clickable');
-        clickableElements.forEach(el => {
-            el.addEventListener('click', function() {
-                const stat = this.dataset.stat;
-                const value = parseInt(this.dataset.value);
-                showStatTooltip(this, stat, value);
-            });
-        });
-    });
-    
-    // Обновляем прогресс-бар (без изменений)
-    const progressValue = State.getGameItemValue('progress:oto') || 0;
-    const maxScore = 110;
-    const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
-    if (dom.tube) {
-        dom.tube.style.height = `${pct}%`;
-    }
-    
-    // Обновляем степени инициализации (без изменений)
-    const degreeItems = State.getGameItemsByType('initiation_degree:');
-    const currentDegreeItem = degreeItems.find(item => item.value && item.value.trim() !== '');
-    let currentDegreeIndex = 0;
-    
-    if (currentDegreeItem) {
-        const degreeMatch = currentDegreeItem.value.match(/(\d+)°/);
-        if (degreeMatch) {
-            currentDegreeIndex = parseInt(degreeMatch[1]) || 0;
-        }
-    }
-    
-    if (dom.degrees) {
-        dom.degrees.innerHTML = CONFIG.degrees.slice().reverse().map(d => {
-            let cls = 'degree-item';
-            if (d.lvl < currentDegreeIndex) cls += ' passed';
-            if (d.lvl === currentDegreeIndex) cls += ' active';
-            return `<div class="${cls}">${d.name}</div>`;
-        }).join('');
-    }
-    
-    console.log('✅ renderStats completed');
+    return icons[type] || '📌';
 }
 
 // ====================================================================
-// НОВАЯ ФУНКЦИЯ: Анимация изменения стата (вылетающие цифры)
+// АНИМАЦИЯ ИЗМЕНЕНИЯ СТАТОВ
 // ====================================================================
+
+/**
+ * Анимация изменения стата (вылетающие цифры)
+ */
 function showStatChangeAnimation(element, delta, color) {
     if (delta === 0) return;
     
@@ -302,7 +202,6 @@ function showStatChangeAnimation(element, delta, color) {
     
     container.appendChild(flyingNumber);
     
-    // Добавляем пульсацию к основному значению
     const valueEl = container.querySelector('.stat-value-clickable');
     if (valueEl) {
         valueEl.style.animation = 'statPulse 0.5s ease-in-out';
@@ -311,7 +210,6 @@ function showStatChangeAnimation(element, delta, color) {
         }, 500);
     }
     
-    // Удаляем элемент после анимации
     setTimeout(() => {
         if (flyingNumber && flyingNumber.parentNode) {
             flyingNumber.parentNode.removeChild(flyingNumber);
@@ -320,10 +218,13 @@ function showStatChangeAnimation(element, delta, color) {
 }
 
 // ====================================================================
-// НОВАЯ ФУНКЦИЯ: Показ тултипа для стата
+// УЛУЧШЕННЫЕ ТУЛТИПЫ
 // ====================================================================
+
+/**
+ * Показ тултипа для стата
+ */
 function showStatTooltip(element, statName, value) {
-    // Удаляем предыдущий тултип если есть
     const existingTooltip = document.querySelector('.stat-tooltip');
     if (existingTooltip) {
         existingTooltip.remove();
@@ -356,14 +257,33 @@ function showStatTooltip(element, statName, value) {
         animation: tooltipFadeIn 0.2s ease-out;
     `;
     
-    // Позиционируем тултип
-    const rect = element.getBoundingClientRect();
-    tooltip.style.left = `${rect.left + window.scrollX}px`;
-    tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`;
-    
     document.body.appendChild(tooltip);
     
-    // Удаляем при клике вне или через 5 секунд
+    const rect = element.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    
+    let left = rect.left + window.scrollX;
+    let top = rect.bottom + window.scrollY + 5;
+    
+    if (left + tooltipRect.width > window.innerWidth) {
+        left = window.innerWidth - tooltipRect.width - 10;
+    }
+    
+    if (left < 10) {
+        left = 10;
+    }
+    
+    if (top + tooltipRect.height > window.innerHeight + window.scrollY) {
+        top = rect.top + window.scrollY - tooltipRect.height - 5;
+    }
+    
+    if (top < window.scrollY) {
+        top = window.scrollY + 10;
+    }
+    
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+    
     const removeTooltip = () => {
         if (tooltip && tooltip.parentNode) {
             tooltip.style.animation = 'tooltipFadeOut 0.2s ease-out';
@@ -383,424 +303,73 @@ function showStatTooltip(element, statName, value) {
     setTimeout(removeTooltip, 5000);
 }
 
-// ====================================================================
-// ПОЛНОСТЬЮ ПЕРЕРАБОТАННАЯ ФУНКЦИЯ: renderAllGameItems
-// С новой структурой и компактным дизайном
-// ====================================================================
-function renderAllGameItems() {
-    console.log('🔍 renderAllGameItems called (Blood Gothic Industrial v2.0)');
-    
-    const personalityEl = document.getElementById('personalityDisplay');
-    if (!personalityEl || !personalityEl.parentNode) {
-        console.error('❌ Cannot find personalityDisplay container');
-        return;
-    }
-    
-    const container = personalityEl.parentNode;
-    
-    // Удаляем старое поле Личность из HTML (оно будет выведено в новом блоке)
-    personalityEl.style.display = 'none';
-    
-    // Удаляем все управляемые контейнеры
-    const managedIds = [
-        'personalityBlockContainer', // НОВЫЙ БЛОК
-        'typologyContainer',
-        'relationsContainer',
-        'skillsContainer',
-        'blessingsContainer',
-        'cursesContainer',
-        'buffsDebuffsContainer', // ПЕРЕИМЕНОВАННЫЙ
-        'effectsContainer', // НОВЫЙ
-        'inventoryContainer'
-    ];
-    
-    managedIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.remove();
-    });
-    
-    const fragment = document.createDocumentFragment();
-    
-    const state = State.getState();
-    
-    // =============================================
-    // БЛОК 1: ЛИЧНОСТЬ (НОВЫЙ!) - над Типологией
-    // =============================================
-    const personalityVal = State.getGameItemValue('personality:hero');
-    
-    if (personalityVal && personalityVal.trim() !== '') {
-        const personalityBlock = document.createElement('div');
-        personalityBlock.id = 'personalityBlockContainer';
-        personalityBlock.className = 'game-item-section';
-        personalityBlock.innerHTML = `
-            <div class="section-header" style="color: #c084fc; border-bottom: 1px solid #4a044e;">
-                <i class="fas fa-brain"></i> ЛИЧНОСТЬ
-            </div>
-            <div class="section-content" style="font-size: 0.75em; color: #ccc; line-height: 1.3; font-style: italic; padding: 3px 0;">
-                ${personalityVal}
-            </div>
-        `;
-        fragment.appendChild(personalityBlock);
-    }
-    
-    // =============================================
-    // БЛОК 2: ТИПОЛОГИЯ - без изменений по логике
-    // =============================================
-    const typologyVal = state.gameState.currentScene ? state.gameState.currentScene.typology : null;
-    
-    const typologyDiv = document.createElement('div');
-    typologyDiv.id = 'typologyContainer';
-    typologyDiv.className = 'game-item-section';
-    typologyDiv.innerHTML = `
-        <div class="section-header" style="color: #1dd1a1; border-bottom: 1px solid #0a3622;">
-            <i class="fas fa-fingerprint"></i> ТИПОЛОГИЯ
-        </div>
-        <div class="section-content" style="font-size: 0.75em; color: ${typologyVal ? '#ccc' : '#555'}; line-height: 1.3; ${typologyVal ? 'font-style: italic;' : ''} padding: 3px 0;">
-            ${typologyVal || 'Не определена...'}
-        </div>
-    `;
-    fragment.appendChild(typologyDiv);
-    
-    // =============================================
-    // БЛОК 3: ОТНОШЕНИЯ - С ЦВЕТОВОЙ ШКАЛОЙ -100 до 100
-    // =============================================
-    const relationsItems = State.getGameItemsByType('relations:');
-    
-    if (relationsItems && relationsItems.length > 0) {
-        const relationsDiv = document.createElement('div');
-        relationsDiv.id = 'relationsContainer';
-        relationsDiv.className = 'game-item-section';
-        
-        let relationsHTML = '';
-        relationsItems.forEach(rel => {
-            const name = rel.id.split(':')[1].replace(/_/g, ' ');
-            const value = parseInt(rel.value) || 0;
-            const color = getRelationColor(value);
-            const description = rel.description || '';
-            
-            relationsHTML += `
-                <div class="game-item-badge relation-badge" 
-                     onclick="showGameItemTooltip(this, ${JSON.stringify(rel).replace(/"/g, '&quot;')})"
-                     style="background: linear-gradient(135deg, #1a0a0a 0%, #0d0505 100%); 
-                            border: 1px solid ${color}40; 
-                            padding: 2px 6px; 
-                            cursor: help;
-                            transition: all 0.2s;">
-                    <span style="color: #ff9ff3; font-size: 0.75em;">🤝</span>
-                    <span style="color: #ccc; font-size: 0.75em; margin: 0 3px;">${name}:</span>
-                    <span style="color: ${color}; font-weight: bold; font-size: 0.8em; text-shadow: 0 0 3px ${color}40;">${value}</span>
-                </div>
-            `;
-        });
-        
-        relationsDiv.innerHTML = `
-            <div class="section-header" style="color: #ff9ff3; border-bottom: 1px solid #4a0438;">
-                <i class="fas fa-people-arrows"></i> ОТНОШЕНИЯ (${relationsItems.length})
-            </div>
-            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
-                ${relationsHTML}
-            </div>
-        `;
-        fragment.appendChild(relationsDiv);
-    }
-    
-    // =============================================
-    // БЛОК 4: НАВЫКИ
-    // =============================================
-    const skillsItems = State.getGameItemsByType('skill:');
-    
-    if (skillsItems && skillsItems.length > 0) {
-        const skillsDiv = document.createElement('div');
-        skillsDiv.id = 'skillsContainer';
-        skillsDiv.className = 'game-item-section';
-        
-        let skillsHTML = '';
-        skillsItems.forEach(skill => {
-            const name = skill.value || skill.id.split(':')[1];
-            const description = skill.description || '';
-            
-            skillsHTML += `
-                <div class="game-item-badge" 
-                     onclick="showGameItemTooltip(this, ${JSON.stringify(skill).replace(/"/g, '&quot;')})"
-                     style="background: linear-gradient(135deg, #0a0a1a 0%, #050510 100%); 
-                            border: 1px solid #9c88ff40; 
-                            padding: 2px 6px; 
-                            cursor: help;">
-                    <span style="color: #9c88ff; font-size: 0.75em;">📜</span>
-                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
-                </div>
-            `;
-        });
-        
-        skillsDiv.innerHTML = `
-            <div class="section-header" style="color: #9c88ff; border-bottom: 1px solid #2a1a4a;">
-                <i class="fas fa-scroll"></i> НАВЫКИ (${skillsItems.length})
-            </div>
-            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
-                ${skillsHTML}
-            </div>
-        `;
-        fragment.appendChild(skillsDiv);
-    }
-    
-    // =============================================
-    // БЛОК 5: БЛАГОСЛОВЕНИЯ
-    // =============================================
-    const blessItems = State.getGameItemsByType('bless:');
-    
-    if (blessItems && blessItems.length > 0) {
-        const blessDiv = document.createElement('div');
-        blessDiv.id = 'blessingsContainer';
-        blessDiv.className = 'game-item-section';
-        
-        let blessHTML = '';
-        blessItems.forEach(bless => {
-            const name = bless.value || bless.id.split(':')[1];
-            const duration = bless.duration !== undefined ? `[${bless.duration}]` : '';
-            
-            blessHTML += `
-                <div class="game-item-badge" 
-                     onclick="showGameItemTooltip(this, ${JSON.stringify(bless).replace(/"/g, '&quot;')})"
-                     style="background: linear-gradient(135deg, #1a1a0a 0%, #0d0d05 100%); 
-                            border: 1px solid #fbc53140; 
-                            padding: 2px 6px; 
-                            cursor: help;">
-                    <span style="color: #fbc531; font-size: 0.75em;">✨</span>
-                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
-                    ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
-                </div>
-            `;
-        });
-        
-        blessDiv.innerHTML = `
-            <div class="section-header" style="color: #fbc531; border-bottom: 1px solid #4a3a0a;">
-                <i class="fas fa-star"></i> БЛАГОСЛОВЕНИЯ (${blessItems.length})
-            </div>
-            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
-                ${blessHTML}
-            </div>
-        `;
-        fragment.appendChild(blessDiv);
-    }
-    
-    // =============================================
-    // БЛОК 6: ПРОКЛЯТИЯ
-    // =============================================
-    const curseItems = State.getGameItemsByType('curse:');
-    
-    if (curseItems && curseItems.length > 0) {
-        const curseDiv = document.createElement('div');
-        curseDiv.id = 'cursesContainer';
-        curseDiv.className = 'game-item-section';
-        
-        let curseHTML = '';
-        curseItems.forEach(curse => {
-            const name = curse.value || curse.id.split(':')[1];
-            const duration = curse.duration !== undefined ? `[${curse.duration}]` : '';
-            
-            curseHTML += `
-                <div class="game-item-badge" 
-                     onclick="showGameItemTooltip(this, ${JSON.stringify(curse).replace(/"/g, '&quot;')})"
-                     style="background: linear-gradient(135deg, #1a0000 0%, #0d0000 100%); 
-                            border: 1px solid #c2361640; 
-                            padding: 2px 6px; 
-                            cursor: help;">
-                    <span style="color: #c23616; font-size: 0.75em;">💀</span>
-                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
-                    ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
-                </div>
-            `;
-        });
-        
-        curseDiv.innerHTML = `
-            <div class="section-header" style="color: #c23616; border-bottom: 1px solid #4a0a0a;">
-                <i class="fas fa-skull-crossbones"></i> ПРОКЛЯТИЯ (${curseItems.length})
-            </div>
-            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
-                ${curseHTML}
-            </div>
-        `;
-        fragment.appendChild(curseDiv);
-    }
-    
-    // =============================================
-    // БЛОК 7: БАФФЫ/ДЕБАФФЫ К СТАТАМ (ПЕРЕИМЕНОВАННЫЙ)
-    // =============================================
-    const buffsItems = State.getGameItemsByType('buff:');
-    const debuffsItems = State.getGameItemsByType('debuff:');
-    const statBuffsDebuffs = [...buffsItems, ...debuffsItems];
-    
-    if (statBuffsDebuffs && statBuffsDebuffs.length > 0) {
-        const buffsDebuffsDiv = document.createElement('div');
-        buffsDebuffsDiv.id = 'buffsDebuffsContainer';
-        buffsDebuffsDiv.className = 'game-item-section';
-        
-        let itemsHTML = '';
-        statBuffsDebuffs.forEach(item => {
-            const isBuff = item.id.startsWith('buff:');
-            const statName = item.id.split(':')[1];
-            const russianName = getRussianStatName(statName);
-            const value = item.value || 0;
-            const sign = value > 0 ? '+' : '';
-            const duration = item.duration !== undefined ? `[${item.duration}]` : '';
-            const color = isBuff ? '#4cd137' : '#e84118';
-            const icon = isBuff ? '⬆️' : '⬇️';
-            
-            itemsHTML += `
-                <div class="game-item-badge" 
-                     onclick="showGameItemTooltip(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})"
-                     style="background: linear-gradient(135deg, ${isBuff ? '#0a1a0a' : '#1a0a0a'} 0%, ${isBuff ? '#051005' : '#0d0505'} 100%); 
-                            border: 1px solid ${color}40; 
-                            padding: 2px 6px; 
-                            cursor: help;">
-                    <span style="color: ${color}; font-size: 0.75em;">${icon}</span>
-                    <span style="color: #ccc; font-size: 0.75em; margin: 0 2px;">${russianName}${sign}${value}</span>
-                    ${duration ? `<span style="color: #888; font-size: 0.7em;">${duration}</span>` : ''}
-                </div>
-            `;
-        });
-        
-        buffsDebuffsDiv.innerHTML = `
-            <div class="section-header" style="color: #48dbfb; border-bottom: 1px solid #0a3a4a;">
-                <i class="fas fa-tachometer-alt"></i> БАФФЫ/ДЕБАФФЫ (${statBuffsDebuffs.length})
-            </div>
-            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
-                ${itemsHTML}
-            </div>
-        `;
-        fragment.appendChild(buffsDebuffsDiv);
-    }
-    
-    // =============================================
-    // БЛОК 8: ЭФФЕКТЫ/ВОЗДЕЙСТВИЯ (НОВЫЙ!) - Неизвестные типы
-    // =============================================
-    const knownPrefixes = ['stat:', 'skill:', 'inventory:', 'relations:', 'bless:', 'curse:', 
-                           'buff:', 'debuff:', 'personality:', 'initiation_degree:', 'progress:'];
-    
-    const allItems = state.heroState || [];
-    const unknownItems = allItems.filter(item => {
-        return !knownPrefixes.some(prefix => item.id.startsWith(prefix));
-    });
-    
-    if (unknownItems && unknownItems.length > 0) {
-        const effectsDiv = document.createElement('div');
-        effectsDiv.id = 'effectsContainer';
-        effectsDiv.className = 'game-item-section';
-        
-        let effectsHTML = '';
-        unknownItems.forEach(item => {
-            const [type, name] = item.id.split(':');
-            const displayName = item.value || name || item.id;
-            const duration = item.duration !== undefined ? `[${item.duration}]` : '';
-            
-            effectsHTML += `
-                <div class="game-item-badge" 
-                     onclick="showGameItemTooltip(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})"
-                     style="background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%); 
-                            border: 1px solid #88888840; 
-                            padding: 2px 6px; 
-                            cursor: help;">
-                    <span style="color: #888; font-size: 0.75em;">❓</span>
-                    <span style="color: #aaa; font-size: 0.75em; margin-left: 2px;">${displayName}</span>
-                    ${duration ? `<span style="color: #666; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
-                </div>
-            `;
-        });
-        
-        effectsDiv.innerHTML = `
-            <div class="section-header" style="color: #888; border-bottom: 1px solid #333;">
-                <i class="fas fa-question-circle"></i> ЭФФЕКТЫ/ВОЗДЕЙСТВИЯ (${unknownItems.length})
-            </div>
-            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
-                ${effectsHTML}
-            </div>
-        `;
-        fragment.appendChild(effectsDiv);
-    }
-    
-    // =============================================
-    // БЛОК 9: ИНВЕНТАРЬ
-    // =============================================
-    const inventoryItems = State.getGameItemsByType('inventory:');
-    
-    if (inventoryItems && inventoryItems.length > 0) {
-        const invDiv = document.createElement('div');
-        invDiv.id = 'inventoryContainer';
-        invDiv.className = 'game-item-section';
-        
-        let invHTML = '';
-        inventoryItems.forEach(item => {
-            const name = item.value || item.id.split(':')[1];
-            
-            invHTML += `
-                <div class="game-item-badge" 
-                     onclick="showGameItemTooltip(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})"
-                     style="background: linear-gradient(135deg, #0a1a1a 0%, #051010 100%); 
-                            border: 1px solid #00a8ff40; 
-                            padding: 2px 6px; 
-                            cursor: help;">
-                    <span style="color: #00a8ff; font-size: 0.75em;">📦</span>
-                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
-                </div>
-            `;
-        });
-        
-        invDiv.innerHTML = `
-            <div class="section-header" style="color: #00a8ff; border-bottom: 1px solid #0a2a3a;">
-                <i class="fas fa-box"></i> ИНВЕНТАРЬ (${inventoryItems.length})
-            </div>
-            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
-                ${invHTML}
-            </div>
-        `;
-        fragment.appendChild(invDiv);
-    }
-    
-    // Добавляем все в DOM
-    container.appendChild(fragment);
-    
-    console.log('✅ renderAllGameItems completed (Blood Gothic Industrial v2.0)');
-}
-
-// ====================================================================
-// Показ тултипа для game_item со всеми полями
-// ====================================================================
-function showGameItemTooltip(element, itemData) {
-    // Удаляем предыдущий тултип если есть
-    const existingTooltip = document.querySelector('.gameitem-tooltip');
+/**
+ * Показ тултипа для game_item
+ */
+function showGameItemTooltip(element, gameItem) {
+    const existingTooltip = document.querySelector('.game-item-tooltip');
     if (existingTooltip) {
         existingTooltip.remove();
     }
     
-    const item = typeof itemData === 'string' ? JSON.parse(itemData) : itemData;
+    if (!gameItem || !gameItem.id) {
+        console.warn('showGameItemTooltip: Нет данных об объекте');
+        return;
+    }
     
     const tooltip = document.createElement('div');
-    tooltip.className = 'gameitem-tooltip';
+    tooltip.className = 'game-item-tooltip';
     
-    // Формируем содержимое тултипа со ВСЕМИ непустыми полями
-    let content = `<div style="font-weight: bold; color: #fbc531; margin-bottom: 8px; font-size: 0.95em; border-bottom: 1px solid #444; padding-bottom: 4px;">
-        ${getGameItemIcon(item.id)} ${item.id}
-    </div>`;
+    let content = '';
     
-    // Список полей для отображения
-    const fields = [
-        { key: 'value', label: 'Значение', color: '#4cd137' },
-        { key: 'description', label: 'Описание', color: '#ccc' },
-        { key: 'duration', label: 'Длительность', color: '#48dbfb' },
-        { key: 'max', label: 'Максимум', color: '#888' },
-        { key: 'min', label: 'Минимум', color: '#888' }
-    ];
+    const icon = getGameItemIcon(gameItem.id);
+    const [type, name] = gameItem.id.split(':');
     
-    fields.forEach(field => {
-        if (item[field.key] !== undefined && item[field.key] !== null && item[field.key] !== '') {
-            content += `
-                <div style="margin: 4px 0; font-size: 0.85em;">
-                    <span style="color: ${field.color}; font-style: italic;">${field.label}:</span>
-                    <span style="color: #ddd; margin-left: 4px;">${item[field.key]}</span>
-                </div>
-            `;
-        }
-    });
+    content += `
+        <div style="font-weight: bold; color: #fbc531; margin-bottom: 6px; font-size: 0.95em; border-bottom: 1px solid #fbc53140; padding-bottom: 4px;">
+            ${icon} ${name || type}
+        </div>
+    `;
+    
+    if (gameItem.value !== undefined && gameItem.value !== name) {
+        content += `
+            <div style="margin-bottom: 4px; color: #ddd; font-size: 0.85em;">
+                <span style="color: #888;">Значение:</span> ${gameItem.value}
+            </div>
+        `;
+    }
+    
+    if (gameItem.description) {
+        content += `
+            <div style="margin-bottom: 4px; color: #ccc; font-size: 0.8em; font-style: italic; line-height: 1.3;">
+                ${gameItem.description}
+            </div>
+        `;
+    }
+    
+    if (gameItem.duration !== undefined) {
+        content += `
+            <div style="margin-bottom: 2px; color: #fbc531; font-size: 0.75em;">
+                <i class="fas fa-clock"></i> Длительность: ${gameItem.duration} ход.
+            </div>
+        `;
+    }
+    
+    const extraFields = Object.keys(gameItem).filter(k => !['id', 'value', 'description', 'duration'].includes(k));
+    if (extraFields.length > 0) {
+        content += '<div style="margin-top: 6px; padding-top: 4px; border-top: 1px solid #333;">';
+        extraFields.forEach(field => {
+            const val = gameItem[field];
+            if (val !== null && val !== undefined) {
+                content += `
+                    <div style="font-size: 0.75em; color: #999; margin-bottom: 2px;">
+                        <span style="color: #666;">${field}:</span> ${JSON.stringify(val)}
+                    </div>
+                `;
+            }
+        });
+        content += '</div>';
+    }
     
     tooltip.innerHTML = content;
     
@@ -818,14 +387,33 @@ function showGameItemTooltip(element, itemData) {
         font-family: 'Courier New', monospace;
     `;
     
-    // Позиционируем тултип
-    const rect = element.getBoundingClientRect();
-    tooltip.style.left = `${rect.left + window.scrollX}px`;
-    tooltip.style.top = `${rect.bottom + window.scrollY + 5}px`;
-    
     document.body.appendChild(tooltip);
     
-    // Удаляем при клике вне или через 7 секунд
+    const rect = element.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    
+    let left = rect.left + window.scrollX;
+    let top = rect.bottom + window.scrollY + 5;
+    
+    if (left + tooltipRect.width > window.innerWidth) {
+        left = window.innerWidth - tooltipRect.width - 10;
+    }
+    
+    if (left < 10) {
+        left = 10;
+    }
+    
+    if (top + tooltipRect.height > window.innerHeight + window.scrollY) {
+        top = rect.top + window.scrollY - tooltipRect.height - 5;
+    }
+    
+    if (top < window.scrollY) {
+        top = window.scrollY + 10;
+    }
+    
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+    
     const removeTooltip = () => {
         if (tooltip && tooltip.parentNode) {
             tooltip.style.animation = 'tooltipFadeOut 0.2s ease-out';
@@ -845,10 +433,443 @@ function showGameItemTooltip(element, itemData) {
     setTimeout(removeTooltip, 7000);
 }
 
+// ====================================================================
+// РЕНДЕРИНГ СТАТОВ С АНИМАЦИЕЙ
+// ====================================================================
 
+function renderStats() {
+    console.log('🔍 renderStats called');
+    
+    const state = State.getState();
+    
+    if (!window.previousBaseStats) {
+        window.previousBaseStats = {};
+    }
+    
+    const baseStats = {
+        will: State.getGameItemValue('stat:will') || 50,
+        stealth: State.getGameItemValue('stat:stealth') || 50,
+        influence: State.getGameItemValue('stat:influence') || 50,
+        sanity: State.getGameItemValue('stat:sanity') || 50
+    };
+    
+    const buffs = State.getGameItemsByType('buff:');
+    const debuffs = State.getGameItemsByType('debuff:');
+    
+    const statEffects = {
+        will: { buffs: [], debuffs: [] },
+        stealth: { buffs: [], debuffs: [] },
+        influence: { buffs: [], debuffs: [] },
+        sanity: { buffs: [], debuffs: [] }
+    };
+    
+    buffs.forEach(buff => {
+        const [type, statName] = buff.id.split(':');
+        if (statEffects[statName] && buff.value !== undefined) {
+            statEffects[statName].buffs.push({
+                value: buff.value,
+                duration: buff.duration || 0,
+                name: buff.description || 'Бафф'
+            });
+        }
+    });
+    
+    debuffs.forEach(debuff => {
+        const [type, statName] = debuff.id.split(':');
+        if (statEffects[statName] && debuff.value !== undefined) {
+            statEffects[statName].debuffs.push({
+                value: debuff.value,
+                duration: debuff.duration || 0,
+                name: debuff.description || 'Дебафф'
+            });
+        }
+    });
+    
+    ['will', 'stealth', 'influence', 'sanity'].forEach(statName => {
+        const valElement = dom.vals[statName];
+        if (!valElement) return;
+        
+        const baseValue = baseStats[statName];
+        const previousBase = window.previousBaseStats[statName] || baseValue;
+        const { buffs: buffList, debuffs: debuffList } = statEffects[statName];
+        
+        const totalBuff = buffList.reduce((sum, b) => sum + b.value, 0);
+        const totalDebuff = debuffList.reduce((sum, d) => sum + d.value, 0);
+        const totalModifier = totalBuff + totalDebuff;
+        const currentValue = baseValue + totalModifier;
+        
+        const currentColor = getStatColor(currentValue);
+        
+        const delta = baseValue - previousBase;
+        if (delta !== 0) {
+            showStatChangeAnimation(valElement, delta, currentColor);
+        }
+        
+        window.previousBaseStats[statName] = baseValue;
+        
+        let detailHtml = '';
+        
+        if (buffList.length > 0 || debuffList.length > 0) {
+            detailHtml = `<span style="color: #888; font-size: 0.8em;">${baseValue}</span>`;
+            
+            buffList.forEach(buff => {
+                if (buff.value > 0) {
+                    detailHtml += ` <span style="color: #4cd137; font-size: 0.8em;">+${buff.value}[${buff.duration}]</span>`;
+                }
+            });
+            
+            debuffList.forEach(debuff => {
+                if (debuff.value < 0) {
+                    const absValue = Math.abs(debuff.value);
+                    detailHtml += ` <span style="color: #e84118; font-size: 0.8em;">-${absValue}[${debuff.duration}]</span>`;
+                }
+            });
+            
+            valElement.innerHTML = `
+                <div class="stat-container" style="display: flex; flex-direction: column; align-items: center; line-height: 1.1; gap: 1px; position: relative;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                        <span style="color: #999; font-size: 0.85em; white-space: nowrap;">${getRussianStatName(statName)}:</span>
+                        <span class="stat-value-clickable" 
+                              data-stat="${statName}" 
+                              data-value="${currentValue}"
+                              onclick="showStatTooltip(this, '${statName}', ${currentValue})"
+                              style="color: ${currentColor}; 
+                                     font-weight: bold; 
+                                     font-size: 1.1em; 
+                                     text-shadow: 0 0 3px ${currentColor}40;
+                                     cursor: help;
+                                     user-select: none;">
+                            ${currentValue}
+                        </span>
+                    </div>
+                    <div style="font-size: 0.7em; color: #666; width: 100%; text-align: right; line-height: 1;">
+                        ${detailHtml}
+                    </div>
+                </div>
+            `;
+        } else {
+            valElement.innerHTML = `
+                <div class="stat-container" style="display: flex; justify-content: space-between; align-items: center; position: relative;">
+                    <span style="color: #999; font-size: 0.85em;">${getRussianStatName(statName)}:</span>
+                    <span class="stat-value-clickable" 
+                          data-stat="${statName}" 
+                          data-value="${currentValue}"
+                          onclick="showStatTooltip(this, '${statName}', ${currentValue})"
+                          style="color: ${currentColor}; 
+                                 font-weight: bold; 
+                                 font-size: 1.1em; 
+                                 text-shadow: 0 0 3px ${currentColor}40;
+                                 cursor: help;
+                                 user-select: none;">
+                        ${currentValue}
+                    </span>
+                </div>
+            `;
+        }
+    });
+    
+    const progressValue = State.getGameItemValue('progress:oto') || 0;
+    const maxScore = 110;
+    const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
+    if (dom.tube) {
+        dom.tube.style.height = `${pct}%`;
+    }
+    
+    const degreeItems = State.getGameItemsByType('initiation_degree:');
+    const currentDegreeItem = degreeItems.find(item => item.value && item.value.trim() !== '');
+    let currentDegreeIndex = 0;
+    
+    if (currentDegreeItem) {
+        const degreeMatch = currentDegreeItem.value.match(/(\d+)°/);
+        if (degreeMatch) {
+            currentDegreeIndex = parseInt(degreeMatch[1]) || 0;
+        }
+    }
+    
+    if (dom.degrees) {
+        dom.degrees.innerHTML = CONFIG.degrees.slice().reverse().map(d => {
+            let cls = 'degree-item';
+            if (d.lvl < currentDegreeIndex) cls += ' passed';
+            if (d.lvl === currentDegreeIndex) cls += ' active';
+            return `<div class="${cls}">${d.name}</div>`;
+        }).join('');
+    }
+    
+    console.log('✅ renderStats completed');
+}
 
 // ====================================================================
-// "ИЗМЕНЕНИЯ ЗА ПОСЛЕДНИЙ ХОД" с полной детализацией
+// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: Рекурсивное отображение объектов aiMemory
+// ====================================================================
+
+/**
+ * Рекурсивно отображает объект aiMemory на всю глубину
+ */
+function renderAiMemoryRecursive(obj, depth = 0) {
+    if (obj === null || obj === undefined) {
+        return `<div style="margin-left: ${depth * 20}px; color: #888; font-style: italic;">
+            ${obj === null ? 'null' : 'undefined'}
+        </div>`;
+    }
+    
+    if (typeof obj !== 'object' || Array.isArray(obj)) {
+        // Примитивные значения и массивы
+        let value = obj;
+        let color = '#ccc';
+        let style = '';
+        
+        if (typeof obj === 'boolean') {
+            color = obj ? '#4cd137' : '#e84118';
+            value = obj ? 'true' : 'false';
+        } else if (typeof obj === 'number') {
+            color = '#fbc531';
+        } else if (Array.isArray(obj)) {
+            color = '#9c88ff';
+            value = `[${obj.length} элементов]`;
+            style = 'font-style: italic;';
+        } else if (typeof obj === 'string') {
+            // Проверяем, не слишком ли длинная строка
+            if (obj.length > 150) {
+                value = obj.substring(0, 150) + '...';
+                style = 'color: #aaa;';
+            }
+        }
+        
+        return `<div style="margin-left: ${depth * 20}px; color: ${color}; ${style}">
+            ${JSON.stringify(value)}
+        </div>`;
+    }
+    
+    // Объекты
+    const entries = Object.entries(obj);
+    if (entries.length === 0) {
+        return `<div style="margin-left: ${depth * 20}px; color: #888; font-style: italic;">
+            { } (пустой объект)
+        </div>`;
+    }
+    
+    let html = '';
+    entries.forEach(([key, value]) => {
+        const keyHtml = `<span style="color: #fbc531; font-weight: bold;">${key}:</span>`;
+        
+        if (typeof value === 'object' && value !== null) {
+            // Вложенный объект - рекурсивно обрабатываем
+            html += `<div style="margin-left: ${depth * 20}px;">
+                ${keyHtml}
+            </div>`;
+            html += renderAiMemoryRecursive(value, depth + 1);
+        } else {
+            // Простое значение
+            html += `<div style="margin-left: ${depth * 20}px;">
+                ${keyHtml} ${renderAiMemoryRecursive(value, 0)}
+            </div>`;
+        }
+    });
+    
+    return html;
+}
+
+/**
+ * Форматирует aiMemory для отображения
+ */
+function formatAiMemory(aiMemory) {
+    if (!aiMemory || typeof aiMemory !== 'object') {
+        return '<div style="color: #888; font-style: italic;">Нет данных в памяти</div>';
+    }
+    
+    return renderAiMemoryRecursive(aiMemory);
+}
+
+// ====================================================================
+// РЕНДЕРИНГ СЦЕНЫ (ИСПРАВЛЕН, ВОССТАНОВЛЕН ФУНКЦИОНАЛ)
+// ====================================================================
+
+function renderScene() {
+    const state = State.getState();
+    
+    if (!state.gameState.currentScene) {
+        console.error('❌ renderScene: currentScene отсутствует');
+        return;
+    }
+    
+    const currentScene = state.gameState.currentScene;
+    
+    // Создаем контейнер для всей верхней секции
+    const sceneContainer = dom.sceneArea; // Используем sceneArea вместо sceneText.parentNode
+    
+    // Очищаем старый контент
+    sceneContainer.innerHTML = '';
+    
+    // 1. Заметки дизайнера (если передано в ответе)
+    if (currentScene.design_notes && currentScene.design_notes.trim() !== '') {
+        const designNotesDiv = document.createElement('div');
+        designNotesDiv.className = 'scene-meta-block';
+        designNotesDiv.style.cssText = `
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(102, 102, 102, 0.1);
+            border-left: 3px solid #666;
+            border-radius: 3px;
+        `;
+        designNotesDiv.innerHTML = `
+            <div style="color: #888; font-size: 0.9em; font-weight: bold; margin-bottom: 5px;">
+                <i class="fas fa-pencil-alt"></i> Заметки дизайнера:
+            </div>
+            <div style="color: #aaa; font-size: 0.85em; font-style: italic;">
+                ${currentScene.design_notes}
+            </div>
+        `;
+        sceneContainer.appendChild(designNotesDiv);
+    }
+    
+    // 2. Память ГМ (если передано в ответе) - ИСПРАВЛЕННАЯ ВЕРСИЯ
+    if (currentScene.aiMemory && Object.keys(currentScene.aiMemory).length > 0) {
+        const aiMemoryDiv = document.createElement('div');
+        aiMemoryDiv.className = 'scene-meta-block';
+        aiMemoryDiv.style.cssText = `
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(251, 197, 49, 0.1);
+            border-left: 3px solid #fbc531;
+            border-radius: 3px;
+            max-height: 300px;
+            overflow-y: auto;
+        `;
+        aiMemoryDiv.innerHTML = `
+            <div style="color: #fbc531; font-size: 0.9em; font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; gap: 5px;">
+                <i class="fas fa-brain"></i> ПАМЯТЬ ГМ:
+                <span style="font-size: 0.8em; color: #aaa; font-weight: normal; margin-left: auto;">
+                    ${Object.keys(currentScene.aiMemory).length} поле(й)
+                </span>
+            </div>
+            <div style="color: #aaa; font-size: 0.85em; font-family: 'Courier New', monospace; line-height: 1.4;">
+                ${formatAiMemory(currentScene.aiMemory)}
+            </div>
+        `;
+        sceneContainer.appendChild(aiMemoryDiv);
+    }
+    
+    // 3. Сводка (если передано в ответе)
+    if (currentScene.summary && currentScene.summary.trim() !== '') {
+        const summaryDiv = document.createElement('div');
+        summaryDiv.className = 'scene-meta-block';
+        summaryDiv.style.cssText = `
+            margin-bottom: 10px;
+            padding: 8px;
+            background: rgba(72, 219, 251, 0.1);
+            border-left: 3px solid #48dbfb;
+            border-radius: 3px;
+        `;
+        summaryDiv.innerHTML = `
+            <div style="color: #48dbfb; font-size: 0.9em; font-weight: bold; margin-bottom: 5px;">
+                <i class="fas fa-file-alt"></i> Сводка:
+            </div>
+            <div style="color: #aaa; font-size: 0.85em;">
+                ${currentScene.summary}
+            </div>
+        `;
+        sceneContainer.appendChild(summaryDiv);
+    }
+    
+    // 4. Блок изменений за последний ход
+    const changesBlock = renderLastTurnChanges();
+    if (changesBlock) {
+        sceneContainer.appendChild(changesBlock);
+    }
+    
+    // 5. Основной текст сцены
+    const sceneDiv = document.createElement('div');
+    sceneDiv.className = 'scene-text';
+    sceneDiv.id = 'sceneText';
+    
+    if (currentScene.scene) {
+        // ОСНОВНОЙ ТЕКСТ СЦЕНЫ
+        sceneDiv.innerHTML = `<div style="color: #ddd; line-height: 1.5;">${currentScene.scene}</div>`;
+    } else {
+        sceneDiv.innerHTML = '<p>Сцена отсутствует</p>';
+    }
+    
+    sceneContainer.appendChild(sceneDiv);
+    
+    // ОБНОВЛЯЕМ ССЫЛКУ В DOM ОБЪЕКТЕ
+    dom.sceneText = sceneDiv;
+    
+    // 6. Reflection (если передано в ответе)
+    if (currentScene.reflection && currentScene.reflection.trim() !== '') {
+        const reflectionDiv = document.createElement('div');
+        reflectionDiv.className = 'scene-reflection';
+        reflectionDiv.id = 'sceneReflection';
+        reflectionDiv.style.display = 'block';
+        reflectionDiv.style.cssText = `
+            margin-top: 15px;
+            padding: 10px;
+            background: rgba(72, 219, 251, 0.1);
+            border-left: 3px solid #48dbfb;
+            border-radius: 3px;
+        `;
+        reflectionDiv.innerHTML = `
+            <div style="color: #48dbfb; font-size: 0.95em; font-weight: bold; margin-bottom: 5px;">
+                <i class="fas fa-eye"></i> Рефлексия:
+            </div>
+            <div style="color: #ccc; font-size: 0.9em; font-style: italic;">
+                ${currentScene.reflection}
+            </div>
+        `;
+        sceneContainer.appendChild(reflectionDiv);
+        
+        // ОБНОВЛЯЕМ ССЫЛКУ
+        dom.reflection = reflectionDiv;
+    } else if (dom.reflection) {
+        dom.reflection.style.display = 'none';
+    }
+    
+    // 7. Personality (если передано в ответе)
+    if (currentScene.personality && currentScene.personality.trim() !== '') {
+        const personalityDiv = document.createElement('div');
+        personalityDiv.className = 'scene-personality';
+        personalityDiv.style.cssText = `
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(76, 209, 55, 0.1);
+            border-left: 3px solid #4cd137;
+            border-radius: 3px;
+        `;
+        personalityDiv.innerHTML = `
+            <div style="color: #4cd137; font-size: 0.95em; font-weight: bold; margin-bottom: 5px;">
+                <i class="fas fa-user-circle"></i> Личность изменена:
+            </div>
+            <div style="color: #ccc; font-size: 0.9em; font-style: italic;">
+                ${currentScene.personality}
+            </div>
+        `;
+        sceneContainer.appendChild(personalityDiv);
+    }
+    
+    // 8. Typology (если передано в ответе)
+    if (currentScene.typology && currentScene.typology.trim() !== '') {
+        const typologyDiv = document.createElement('div');
+        typologyDiv.className = 'scene-typology';
+        typologyDiv.style.cssText = `
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(156, 136, 255, 0.1);
+            border-left: 3px solid #9c88ff;
+            border-radius: 3px;
+        `;
+        typologyDiv.innerHTML = `
+            <div style="color: #9c88ff; font-size: 0.95em; font-weight: bold; margin-bottom: 5px;">
+                <i class="fas fa-fingerprint"></i> Типология:
+            </div>
+            <div style="color: #ccc; font-size: 0.9em; font-style: italic;">
+                ${currentScene.typology}
+            </div>
+        `;
+        sceneContainer.appendChild(typologyDiv);
+    }
+}
+
+// ====================================================================
+// УЛУЧШЕННЫЙ РЕНДЕРИНГ ИСТОРИИ (ВОССТАНОВЛЕН ФУНКЦИОНАЛ)
 // ====================================================================
 function renderHistory() {
     const state = State.getState();
@@ -858,302 +879,1116 @@ function renderHistory() {
     // Если истории нет - показываем заглушку
     if (!state.gameState.history || state.gameState.history.length === 0) {
         dom.hist.innerHTML = `
-            <div style="padding: 15px; text-align: center; color: #555; font-style: italic; font-size: 0.85em;">
+            <div style="padding: 10px; text-align: center; color: #555; font-style: italic; font-size: 0.8em;">
                 История пуста. Сделайте первый ход.
             </div>
         `;
         return;
     }
     
-    // Берем только последний элемент истории
-    const lastEntry = state.gameState.history[state.gameState.history.length - 1];
-    
-    if (!lastEntry) return;
-    
-    // Получаем текущую сцену для извлечения дополнительных полей
-    const currentScene = state.gameState.currentScene || {};
-    
-    // Формируем блок изменений за последний ход
-    const changesBlock = document.createElement('div');
-    changesBlock.className = 'last-turn-changes blood-gothic-panel';
-    changesBlock.style.cssText = `
-        background: linear-gradient(135deg, #0d0000 0%, #000000 100%);
-        border: 1px solid #4a0a0a;
-        border-radius: 4px;
-        padding: 8px;
-        margin-bottom: 10px;
-        box-shadow: 0 0 15px #4a0a0a30;
+    // Создаем контейнер для аккордеона истории
+    const historyAccordion = document.createElement('div');
+    historyAccordion.className = 'history-accordion';
+    historyAccordion.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
     `;
     
-    let content = '';
+    // Проходим по всей истории в обратном порядке (от новых к старым)
+    const reversedHistory = [...state.gameState.history].reverse();
     
-    // ============= ЗАГОЛОВОК =============
-    content += `
-        <div style="font-weight: bold; 
-                    color: #e84118; 
-                    font-size: 0.9em; 
-                    margin-bottom: 8px; 
-                    border-bottom: 1px solid #4a0a0a; 
-                    padding-bottom: 4px;
-                    text-shadow: 0 0 5px #e8411840;
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;">
-            <i class="fas fa-history"></i>
-            ИЗМЕНЕНИЯ ЗА ПОСЛЕДНИЙ ХОД
-        </div>
-    `;
-    
-    // ============= DESIGN_NOTES (если есть) =============
-    if (currentScene.design_notes && currentScene.design_notes.trim() !== '') {
-        content += `
-            <div style="margin-bottom: 6px; padding: 4px; background: #0a0000; border-left: 2px solid #666; border-radius: 2px;">
-                <div style="color: #888; font-size: 0.7em; font-style: italic; margin-bottom: 2px;">
-                    <i class="fas fa-pencil-alt"></i> Заметки дизайнера:
-                </div>
-                <div style="color: #aaa; font-size: 0.75em; line-height: 1.3;">
-                    ${currentScene.design_notes}
-                </div>
-            </div>
-        `;
-    }
-    
-    // ============= AI_MEMORY (если есть) =============
-    if (currentScene.aiMemory && Object.keys(currentScene.aiMemory).length > 0) {
-        const memoryEntries = Object.entries(currentScene.aiMemory)
-            .map(([key, value]) => `<span style="color: #888;">${key}:</span> <span style="color: #ccc;">${value}</span>`)
-            .join('<br>');
+    reversedHistory.forEach((entry, reverseIndex) => {
+        const originalIndex = state.gameState.history.length - 1 - reverseIndex;
+        const turnNumber = originalIndex + 1;
         
-        content += `
-            <div style="margin-bottom: 6px; padding: 4px; background: #0a0a00; border-left: 2px solid #fbc531; border-radius: 2px;">
-                <div style="color: #fbc531; font-size: 0.7em; font-style: italic; margin-bottom: 2px;">
-                    <i class="fas fa-brain"></i> Память ГМ:
-                </div>
-                <div style="color: #aaa; font-size: 0.75em; line-height: 1.3;">
-                    ${memoryEntries}
-                </div>
-            </div>
-        `;
-    }
-    
-    // ============= SUMMARY (если есть) =============
-    if (currentScene.summary && currentScene.summary.trim() !== '') {
-        content += `
-            <div style="margin-bottom: 6px; padding: 4px; background: #00000a; border-left: 2px solid #48dbfb; border-radius: 2px;">
-                <div style="color: #48dbfb; font-size: 0.7em; font-style: italic; margin-bottom: 2px;">
-                    <i class="fas fa-file-alt"></i> Сводка:
-                </div>
-                <div style="color: #aaa; font-size: 0.75em; line-height: 1.3;">
-                    ${currentScene.summary}
-                </div>
-            </div>
-        `;
-    }
-    
-    // ============= ИЗМЕНЕНИЯ GAME_ITEMS =============
-    // Парсим строку изменений из lastEntry.changes
-    const changesText = lastEntry.changes || '';
-    
-    if (changesText && changesText !== 'Нет явных изменений') {
-        // Разбираем изменения на отдельные операции
-        // Формат может быть разным, поэтому делаем универсальный парсер
+        // Извлекаем summary из entry (если есть в текущей сцене) или из currentScene для последнего хода
+        let summary = '';
+        if (reverseIndex === 0 && state.gameState.currentScene?.summary) {
+            summary = state.gameState.currentScene.summary;
+        } else if (entry.summary) {
+            summary = entry.summary;
+        } else if (entry.fullText) {
+            // Если summary нет, создаем из fullText
+            summary = entry.fullText.replace(/<[^>]*>/g, ' ').substring(0, 150).trim() + '...';
+        } else {
+            summary = 'Нет сводки';
+        }
         
-        const operations = parseChangesText(changesText);
+        // Обрезаем summary до 2 строк для заголовка
+        const truncatedSummary = truncateToLines(summary, 2);
         
-        if (operations && operations.length > 0) {
-            content += `
-                <div style="margin-bottom: 6px; padding: 4px; background: #0a0a0a; border-left: 2px solid #4cd137; border-radius: 2px;">
-                    <div style="color: #4cd137; font-size: 0.7em; font-style: italic; margin-bottom: 3px;">
-                        <i class="fas fa-exchange-alt"></i> Изменения характеристик:
+        // Создаем элемент аккордеона
+        const accordionItem = document.createElement('details');
+        accordionItem.className = 'history-accordion-item';
+        accordionItem.style.cssText = `
+            background: linear-gradient(135deg, #0d0000 0%, #000000 100%);
+            border: 1px solid #4a0a0a;
+            border-radius: 3px;
+            margin-bottom: 2px;
+            font-size: 0.8em;
+        `;
+        
+        // Открываем первый элемент (последний ход) по умолчанию
+        if (reverseIndex === 0) {
+            accordionItem.setAttribute('open', '');
+        }
+        
+        // Заголовок (кликабельный) - УМЕНЬШЕНЫ ПАДДИНГИ
+        const summary_html = document.createElement('summary');
+        summary_html.style.cssText = `
+            padding: 4px 6px;
+            cursor: pointer;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #e84118;
+            user-select: none;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        `;
+        summary_html.innerHTML = `
+            <i class="fas fa-chevron-right" style="transition: transform 0.2s; font-size: 0.6em;"></i>
+            <span style="flex: 1;">Ход ${turnNumber}: ${truncatedSummary}</span>
+        `;
+        
+        // Анимация иконки при раскрытии
+        accordionItem.addEventListener('toggle', () => {
+            const icon = summary_html.querySelector('i');
+            if (accordionItem.open) {
+                icon.style.transform = 'rotate(90deg)';
+            } else {
+                icon.style.transform = 'rotate(0deg)';
+            }
+        });
+        
+        // Если открыто по умолчанию, поворачиваем иконку
+        if (reverseIndex === 0) {
+            summary_html.querySelector('i').style.transform = 'rotate(90deg)';
+        }
+        
+        accordionItem.appendChild(summary_html);
+        
+        // Содержимое аккордеона - УМЕНЬШЕНЫ ПАДДИНГИ
+        const content = document.createElement('div');
+        content.style.cssText = `
+            padding: 4px 6px;
+            border-top: 1px solid #4a0a0a;
+            font-size: 0.75em;
+        `;
+        
+        let contentHTML = '';
+        
+        // DESIGN_NOTES 
+        const design_notes = reverseIndex === 0 ? state.gameState.currentScene?.design_notes : entry.design_notes;
+        if (design_notes && design_notes.trim() !== '') {
+            contentHTML += `
+                <div style="margin-bottom: 4px; padding: 3px; background: #0a0000; border-left: 2px solid #666; border-radius: 2px;">
+                    <div style="color: #888; font-size: 0.8em; font-style: italic; margin-bottom: 1px;">
+                        <i class="fas fa-pencil-alt"></i> Заметки дизайнера:
                     </div>
-                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <div style="color: #aaa; font-size: 0.85em; line-height: 1.2;">
+                        ${design_notes}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // AI_MEMORY 
+        const aiMemory = reverseIndex === 0 ? state.gameState.currentScene?.aiMemory : entry.aiMemory;
+        if (aiMemory && Object.keys(aiMemory).length > 0) {
+            // Используем ту же функцию форматирования, что и в renderScene
+            const memoryEntries = formatAiMemory(aiMemory);
+            
+            contentHTML += `
+                <div style="margin-bottom: 4px; padding: 3px; background: #0a0a00; border-left: 2px solid #fbc531; border-radius: 2px; max-height: 200px; overflow-y: auto;">
+                    <div style="color: #fbc531; font-size: 0.8em; font-style: italic; margin-bottom: 1px;">
+                        <i class="fas fa-brain"></i> Память ГМ:
+                    </div>
+                    <div style="color: #aaa; font-size: 0.85em; line-height: 1.2; font-family: 'Courier New', monospace;">
+                        ${memoryEntries}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // SUMMARY
+        if (summary && summary.trim() !== '') {
+            contentHTML += `
+                <div style="margin-bottom: 4px; padding: 3px; background: #00000a; border-left: 2px solid #48dbfb; border-radius: 2px;">
+                    <div style="color: #48dbfb; font-size: 0.8em; font-style: italic; margin-bottom: 1px;">
+                        <i class="fas fa-file-alt"></i> Сводка:
+                    </div>
+                    <div style="color: #aaa; font-size: 0.85em; line-height: 1.2;">
+                        ${summary}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // ОСНОВНОЙ ТЕКСТ СЦЕНЫ
+        const sceneText = entry.fullText || entry.scene;
+        if (sceneText && sceneText.trim() !== '') {
+            contentHTML += `
+                <div style="margin-bottom: 4px; padding: 3px; background: #000; border-left: 2px solid #e84118; border-radius: 2px; max-height: 200px; overflow-y: auto;">
+                    <div style="color: #e84118; font-size: 0.8em; font-style: italic; margin-bottom: 1px;">
+                        <i class="fas fa-scroll"></i> Текст сцены:
+                    </div>
+                    <div style="color: #aaa; font-size: 0.85em; line-height: 1.3; white-space: pre-wrap;">
+                        ${sceneText}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // REFLECTION
+        const reflection = reverseIndex === 0 ? state.gameState.currentScene?.reflection : entry.reflection;
+        if (reflection && reflection.trim() !== '') {
+            contentHTML += `
+                <div style="margin-bottom: 4px; padding: 3px; background: #00000a; border-left: 2px solid #48dbfb; border-radius: 2px;">
+                    <div style="color: #48dbfb; font-size: 0.8em; font-style: italic; margin-bottom: 1px;">
+                        <i class="fas fa-eye"></i> Рефлексия:
+                    </div>
+                    <div style="color: #aaa; font-size: 0.85em; line-height: 1.2;">
+                        ${reflection}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // PERSONALITY
+        const personality = reverseIndex === 0 ? 
+            (state.gameState.currentScene?.personality || State.getGameItemValue('personality:hero')) : 
+            entry.personality;
+        if (personality && personality.trim() !== '') {
+            contentHTML += `
+                <div style="margin-bottom: 4px; padding: 3px; background: #000a00; border-left: 2px solid #4cd137; border-radius: 2px;">
+                    <div style="color: #4cd137; font-size: 0.8em; font-style: italic; margin-bottom: 1px;">
+                        <i class="fas fa-user-circle"></i> Личность:
+                    </div>
+                    <div style="color: #aaa; font-size: 0.85em; line-height: 1.2;">
+                        ${personality}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Typology
+        const typology = reverseIndex === 0 ? state.gameState.currentScene?.typology : entry.typology;
+        if (typology && typology.trim() !== '') {
+            contentHTML += `
+                <div style="margin-bottom: 4px; padding: 3px; background: #000a00; border-left: 2px solid #9c88ff; border-radius: 2px;">
+                    <div style="color: #9c88ff; font-size: 0.8em; font-style: italic; margin-bottom: 1px;">
+                        <i class="fas fa-fingerprint"></i> Типология:
+                    </div>
+                    <div style="color: #aaa; font-size: 0.85em; line-height: 1.2;">
+                        ${typology}
+                    </div>
+                </div>
+            `;
+        }
+        
+        // ДЛЯ СТАРЫХ ХОДОВ: УПРОЩЕННЫЙ ФОРМАТ
+        // Действия в упрощенном формате
+        const actions = entry.actionResults || [];
+        if (actions && actions.length > 0) {
+            contentHTML += `
+                <div style="margin-bottom: 4px;">
+                    <div style="color: #9c88ff; font-size: 0.8em; font-weight: bold; margin-bottom: 2px; padding-bottom: 2px; border-bottom: 1px solid #9c88ff40;">
+                        <i class="fas fa-hand-point-right"></i> Действия:
+                    </div>
             `;
             
-            operations.forEach(op => {
-                content += renderOperationLine(op);
+            actions.forEach(action => {
+                const isSuccess = action.success;
+                const isPartial = action.partial_success;
+                
+                let statusColor, statusBg, statusIcon, statusText;
+                
+                if (isSuccess && !isPartial) {
+                    statusColor = '#4cd137';
+                    statusBg = 'rgba(76, 209, 55, 0.1)';
+                    statusIcon = '<i class="fas fa-check"></i>';
+                    statusText = 'УСПЕХ';
+                } else if (isPartial) {
+                    statusColor = '#fbc531';
+                    statusBg = 'rgba(251, 197, 49, 0.1)';
+                    statusIcon = '<i class="fas fa-exclamation-triangle"></i>';
+                    statusText = 'ЧАСТИЧНЫЙ УСПЕХ';
+                } else {
+                    statusColor = '#e84118';
+                    statusBg = 'rgba(232, 65, 24, 0.1)';
+                    statusIcon = '<i class="fas fa-times"></i>';
+                    statusText = 'ПРОВАЛ';
+                }
+                
+                contentHTML += `
+                    <div class="simplified-action" style="padding: 2px 4px; margin: 1px 0; background: ${statusBg}; border-left: 3px solid ${statusColor}; border-radius: 2px; font-size: 0.75em;">
+                        <span style="color: ${statusColor}; font-weight: bold;">${statusIcon} ${statusText}:</span>
+                        <span style="color: #ddd; margin-left: 4px;">${action.text}</span>
+                    </div>
+                `;
             });
             
-            content += `
+            contentHTML += `</div>`;
+        } else if (entry.choice) {
+            // Fallback к старому формату
+            contentHTML += `
+                <div class="simplified-action" style="padding: 2px 4px; margin: 1px 0; background: rgba(156, 136, 255, 0.1); border-left: 3px solid #9c88ff; border-radius: 2px; font-size: 0.75em;">
+                    <span style="color: #9c88ff; font-weight: bold;"><i class="fas fa-hand-point-right"></i> ВЫБОР:</span>
+                    <span style="color: #ddd; margin-left: 4px;">${entry.choice}</span>
+                </div>
+            `;
+        }
+        
+        // Изменения характеристик в упрощенном формате
+        const changesText = entry.changes || '';
+        if (changesText && changesText !== 'Нет явных изменений') {
+            contentHTML += `
+                <div style="margin-top: 4px;">
+                    <div style="color: #4cd137; font-size: 0.8em; font-weight: bold; margin-bottom: 2px; padding-bottom: 2px; border-bottom: 1px solid #4cd13740;">
+                        <i class="fas fa-exchange-alt"></i> Изменения:
+                    </div>
+                    <div style="font-size: 0.75em; color: #ccc; line-height: 1.2; padding: 2px 0;">
+                        ${changesText}
                     </div>
                 </div>
             `;
         }
-    }
-    
-    // ============= ДЕЙСТВИЯ ИГРОКА =============
-    // Извлекаем действия из actionResults или fallback к старому полю choice
-    const actions = lastEntry.actionResults || [];
-    
-    if (actions && actions.length > 0) {
-        content += `
-            <div style="margin-bottom: 6px; padding: 4px; background: #0a0000; border-left: 2px solid #9c88ff; border-radius: 2px;">
-                <div style="color: #9c88ff; font-size: 0.7em; font-style: italic; margin-bottom: 3px;">
-                    <i class="fas fa-hand-point-right"></i> Ваши действия:
-                </div>
-                <div style="display: flex; flex-direction: column; gap: 2px;">
-        `;
         
-        actions.forEach(action => {
-            const statusIcon = action.success ? '✅' : action.partial_success ? '⚠️' : '❌';
-            const statusColor = action.success ? '#4cd137' : action.partial_success ? '#fbc531' : '#e84118';
-            const statusText = action.success ? 'УСПЕХ' : action.partial_success ? 'ЧАСТИЧНЫЙ' : 'ПРОВАЛ';
-            
-            content += `
-                <div style="font-size: 0.75em; padding: 2px 0; color: #ddd;">
-                    <span style="color: ${statusColor};">${statusIcon}</span>
-                    <span style="color: #ccc;">"${action.text}"</span>
-                    <span style="color: ${statusColor}; font-weight: bold; margin-left: 4px;">${statusText}</span>
-                    <span style="color: #888; font-size: 0.9em; margin-left: 4px;">(сложность: ${action.difficulty_level})</span>
+        // ИТОГО хода
+        const hasContent = (actions && actions.length > 0) || (entry.choice) || (changesText && changesText !== 'Нет явных изменений');
+        if (hasContent) {
+            contentHTML += `
+                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #333; font-size: 0.7em; color: #666;">
+                    <div style="display: flex;">
+                     
+                    
+                    </div>
                 </div>
             `;
-        });
-        
-        content += `
-                </div>
-            </div>
-        `;
-    } else if (lastEntry.choice) {
-        // Fallback к старому формату
-        content += `
-            <div style="margin-bottom: 6px; padding: 4px; background: #0a0000; border-left: 2px solid #9c88ff; border-radius: 2px;">
-                <div style="color: #9c88ff; font-size: 0.7em; font-style: italic; margin-bottom: 2px;">
-                    <i class="fas fa-hand-point-right"></i> Ваш выбор:
-                </div>
-                <div style="font-size: 0.75em; color: #ccc;">
-                    ${lastEntry.choice}
-                </div>
-            </div>
-        `;
-    }
-    
-    // ============= ПОЛНЫЙ ТЕКСТ СЦЕНЫ (если есть) =============
-    if (lastEntry.fullText && lastEntry.fullText.trim() !== '') {
-        content += `
-            <div style="margin-top: 8px; padding: 4px; background: #000005; border-left: 2px solid #555; border-radius: 2px;">
-                <details style="cursor: pointer;">
-                    <summary style="color: #888; font-size: 0.7em; font-style: italic; user-select: none;">
-                        <i class="fas fa-book-open"></i> Показать полный текст сцены
-                    </summary>
-                    <div style="margin-top: 6px; font-size: 0.75em; color: #aaa; line-height: 1.4; max-height: 300px; overflow-y: auto;">
-                        ${lastEntry.fullText}
-                    </div>
-                </details>
-            </div>
-        `;
-    }
-    
-    changesBlock.innerHTML = content;
-    dom.hist.appendChild(changesBlock);
-    
-    // ВАЖНО: Прокручиваем к началу блока изменений
-    setTimeout(() => {
-        if (changesBlock && changesBlock.scrollIntoView) {
-            changesBlock.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
-    }, 100);
+        
+        content.innerHTML = contentHTML;
+        accordionItem.appendChild(content);
+        
+        historyAccordion.appendChild(accordionItem);
+    });
+    
+    dom.hist.appendChild(historyAccordion);
+}
+
+function truncateToLines(text, maxLines) {
+    if (!text) return '';
+    
+    // Приблизительно считаем, что строка помещается в 60 символов
+    const charsPerLine = 60;
+    const maxChars = charsPerLine * maxLines;
+    
+    if (text.length <= maxChars) {
+        return text;
+    }
+    
+    return text.substring(0, maxChars) + '...';
 }
 
 // ====================================================================
-// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: Парсинг текста изменений
+// ПЕРЕРАБОТАННЫЙ БЛОК ИЗМЕНЕНИЙ ЗА ПОСЛЕДНИЙ ХОД (по эталонному примеру)
 // ====================================================================
-function parseChangesText(changesText) {
-    const operations = [];
+
+function renderLastTurnChanges() {
+    const state = State.getState();
+    const currentScene = state.gameState.currentScene || {};
     
-    // Пытаемся найти упоминания операций
-    // Формат может быть: "Воля +2, Разум -1, добавлен Навык: Наблюдательность" и т.д.
+    // Если нет изменений за последний ход - не показываем блок
+    if (!state.lastTurnUpdates || state.lastTurnUpdates.trim() === '') {
+        return null;
+    }
     
-    // Паттерны для разных типов операций
-    const patterns = [
-        // MODIFY: "Воля +2" или "will +2"
-        /(\w+)\s*([\+\-])\s*(\d+)/g,
-        // ADD/REMOVE: "добавлен X" или "удалён X"
-        /(добавлен[а-я]*|удалён[а-я]*|получен[а-я]*)\s+([^,\.]+)/gi,
-        // SET: "X установлено на Y"
-        /([^,]+)\s+установлен[о|а|ы]\s+на\s+([^,\.]+)/gi
+    const changesBlock = document.createElement('div');
+    changesBlock.id = 'lastTurnChangesBlock';
+    changesBlock.className = 'last-turn-changes blood-gothic-panel';
+    changesBlock.style.cssText = `
+        background: linear-gradient(135deg, #0a0a0a 0%, #050505 100%);
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 6px;
+        margin-bottom: 10px;
+        box-shadow: 0 0 10px #00000030;
+    `;
+    
+    // Используем уже готовый HTML изменений из state.lastTurnUpdates
+    // (он создается в Game.createTurnUpdatesHTML и сохраняется в State)
+    changesBlock.innerHTML = state.lastTurnUpdates;
+    
+    return changesBlock;
+}
+
+// ====================================================================
+// ПЕРЕРАБОТАННЫЙ РЕНДЕРИНГ ВСЕХ GAME ITEMS (с новыми цветами и порядком)
+// ====================================================================
+
+function renderAllGameItems() {
+    console.log('🔍 renderAllGameItems called (NEW COLORS AND ORDER)');
+    
+    const personalityEl = document.getElementById('personalityDisplay');
+    if (!personalityEl || !personalityEl.parentNode) {
+        console.error('❌ Cannot find personalityDisplay container');
+        return;
+    }
+    
+    const container = personalityEl.parentNode;
+    
+    personalityEl.style.display = 'none';
+    
+    const managedIds = [
+        'personalityBlockContainer',
+        'typologyContainer',
+        'relationsContainer',
+        'skillsContainer',
+        'statBuffsContainer', // НОВЫЙ БЛОК: +/- К СТАТАМ
+        'blessingsContainer',
+        'cursesContainer',
+        'buffsDebuffsContainer',
+        'detailsContainer', // ПЕРЕИМЕНОВАНО: ЭФФЕКТЫ → ДЕТАЛИ
+        'inventoryContainer'
     ];
     
-    // Для простоты, возвращаем пустой массив если текст сложный
-    // В реальности, лучше парсить структурированные данные из API
+    managedIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    });
     
-    // Простой парсер для MODIFY операций
-    let match;
-    const modifyPattern = /(\w+)\s*([\+\-])\s*(\d+)/g;
-    while ((match = modifyPattern.exec(changesText)) !== null) {
-        operations.push({
-            type: 'MODIFY',
-            target: match[1],
-            delta: parseInt(match[2] + match[3])
+    const fragment = document.createDocumentFragment();
+    const state = State.getState();
+    
+    // =============================================
+    // БЛОК 1: ЛИЧНОСТЬ - ЖЁЛТЫЙ (был зелёный)
+    // =============================================
+    const personalityVal = State.getGameItemValue('personality:hero');
+    
+    const personalityDiv = document.createElement('div');
+    personalityDiv.id = 'personalityBlockContainer';
+    personalityDiv.className = 'game-item-section';
+    personalityDiv.style.cssText = 'margin-bottom: 8px;';
+    
+    if (personalityVal && personalityVal.trim() !== '') {
+        personalityDiv.innerHTML = `
+            <div class="section-header" style="color: #fbc531; border-bottom: 1px solid #4a3a0a;">
+                <i class="fas fa-user-circle"></i> ЛИЧНОСТЬ
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.8em; color: #ccc; font-style: italic; line-height: 1.3;">
+                ${personalityVal}
+            </div>
+        `;
+    } else {
+        personalityDiv.innerHTML = `
+            <div class="section-header" style="color: #fbc531; border-bottom: 1px solid #4a3a0a;">
+                <i class="fas fa-user-circle"></i> ЛИЧНОСТЬ
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет данных о личности...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(personalityDiv);
+    
+    // =============================================
+    // БЛОК 2: ТИПОЛОГИЯ - ЗЕЛЁНЫЙ (был цвет морской волны)
+    // =============================================
+    const currentScene = state.gameState.currentScene || {};
+    const typologyText = currentScene.typology || '';
+    
+    const typologyDiv = document.createElement('div');
+    typologyDiv.id = 'typologyContainer';
+    typologyDiv.className = 'game-item-section';
+    typologyDiv.style.cssText = 'margin-bottom: 8px;';
+    
+    if (typologyText && typologyText.trim() !== '') {
+        typologyDiv.innerHTML = `
+            <div class="section-header" style="color: #4cd137; border-bottom: 1px solid #2d8b57;">
+                <i class="fas fa-fingerprint"></i> ТИПОЛОГИЯ
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.8em; color: #4cd137; font-style: italic; line-height: 1.3;">
+                ${typologyText}
+            </div>
+        `;
+    } else {
+        typologyDiv.innerHTML = `
+            <div class="section-header" style="color: #4cd137; border-bottom: 1px solid #2d8b57;">
+                <i class="fas fa-fingerprint"></i> ТИПОЛОГИЯ
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет данных о типологии...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(typologyDiv);
+    
+    // =============================================
+    // БЛОК 3: ОТНОШЕНИЯ - НЕЖНО-РОЗОВЫЙ
+    // =============================================
+    const relationsItems = State.getGameItemsByType('relations:');
+    
+    const relationsDiv = document.createElement('div');
+    relationsDiv.id = 'relationsContainer';
+    relationsDiv.className = 'game-item-section';
+    
+    if (relationsItems && relationsItems.length > 0) {
+        let relationsHTML = '';
+        
+        relationsItems.forEach(rel => {
+            const name = rel.id.split(':')[1] || 'Unknown';
+            const value = rel.value !== undefined ? rel.value : 0;
+            const color = getRelationColor(value);
+            const description = rel.description || '';
+            
+            let emoji = '😐';
+            if (value >= 75) emoji = '😍';
+            else if (value >= 50) emoji = '😊';
+            else if (value >= 25) emoji = '🙂';
+            else if (value >= -25) emoji = '😐';
+            else if (value >= -50) emoji = '😠';
+            else if (value >= -75) emoji = '😡';
+            else emoji = '💀';
+            
+            relationsHTML += `
+                <div class="game-item-badge" 
+                     onclick="showGameItemTooltip(this, ${JSON.stringify(rel).replace(/"/g, '&quot;')})"
+                     style="background: linear-gradient(135deg, #2a0a2a 0%, #1a051a 100%); 
+                            border: 1px solid #ff9ff340; 
+                            padding: 2px 6px; 
+                            cursor: help;
+                            display: flex;
+                            align-items: center;
+                            gap: 3px;">
+                    <span style="font-size: 0.85em;">${emoji}</span>
+                    <span style="color: #ff9ff3; font-size: 0.75em;">${name}</span>
+                    <span style="color: ${color}; font-size: 0.75em; font-weight: bold;">${value}</span>
+                </div>
+            `;
         });
+        
+        relationsDiv.innerHTML = `
+            <div class="section-header" style="color: #ff9ff3; border-bottom: 1px solid #6a2a5a;">
+                <i class="fas fa-users"></i> ОТНОШЕНИЯ (${relationsItems.length})
+            </div>
+            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
+                ${relationsHTML}
+            </div>
+        `;
+    } else {
+        relationsDiv.innerHTML = `
+            <div class="section-header" style="color: #ff9ff3; border-bottom: 1px solid #6a2a5a;">
+                <i class="fas fa-users"></i> ОТНОШЕНИЯ (0)
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет данных об отношениях...
+            </div>
+        `;
     }
     
-    return operations;
+    fragment.appendChild(relationsDiv);
+    
+    // =============================================
+    // БЛОК 4: НАВЫКИ - ТЁМНО-ФИОЛЕТОВЫЙ
+    // =============================================
+    const skillsItems = State.getGameItemsByType('skill:');
+    
+    const skillsDiv = document.createElement('div');
+    skillsDiv.id = 'skillsContainer';
+    skillsDiv.className = 'game-item-section';
+    
+    if (skillsItems && skillsItems.length > 0) {
+        let skillsHTML = '';
+        skillsItems.forEach(skill => {
+            const name = skill.value || skill.id.split(':')[1];
+            
+            skillsHTML += `
+                <div class="game-item-badge" 
+                     onclick="showGameItemTooltip(this, ${JSON.stringify(skill).replace(/"/g, '&quot;')})"
+                     style="background: linear-gradient(135deg, #0a0a2a 0%, #05051a 100%); 
+                            border: 1px solid #6c5ce740; 
+                            padding: 2px 6px; 
+                            cursor: help;">
+                    <span style="color: #6c5ce7; font-size: 0.75em;">📜</span>
+                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
+                </div>
+            `;
+        });
+        
+        skillsDiv.innerHTML = `
+            <div class="section-header" style="color: #6c5ce7; border-bottom: 1px solid #3a2a6a;">
+                <i class="fas fa-scroll"></i> НАВЫКИ (${skillsItems.length})
+            </div>
+            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
+                ${skillsHTML}
+            </div>
+        `;
+    } else {
+        skillsDiv.innerHTML = `
+            <div class="section-header" style="color: #6c5ce7; border-bottom: 1px solid #3a2a6a;">
+                <i class="fas fa-scroll"></i> НАВЫКИ (0)
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет навыков...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(skillsDiv);
+    
+    // =============================================
+    // НОВЫЙ БЛОК 5: +/- К СТАТАМ - СИНИЙ
+    // (баффы/дебаффы к 4-м основным статам)
+    // =============================================
+    const statBuffsItems = State.getGameItemsByType('buff:').filter(item => {
+        const statName = item.id.split(':')[1];
+        return ['will', 'stealth', 'influence', 'sanity'].includes(statName);
+    });
+    const statDebuffsItems = State.getGameItemsByType('debuff:').filter(item => {
+        const statName = item.id.split(':')[1];
+        return ['will', 'stealth', 'influence', 'sanity'].includes(statName);
+    });
+    const statBuffsDebuffs = [...statBuffsItems, ...statDebuffsItems];
+    
+    const statBuffsDiv = document.createElement('div');
+    statBuffsDiv.id = 'statBuffsContainer';
+    statBuffsDiv.className = 'game-item-section';
+    
+    if (statBuffsDebuffs && statBuffsDebuffs.length > 0) {
+        let itemsHTML = '';
+        statBuffsDebuffs.forEach(item => {
+            const isBuff = item.id.startsWith('buff:');
+            const statName = item.id.split(':')[1];
+            const russianName = getRussianStatName(statName);
+            const value = item.value || 0;
+            const sign = value > 0 ? '+' : '';
+            const duration = item.duration !== undefined ? `[${item.duration}]` : '';
+            const color = isBuff ? '#4cd137' : '#e84118';
+            const icon = isBuff ? '⬆️' : '⬇️';
+            
+            itemsHTML += `
+                <div class="game-item-badge" 
+                     onclick="showGameItemTooltip(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})"
+                     style="background: linear-gradient(135deg, ${isBuff ? '#0a1a2a' : '#2a0a1a'} 0%, ${isBuff ? '#051025' : '#1a050d'} 100%); 
+                            border: 1px solid ${color}40; 
+                            padding: 2px 6px; 
+                            cursor: help;">
+                    <span style="color: ${color}; font-size: 0.75em;">${icon}</span>
+                    <span style="color: #ccc; font-size: 0.75em; margin: 0 2px;">${russianName}${sign}${value}</span>
+                    ${duration ? `<span style="color: #888; font-size: 0.7em;">${duration}</span>` : ''}
+                </div>
+            `;
+        });
+        
+        statBuffsDiv.innerHTML = `
+            <div class="section-header" style="color: #3498db; border-bottom: 1px solid #1a4a7a;">
+                <i class="fas fa-tachometer-alt"></i> +/- К СТАТАМ (${statBuffsDebuffs.length})
+            </div>
+            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
+                ${itemsHTML}
+            </div>
+        `;
+    } else {
+        statBuffsDiv.innerHTML = `
+            <div class="section-header" style="color: #3498db; border-bottom: 1px solid #1a4a7a;">
+                <i class="fas fa-tachometer-alt"></i> +/- К СТАТАМ (0)
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет активных баффов/дебаффов к статам...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(statBuffsDiv);
+    
+    // =============================================
+    // БЛОК 6: БЛАГОСЛОВЕНИЯ - СЕРЕБРЯНО-БЕЛЫЙ (был желтый)
+    // =============================================
+    const blessItems = State.getGameItemsByType('bless:');
+    
+    const blessDiv = document.createElement('div');
+    blessDiv.id = 'blessingsContainer';
+    blessDiv.className = 'game-item-section';
+    
+    if (blessItems && blessItems.length > 0) {
+        let blessHTML = '';
+        blessItems.forEach(bless => {
+            const name = bless.value || bless.id.split(':')[1];
+            const duration = bless.duration !== undefined ? `[${bless.duration}]` : '';
+            
+            blessHTML += `
+                <div class="game-item-badge" 
+                     onclick="showGameItemTooltip(this, ${JSON.stringify(bless).replace(/"/g, '&quot;')})"
+                     style="background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%); 
+                            border: 1px solid #bdc3c740; 
+                            padding: 2px 6px; 
+                            cursor: help;">
+                    <span style="color: #bdc3c7; font-size: 0.75em;">✨</span>
+                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
+                    ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
+                </div>
+            `;
+        });
+        
+        blessDiv.innerHTML = `
+            <div class="section-header" style="color: #bdc3c7; border-bottom: 1px solid #6a6a6a;">
+                <i class="fas fa-star"></i> БЛАГОСЛОВЕНИЯ (${blessItems.length})
+            </div>
+            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
+                ${blessHTML}
+            </div>
+        `;
+    } else {
+        blessDiv.innerHTML = `
+            <div class="section-header" style="color: #bdc3c7; border-bottom: 1px solid #6a6a6a;">
+                <i class="fas fa-star"></i> БЛАГОСЛОВЕНИЯ (0)
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет благословений...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(blessDiv);
+    
+    // =============================================
+    // БЛОК 7: ПРОКЛЯТИЯ - БОЛЕЕ КРАСНЫЙ
+    // =============================================
+    const curseItems = State.getGameItemsByType('curse:');
+    
+    const curseDiv = document.createElement('div');
+    curseDiv.id = 'cursesContainer';
+    curseDiv.className = 'game-item-section';
+    
+    if (curseItems && curseItems.length > 0) {
+        let curseHTML = '';
+        curseItems.forEach(curse => {
+            const name = curse.value || curse.id.split(':')[1];
+            const duration = curse.duration !== undefined ? `[${curse.duration}]` : '';
+            
+            curseHTML += `
+                <div class="game-item-badge" 
+                     onclick="showGameItemTooltip(this, ${JSON.stringify(curse).replace(/"/g, '&quot;')})"
+                     style="background: linear-gradient(135deg, #2a0000 0%, #1a0000 100%); 
+                            border: 1px solid #ff383840; 
+                            padding: 2px 6px; 
+                            cursor: help;">
+                    <span style="color: #ff3838; font-size: 0.75em;">💀</span>
+                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
+                    ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
+                </div>
+            `;
+        });
+        
+        curseDiv.innerHTML = `
+            <div class="section-header" style="color: #ff3838; border-bottom: 1px solid #8a0a0a;">
+                <i class="fas fa-skull-crossbones"></i> ПРОКЛЯТИЯ (${curseItems.length})
+            </div>
+            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
+                ${curseHTML}
+            </div>
+        `;
+    } else {
+        curseDiv.innerHTML = `
+            <div class="section-header" style="color: #ff3838; border-bottom: 1px solid #8a0a0a;">
+                <i class="fas fa-skull-crossbones"></i> ПРОКЛЯТИЯ (0)
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет проклятий...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(curseDiv);
+    
+    // =============================================
+    // БЛОК 8: БАФФЫ/ДЕБАФФЫ (остальные) - ГОЛУБОЙ (был голубой)
+    // =============================================
+    const allBuffs = State.getGameItemsByType('buff:');
+    const allDebuffs = State.getGameItemsByType('debuff:');
+    
+    // Исключаем те, что уже в блоке +/- К СТАТАМ
+    const otherBuffs = allBuffs.filter(item => {
+        const statName = item.id.split(':')[1];
+        return !['will', 'stealth', 'influence', 'sanity'].includes(statName);
+    });
+    const otherDebuffs = allDebuffs.filter(item => {
+        const statName = item.id.split(':')[1];
+        return !['will', 'stealth', 'influence', 'sanity'].includes(statName);
+    });
+    const otherBuffsDebuffs = [...otherBuffs, ...otherDebuffs];
+    
+    const buffsDebuffsDiv = document.createElement('div');
+    buffsDebuffsDiv.id = 'buffsDebuffsContainer';
+    buffsDebuffsDiv.className = 'game-item-section';
+    
+    if (otherBuffsDebuffs && otherBuffsDebuffs.length > 0) {
+        let itemsHTML = '';
+        otherBuffsDebuffs.forEach(item => {
+            const isBuff = item.id.startsWith('buff:');
+            const statName = item.id.split(':')[1];
+            const russianName = getRussianStatName(statName) || statName;
+            const value = item.value || 0;
+            const sign = value > 0 ? '+' : '';
+            const duration = item.duration !== undefined ? `[${item.duration}]` : '';
+            const color = isBuff ? '#4cd137' : '#e84118';
+            const icon = isBuff ? '⬆️' : '⬇️';
+            
+            itemsHTML += `
+                <div class="game-item-badge" 
+                     onclick="showGameItemTooltip(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})"
+                     style="background: linear-gradient(135deg, ${isBuff ? '#0a1a2a' : '#2a0a1a'} 0%, ${isBuff ? '#051025' : '#1a050d'} 100%); 
+                            border: 1px solid ${color}40; 
+                            padding: 2px 6px; 
+                            cursor: help;">
+                    <span style="color: ${color}; font-size: 0.75em;">${icon}</span>
+                    <span style="color: #ccc; font-size: 0.75em; margin: 0 2px;">${russianName}${sign}${value}</span>
+                    ${duration ? `<span style="color: #888; font-size: 0.7em;">${duration}</span>` : ''}
+                </div>
+            `;
+        });
+        
+        buffsDebuffsDiv.innerHTML = `
+            <div class="section-header" style="color: #00cec9; border-bottom: 1px solid #0a4a4a;">
+                <i class="fas fa-chart-line"></i> БАФФЫ/ДЕБАФФЫ (${otherBuffsDebuffs.length})
+            </div>
+            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
+                ${itemsHTML}
+            </div>
+        `;
+    } else {
+        buffsDebuffsDiv.innerHTML = `
+            <div class="section-header" style="color: #00cec9; border-bottom: 1px solid #0a4a4a;">
+                <i class="fas fa-chart-line"></i> БАФФЫ/ДЕБАФФЫ (0)
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет других баффов/дебаффов...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(buffsDebuffsDiv);
+    
+    // =============================================
+    // БЛОК 9: ДЕТАЛИ (бывш. ЭФФЕКТЫ) - ГОЛУБОЙ (был серый)
+    // =============================================
+    const knownPrefixes = ['stat:', 'skill:', 'inventory:', 'relations:', 'bless:', 'curse:', 
+                           'buff:', 'debuff:', 'personality:', 'initiation_degree:', 'progress:'];
+    
+    const allItems = state.heroState || [];
+    const unknownItems = allItems.filter(item => {
+        return !knownPrefixes.some(prefix => item.id.startsWith(prefix));
+    });
+    
+    const detailsDiv = document.createElement('div');
+    detailsDiv.id = 'detailsContainer';
+    detailsDiv.className = 'game-item-section';
+    
+    if (unknownItems && unknownItems.length > 0) {
+        let detailsHTML = '';
+        unknownItems.forEach(item => {
+            const [type, name] = item.id.split(':');
+            const displayName = item.value || name || item.id;
+            const duration = item.duration !== undefined ? `[${item.duration}]` : '';
+            
+            detailsHTML += `
+                <div class="game-item-badge" 
+                     onclick="showGameItemTooltip(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})"
+                     style="background: linear-gradient(135deg, #1a2a2a 0%, #0d1a1a 100%); 
+                            border: 1px solid #00cec940; 
+                            padding: 2px 6px; 
+                            cursor: help;">
+                    <span style="color: #00cec9; font-size: 0.75em;">${getGameItemIcon(item.id)}</span>
+                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${displayName}</span>
+                    ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
+                </div>
+            `;
+        });
+        
+        detailsDiv.innerHTML = `
+            <div class="section-header" style="color: #00cec9; border-bottom: 1px solid #0a4a4a;">
+                <i class="fas fa-info-circle"></i> ДЕТАЛИ (${unknownItems.length})
+            </div>
+            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
+                ${detailsHTML}
+            </div>
+        `;
+    } else {
+        detailsDiv.innerHTML = `
+            <div class="section-header" style="color: #00cec9; border-bottom: 1px solid #0a4a4a;">
+                <i class="fas fa-info-circle"></i> ДЕТАЛИ (0)
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Нет дополнительных деталей...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(detailsDiv);
+    
+    // =============================================
+    // БЛОК 10: ИНВЕНТАРЬ - ДРЕВЕСНЫЙ (коричневый)
+    // =============================================
+    const inventoryItems = State.getGameItemsByType('inventory:');
+    
+    const inventoryDiv = document.createElement('div');
+    inventoryDiv.id = 'inventoryContainer';
+    inventoryDiv.className = 'game-item-section';
+    
+    if (inventoryItems && inventoryItems.length > 0) {
+        let inventoryHTML = '';
+        inventoryItems.forEach(item => {
+            const name = item.value || item.id.split(':')[1];
+            
+            inventoryHTML += `
+                <div class="game-item-badge" 
+                     onclick="showGameItemTooltip(this, ${JSON.stringify(item).replace(/"/g, '&quot;')})"
+                     style="background: linear-gradient(135deg, #2a1a0a 0%, #1a0d05 100%); 
+                            border: 1px solid #8b451340; 
+                            padding: 2px 6px; 
+                            cursor: help;">
+                    <span style="color: #8b4513; font-size: 0.75em;">🎒</span>
+                    <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
+                </div>
+            `;
+        });
+        
+        inventoryDiv.innerHTML = `
+            <div class="section-header" style="color: #8b4513; border-bottom: 1px solid #4a2a0a;">
+                <i class="fas fa-box"></i> ИНВЕНТАРЬ (${inventoryItems.length})
+            </div>
+            <div class="section-content" style="display: flex; flex-wrap: wrap; gap: 3px; padding: 3px 0;">
+                ${inventoryHTML}
+            </div>
+        `;
+    } else {
+        inventoryDiv.innerHTML = `
+            <div class="section-header" style="color: #8b4513; border-bottom: 1px solid #4a2a0a;">
+                <i class="fas fa-box"></i> ИНВЕНТАРЬ (0)
+            </div>
+            <div class="section-content" style="padding: 4px 0; font-size: 0.75em; color: #444; font-style: italic;">
+                Инвентарь пуст...
+            </div>
+        `;
+    }
+    
+    fragment.appendChild(inventoryDiv);
+    
+    container.appendChild(fragment);
+    
+    console.log('✅ renderAllGameItems completed with new colors and order');
 }
 
 // ====================================================================
-// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ: Рендеринг одной строки операции
+// РЕНДЕРИНГ ВЫБОРОВ (без изменений)
 // ====================================================================
-function renderOperationLine(operation) {
-    if (!operation) return '';
+
+function renderChoices() {
+    const state = State.getState();
     
-    let icon = '🔄';
-    let color = '#ccc';
-    let text = '';
-    
-    switch (operation.type) {
-        case 'MODIFY':
-            icon = operation.delta > 0 ? '⬆️' : '⬇️';
-            color = operation.delta > 0 ? '#4cd137' : '#e84118';
-            const sign = operation.delta > 0 ? '+' : '';
-            text = `${operation.target} ${sign}${operation.delta}`;
-            break;
-        case 'ADD':
-            icon = '➕';
-            color = '#4cd137';
-            text = `Добавлено: ${operation.target}`;
-            break;
-        case 'REMOVE':
-            icon = '➖';
-            color = '#e84118';
-            text = `Удалено: ${operation.target}`;
-            break;
-        case 'SET':
-            icon = '📝';
-            color = '#48dbfb';
-            text = `${operation.target} → ${operation.value}`;
-            break;
-        default:
-            text = JSON.stringify(operation);
+    if (!dom.choicesList) {
+        console.error('❌ renderChoices: choicesList не найден');
+        return;
     }
     
-    return `
-        <div style="font-size: 0.75em; padding: 2px 0; color: #ddd;">
-            <span style="font-size: 0.9em;">${icon}</span>
-            <span style="color: ${color}; margin-left: 3px;">${text}</span>
-        </div>
-    `;
-}
-
-// ========== НОВЫЕ ФУНКЦИИ - КОНЕЦ ==========
-
-// Получение цвета по значению стата (0-100)
-function getStatColor(value) {
-    // Значение от 0 до 100 для градиента
-    const val = Math.max(0, Math.min(100, value));
+    dom.choicesList.innerHTML = '';
     
-    // Градиент от тёмно-красного до белого через 10 промежуточных цветов
-    if (val <= 10) return '#800000'; // тёмно-красный
-    if (val <= 20) return '#FF0000'; // красный
-    if (val <= 30) return '#FF5500'; // оранжевый
-    if (val <= 40) return '#FFAA00'; // оранжево-желтый
-    if (val <= 50) return '#FFD700'; // золотой (жёлтый)
-    if (val <= 60) return '#ADFF2F'; // салатовый
-    if (val <= 70) return '#00FF00'; // зелёный
-    if (val <= 80) return '#20B2AA'; // цвет морской волны
-    if (val <= 90) return '#87CEEB'; // цвет неба
-    return '#FFFFFF'; // белый (100)
+    if (!state.gameState || !state.gameState.currentScene) {
+        console.error('❌ renderChoices: currentScene отсутствует');
+        return;
+    }
+    
+    const currentScene = state.gameState.currentScene;
+    const choices = currentScene.choices;
+    
+    if (!choices || !Array.isArray(choices)) {
+        console.error('❌ renderChoices: choices отсутствует или не массив');
+        return;
+    }
+    
+    console.log(`📋 Отображаем ${choices.length} вариантов выбора`);
+    
+    choices.forEach((choice, idx) => {
+        if (!choice || typeof choice !== 'object') {
+            console.warn(`⚠️ Пропущен choice с индексом ${idx}: объект не существует`);
+            return;
+        }
+        
+        const btn = document.createElement('button');
+        const isSelected = state.gameState.selectedActions &&
+            Array.isArray(state.gameState.selectedActions) ?
+            state.gameState.selectedActions.includes(idx) : false;
+        
+        btn.className = `choice-btn ${isSelected ? 'selected' : ''}`;
+        
+        const choiceText = choice.text || "Действие без названия";
+        let content = `${choiceText}`;
+        
+        const difficulty = choice.difficulty_level || 5;
+        content += `<div style="font-size:0.75rem; color:#888; margin-top:3px; opacity: 0.3">🎯 Сложность: ${difficulty}/10</div>`;
+        
+        if (Array.isArray(choice.requirements) && choice.requirements.length > 0) {
+            content += formatCompactRequirements(choice.requirements);
+        } else {
+            content += `<div style="font-size:0.75rem; color:#888; margin-top:3px; opacity: 0.3">🔓 Нет требований</div>`;
+        }
+        
+        if (Array.isArray(choice.success_rewards) && choice.success_rewards.length > 0) {
+            content += formatCompactOperations(choice.success_rewards, 'success');
+        }
+        
+        if (Array.isArray(choice.fail_penalties) && choice.fail_penalties.length > 0) {
+            content += formatCompactOperations(choice.fail_penalties, 'fail');
+        }
+        
+        btn.innerHTML = content;
+        btn.onclick = () => Game.toggleChoice(idx);
+        dom.choicesList.appendChild(btn);
+    });
+    
+    const count = state.gameState.selectedActions ? state.gameState.selectedActions.length : 0;
+    if (dom.choicesCounter) {
+        dom.choicesCounter.textContent = `${count}/${CONFIG.maxChoices}`;
+    }
+    
+    console.log('✅ Choices rendered');
 }
 
-// Подписка на события состояния
+// ====================================================================
+// ОСНОВНАЯ ФУНКЦИЯ РЕНДЕРА
+// ====================================================================
+
+function renderAll() {
+    console.info(`⚠️   RENDER ALL (NEW STRUCTURE)   ⚠️`);
+    
+    try {
+        renderScene();
+        renderStats();
+        renderChoices();
+        renderAllGameItems();
+        renderHistory();
+        
+        if (dom.turnCounter) {
+            dom.turnCounter.innerHTML = `ХОДЫ: <span style="color: #888; font-family: monospace;">${State.getTurnCount()}</span>`;
+        }
+        
+        console.info(`✅ ALL RENDERED (NEW STRUCTURE)`);
+    } catch (error) {
+        console.error('❌ Ошибка при рендеринге:', error);
+    }
+}
+
+// ====================================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ====================================================================
+
+function formatCompactRequirements(requirements) {
+    if (!Array.isArray(requirements) || requirements.length === 0) {
+        return '';
+    }
+    
+    const items = requirements.map(reqId => {
+        if (!reqId || typeof reqId !== 'string') return '';
+        
+        const [type, name] = reqId.split(':');
+        let color = '#888';
+        let icon = getGameItemIcon(reqId);
+        let displayName = name || reqId;
+        
+        switch (type) {
+            case 'stat':
+                color = '#fbc531';
+                displayName = getRussianStatName(name);
+                break;
+            case 'skill':
+                color = '#6c5ce7';
+                break;
+            case 'inventory':
+                color = '#8b4513';
+                break;
+            case 'relations':
+                color = '#ff9ff3';
+                displayName = name.replace(/_/g, ' ');
+                break;
+            case 'bless':
+                color = '#bdc3c7';
+                break;
+            case 'curse':
+                color = '#ff3838';
+                break;
+            case 'initiation_degree':
+                color = '#ff9ff3';
+                break;
+        }
+        
+        return `<span style="color:${color};" title="${reqId}">${icon} ${displayName}</span>`;
+    }).filter(item => item !== '');
+    
+    if (items.length === 0) return '';
+    
+    return `<div style="font-size:0.75rem; margin-top:3px; color:#888; opacity: 0.3">🔒 Треб: ${items.join(', ')}</div>`;
+}
+
+function formatCompactOperations(operations, type) {
+    if (!Array.isArray(operations) || operations.length === 0) {
+        return '';
+    }
+    
+    const isSuccess = type === 'success';
+    const items = [];
+    
+    operations.forEach(op => {
+        if (!op || !op.id) return;
+        
+        const [itemType, name] = op.id.split(':');
+        let display = '';
+        
+        if (op.operation === 'MODIFY') {
+            const delta = op.delta || 0;
+            const sign = delta > 0 ? '+' : '';
+            const color = delta > 0 ? '#4cd137' : '#e84118';
+            
+            if (itemType === 'stat') {
+                display = `<span style="color:${color};">${getRussianStatName(name)} ${sign}${delta}</span>`;
+            } else {
+                display = `<span style="color:${color};">${name} ${sign}${delta}</span>`;
+            }
+        } else if (op.operation === 'ADD') {
+            const icon = getGameItemIcon(op.id);
+            display = `<span style="color:#4cd137;">+${icon} ${name}</span>`;
+        } else if (op.operation === 'REMOVE') {
+            const icon = getGameItemIcon(op.id);
+            display = `<span style="color:#e84118;">-${icon} ${name}</span>`;
+        } else if (op.operation === 'SET') {
+            display = `<span style="color:#48dbfb;">${name} → ${op.value}</span>`;
+        }
+        
+        if (display) {
+            items.push(display);
+        }
+    });
+    
+    if (items.length === 0) return '';
+    
+    const bgColor = isSuccess ? '#0a1a0a' : '#1a0a0a';
+    const borderColor = isSuccess ? '#4cd137' : '#e84118';
+    const label = isSuccess ? '✅ При успехе' : '❌ При провале';
+    
+    return `<div style="font-size:0.7rem; margin-top:3px; padding:2px 4px; background:${bgColor}; border-left:2px solid ${borderColor}; border-radius:2px; opacity: 0.3">
+        <div style="font-style:italic; margin-bottom:1px;">${label}:</div>
+        ${items.join(', ')}
+    </div>`;
+}
+
+// ====================================================================
+// ПОДПИСКА НА СОБЫТИЯ
+// ====================================================================
+
 function setupStateObservers() {
     console.log('🔍 Настройка подписок на события состояния...');
     
@@ -1167,81 +2002,28 @@ function setupStateObservers() {
         console.log('🎯 Событие: scene:changed', data);
         renderScene();
         renderChoices();
+        renderAllGameItems();
     });
     
     State.onTurnComplete((data) => {
         console.log('🎯 Событие: turn:completed', data);
         renderHistory();
+        renderAllGameItems();
         if (dom.turnCounter) {
             dom.turnCounter.innerHTML = `ХОДЫ: <span style="color: #888; font-family: monospace;">${State.getTurnCount()}</span>`;
         }
     });
-    
-    State.onSettingsChange(() => {
-        updateApiKeyFields();
-        renderModelSelectorByProvider();
-        updateModelDetails();
-    });
-    
-    State.on(State.EVENTS.UI_STATE_CHANGED, () => {
-        updateUIMode();
-    });
-    
-    State.on(State.EVENTS.SCALE_CHANGED, (data) => {
-        console.log('🎯 Событие: scale:changed', data);
-    });
-    
-    State.on(State.EVENTS.HERO_STATS_UPDATED, (data) => {
-        if (data.id && data.id.startsWith('stat:')) {
-            renderStats();
-        }
-    });
-    
-    State.on(State.EVENTS.HERO_ITEM_ADDED, (data) => {
-        if (data.id.startsWith('inventory:')) {
-            renderAllGameItems();
-        }
-    });
-    
-    State.on(State.EVENTS.HERO_ITEM_REMOVED, (data) => {
-        if (data.id.startsWith('inventory:')) {
-            renderAllGameItems();
-        }
-    });
-    
-    console.log('✅ Подписки на события настроены');
 }
 
-function getGameItemIcon(id) {
-    if (!id) return '❓';
-    const [type] = id.split(':');
-    switch (type) {
-        case 'stat': return '📊';
-        case 'skill': return '📜';
-        case 'inventory': return '📦';
-        case 'relations': return '🤝';
-        case 'bless': return '✨';
-        case 'curse': return '💀';
-        case 'buff': return '⬆️';
-        case 'debuff': return '⬇️';
-        case 'personality': return '🧠';
-        case 'initiation_degree': return '🎓';
-        case 'progress': return '📈';
-        default: return '❓';
-    }
-}
+setupStateObservers();
 
-function getGameItemName(id) {
-    if (!id) return '';
-    const [type, name] = id.split(':');
-    if (type === 'stat') {
-        return getRussianStatName(name);
-    }
-    if (type === 'relations') {
-        return name.replace(/_/g, ' ');
-    }
-    return name;
-}
+// Делаем функции доступными глобально
+window.showGameItemTooltip = showGameItemTooltip;
+window.showStatTooltip = showStatTooltip;
+
+// ====================================================================
+// ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений)
+// ====================================================================
 
 function updateApiKeyFields() {
     const state = State.getState();
@@ -1468,342 +2250,9 @@ function renderAuditList() {
                 }, 2000);
             }).catch(err => {
                 console.error('Ошибка копирования:', err);
-                showAlert('Ошибка', 'Не удалось скопировать в буфер обмена', err);
             });
         };
     }
-}
-
-function renderScene() {
-    const state = State.getState();
-    
-    if (!state.gameState.currentScene) {
-        console.error('❌ renderScene: currentScene отсутствует, использую начальную сцену');
-        state.gameState.currentScene = { ...PROMPTS.initialGameState };
-        State.setState({ gameState: state.gameState });
-    }
-    
-    const currentScene = state.gameState.currentScene;
-    
-    if (dom.updates && dom.sceneText && dom.sceneText.parentNode) {
-        dom.sceneText.parentNode.insertBefore(dom.updates, dom.sceneText);
-    }
-    
-    if (state.lastTurnUpdates && state.lastTurnUpdates.length > 0) {
-        dom.updates.style.display = 'block';
-        dom.updates.innerHTML = state.lastTurnUpdates;
-    } else {
-        dom.updates.style.display = 'none';
-        dom.updates.innerHTML = '';
-    }
-    
-    if (currentScene.scene) {
-        dom.sceneText.innerHTML = `<p>${currentScene.scene.replace(/\n/g, '</p><p>')}</p>`;
-    } else {
-        console.warn('⚠️ Текст сцены пуст, использую дефолтный');
-        dom.sceneText.innerHTML = PROMPTS.initialGameState.scene;
-    }
-    
-    let reflectionAndTypologyHtml = '';
-    
-    if (currentScene.reflection) {
-        reflectionAndTypologyHtml += `<div class="reflection-content">${currentScene.reflection}</div>`;
-    }
-    
-    if (currentScene.typology) {
-        reflectionAndTypologyHtml += `<div class="typology-content" style="margin-top: 10px; font-style: italic; color: #1dd1a1; font-size: 0.9em;">
-            <i class="fas fa-fingerprint"></i> ${currentScene.typology}
-        </div>`;
-    }
-    
-    if (reflectionAndTypologyHtml) {
-        dom.reflection.style.display = 'block';
-        dom.reflection.innerHTML = reflectionAndTypologyHtml;
-    } else {
-        dom.reflection.style.display = 'none';
-    }
-}
-
-function renderSectionHTML(title, icon, color, items, renderItemFn) {
-    let html = `<div style="margin-top: 15px; font-weight: bold; color: ${color}; border-bottom: 1px solid #333; padding-bottom: 4px; margin-bottom: 5px; font-size: 0.85rem;">
-        <i class="fas ${icon}"></i> ${title} ${items.length > 0 ? `(${items.length})` : ''}
-    </div>`;
-
-    if (!items || items.length === 0) {
-        html += `<div style="font-size: 0.8rem; color: #444; font-style: italic;">Нет данных...</div>`;
-    } else {
-        html += `<div style="display: flex; flex-wrap: wrap; gap: 4px;">`;
-        html += items.map(renderItemFn).join('');
-        html += `</div>`;
-    }
-    return html;
-}
-
-function renderAll() {
-    console.info(`⚠️   RENDER ALL (формат 4.1)   ⚠️`);
-    
-    try {
-        renderScene();
-        renderStats();
-        renderChoices();
-        renderAllGameItems();
-        renderHistory();
-        applyStateEffects();
-        updateUIMode();
-        
-        if (dom.turnCounter) {
-            dom.turnCounter.innerHTML = `ХОДЫ: <span style="color: #888; font-family: monospace;">${State.getTurnCount()}</span>`;
-        }
-        
-        console.info(`✅ ALL RENDERED (формат 4.1)`);
-    } catch (error) {
-        console.error('❌ Ошибка при рендеринге:', error);
-    }
-}
-
-function updateUIMode() {
-    const state = State.getState();
-    
-    dom.freeModeToggle.checked = state.freeMode;
-    
-    if (state.freeMode) {
-        dom.choicesList.style.display = 'none';
-        dom.freeInputWrapper.style.display = 'block';
-        dom.modeIcon.innerHTML = '<i class="fas fa-keyboard"></i>';
-        dom.modeText.textContent = 'Режим: Свободный ввод';
-        dom.modeText.classList.add('free-mode');
-        dom.choicesCounter.textContent = `${state.freeModeText.length > 0 ? '✓' : '0'}/∞`;
-        
-        dom.freeInputText.value = state.freeModeText;
-        dom.freeInputText.disabled = false;
-        
-        const scale = state.settings.scale;
-        const baseHeight = 140;
-        const adjustedHeight = baseHeight * scale;
-        dom.freeInputText.style.height = `${adjustedHeight}px`;
-        dom.freeInputText.style.minHeight = `${adjustedHeight}px`;
-        
-        setTimeout(() => {
-            dom.freeInputText.focus();
-            dom.freeInputText.scrollTop = dom.freeInputText.scrollHeight;
-        }, 100);
-        
-        dom.btnSubmit.disabled = state.freeModeText.trim().length === 0;
-    } else {
-        dom.choicesList.style.display = 'block';
-        dom.freeInputWrapper.style.display = 'none';
-        dom.modeIcon.innerHTML = '<i class="fas fa-list-ul"></i>';
-        dom.modeText.textContent = 'Режим: Варианты';
-        dom.modeText.classList.remove('free-mode');
-    }
-}
-
-function normalizeStatKey(statName) {
-    if (!statName) return '';
-    
-    const lowerStat = statName.toString().toLowerCase().trim();
-    
-    for (const [alias, key] of Object.entries(CONFIG.statAliases)) {
-        if (alias.toLowerCase() === lowerStat) {
-            return key;
-        }
-    }
-    
-    const standardKeys = ['will', 'stealth', 'influence', 'sanity'];
-    if (standardKeys.includes(lowerStat)) {
-        return lowerStat;
-    }
-    
-    return lowerStat;
-}
-
-function getStatIcon(statKey) {
-    const icons = {
-        'will': '<i class="fas fa-brain" style="color: #ffcc00;"></i>',
-        'stealth': '<i class="fas fa-user-secret" style="color: #00ccff;"></i>',
-        'influence': '<i class="fas fa-crown" style="color: #ff66cc;"></i>',
-        'sanity': '<i class="fas fa-lightbulb" style="color: #66ff66;"></i>'
-    };
-    return icons[statKey] || '<i class="fas fa-question" style="color: #888;"></i>';
-}
-
-function getRussianStatName(key) {
-    const map = { 
-        'will': 'Воля', 
-        'stealth': 'Скрытность', 
-        'influence': 'Влияние', 
-        'sanity': 'Разум' 
-    };
-    return map[key] || key;
-}
-
-function formatCompactRequirements(requirements) {
-    if (!Array.isArray(requirements) || requirements.length === 0) {
-        return '';
-    }
-    
-    const items = requirements.map(reqId => {
-        if (!reqId || typeof reqId !== 'string') return '';
-        
-        const [type, name] = reqId.split(':');
-        let color = '#888';
-        let icon = getGameItemIcon(reqId);
-        let displayName = name || reqId;
-        
-        switch (type) {
-            case 'stat':
-                color = '#fbc531';
-                displayName = getRussianStatName(name);
-                break;
-            case 'skill':
-                color = '#9c88ff';
-                break;
-            case 'inventory':
-                color = '#00a8ff';
-                break;
-            case 'relations':
-                color = '#ff9ff3';
-                displayName = name.replace(/_/g, ' ');
-                break;
-            case 'bless':
-                color = '#fbc531';
-                break;
-            case 'curse':
-                color = '#c23616';
-                break;
-            case 'initiation_degree':
-                color = '#ff9ff3';
-                break;
-        }
-        
-        return `<span style="color:${color};" title="${reqId}">${icon} ${displayName}</span>`;
-    }).filter(item => item !== '');
-    
-    if (items.length === 0) return '';
-    
-    return `<div style="font-size:0.75rem; margin-top:3px; color:#888; opacity: 0.3">🔒 Треб: ${items.join(', ')}</div>`;
-}
-
-function formatCompactOperations(operations, type) {
-    if (!Array.isArray(operations) || operations.length === 0) {
-        return '';
-    }
-    
-    const isSuccess = type === 'success';
-    const items = [];
-    
-    operations.forEach(op => {
-        if (!op || !op.id) return;
-        
-        const [itemType, name] = op.id.split(':');
-        let display = '';
-        
-        switch (op.operation) {
-            case 'MODIFY':
-                const sign = op.delta > 0 ? '+' : '';
-                const statName = itemType === 'stat' ? getRussianStatName(name) : name;
-                display = `${statName}${sign}${op.delta}`;
-                break;
-            case 'ADD':
-                if (itemType === 'buff' || itemType === 'debuff') {
-                    display = `${name}+${op.value}`;
-                } else {
-                    display = `+${name}`;
-                }
-                break;
-            case 'REMOVE':
-                display = `-${name}`;
-                break;
-            case 'SET':
-                display = `${name}→"${String(op.value || '').substring(0, 10)}"`;
-                break;
-        }
-        
-        if (display) {
-            items.push(display);
-        }
-    });
-    
-    if (items.length === 0) return '';
-    
-    const color = isSuccess ? '#4cd137' : '#e84118';
-    const icon = isSuccess ? '✅' : '❌';
-    
-    return `<div style="font-size:0.75rem; margin-top:2px; opacity: 0.3">
-        <span style="color:${color};">${icon} ${items.join(', ')}</span>
-    </div>`;
-}
-
-function renderChoices() {
-    console.log('🔍 renderChoices called');
-    
-    const state = State.getState();
-    if (!dom.choicesList) {
-        console.error('❌ DOM element choicesList not found');
-        return;
-    }
-    
-    dom.choicesList.innerHTML = '';
-    
-    if (!state.gameState.currentScene) {
-        console.error('❌ renderChoices: currentScene отсутствует');
-        return;
-    }
-    
-    const currentScene = state.gameState.currentScene;
-    const choices = currentScene.choices;
-    
-    if (!choices || !Array.isArray(choices)) {
-        console.error('❌ renderChoices: choices отсутствует или не массив');
-        return;
-    }
-    
-    console.log(`📋 Отображаем ${choices.length} вариантов выбора`);
-    
-    choices.forEach((choice, idx) => {
-        if (!choice || typeof choice !== 'object') {
-            console.warn(`⚠️ Пропущен choice с индексом ${idx}: объект не существует`);
-            return;
-        }
-        
-        const btn = document.createElement('button');
-        const isSelected = state.gameState.selectedActions &&
-            Array.isArray(state.gameState.selectedActions) ?
-            state.gameState.selectedActions.includes(idx) : false;
-        
-        btn.className = `choice-btn ${isSelected ? 'selected' : ''}`;
-        
-        const choiceText = choice.text || "Действие без названия";
-        let content = `${choiceText}`;
-        
-        const difficulty = choice.difficulty_level || 5;
-        content += `<div style="font-size:0.75rem; color:#888; margin-top:3px; opacity: 0.3">🎯 Сложность: ${difficulty}/10</div>`;
-        
-        if (Array.isArray(choice.requirements) && choice.requirements.length > 0) {
-            content += formatCompactRequirements(choice.requirements);
-        } else {
-            content += `<div style="font-size:0.75rem; color:#888; margin-top:3px; opacity: 0.3">🔓 Нет требований</div>`;
-        }
-        
-        if (Array.isArray(choice.success_rewards) && choice.success_rewards.length > 0) {
-            content += formatCompactOperations(choice.success_rewards, 'success');
-        }
-        
-        if (Array.isArray(choice.fail_penalties) && choice.fail_penalties.length > 0) {
-            content += formatCompactOperations(choice.fail_penalties, 'fail');
-        }
-        
-        btn.innerHTML = content;
-        btn.onclick = () => Game.toggleChoice(idx);
-        dom.choicesList.appendChild(btn);
-    });
-    
-    const count = state.gameState.selectedActions ? state.gameState.selectedActions.length : 0;
-    if (dom.choicesCounter) {
-        dom.choicesCounter.textContent = `${count}/${CONFIG.maxChoices}`;
-    }
-    
-    console.log('✅ Choices rendered');
 }
 
 function applyStateEffects() {
@@ -1917,16 +2366,11 @@ function formatDuration(duration) {
     return `[${duration}]`;
 }
 
-// Альтернативно, если хотим с текстом "ход.":
 function formatDurationWithText(duration) {
     if (duration === undefined || duration === null) return '[?]';
     return `${duration} ход.`;
 }
 
-
-/**
- * Запуск показа фраз героя на подложке
- */
 function startThoughtsOfHeroDisplay() {
     if (thoughtsOfHeroInterval) clearInterval(thoughtsOfHeroInterval);
     showThoughtsOfHeroLayout();
@@ -1934,12 +2378,9 @@ function startThoughtsOfHeroDisplay() {
     thoughtsOfHeroInterval = setInterval(() => {
         let phrase = null;
         
-        // Пробуем взять фразу из основного списка
         if (State.getHeroPhrasesCount() > 0) {
             phrase = State.getHeroPhrase();
-        }
-        // Если список пуст, берем фразу из заглушек
-        else if (CONFIG.thoughtsOfHeroFakes.length > 0) {
+        } else if (CONFIG.thoughtsOfHeroFakes.length > 0) {
             const fakePhrases = CONFIG.thoughtsOfHeroFakes;
             phrase = fakePhrases[Math.floor(Math.random() * fakePhrases.length)];
         }
@@ -1949,7 +2390,6 @@ function startThoughtsOfHeroDisplay() {
         }
     }, 5000);
     
-    // Показываем первую фразу сразу
     setTimeout(() => {
         let phrase = null;
         
@@ -1966,81 +2406,127 @@ function startThoughtsOfHeroDisplay() {
     }, 100);
 }
 
-/**
- * Остановка показа фраз героя
- */
 function stopThoughtsOfHeroDisplay() {
     if (thoughtsOfHeroInterval) {
         clearInterval(thoughtsOfHeroInterval);
         thoughtsOfHeroInterval = null;
     }
     
-    // Скрываем подложку
     hideThoughtsOfHeroLayout();
 }
 
-/**
- * Показ подложки для фраз героя
- */
 function showThoughtsOfHeroLayout() {
     if (dom.thoughtsOfHeroLayout) {
         dom.thoughtsOfHeroLayout.style.display = 'flex';
     }
 }
 
-/**
- * Скрытие подложки для фраз героя
- */
 function hideThoughtsOfHeroLayout() {
     if (dom.thoughtsOfHeroLayout) {
         dom.thoughtsOfHeroLayout.style.display = 'none';
     }
 }
 
-/**
- * Обновление текста на подложке фраз героя
- * @param {string} text - Текст для отображения
- */
 function updateThoughtsOfHeroText(text) {
     if (dom.thoughtsOfHeroText) {
         dom.thoughtsOfHeroText.textContent = text;
     }
 }
 
-setupStateObservers();
+function updateUIMode() {
+    const state = State.getState();
+    
+    dom.freeModeToggle.checked = state.freeMode;
+    
+    if (state.freeMode) {
+        dom.choicesList.style.display = 'none';
+        dom.freeInputWrapper.style.display = 'block';
+        dom.modeIcon.innerHTML = '<i class="fas fa-keyboard"></i>';
+        dom.modeText.textContent = 'Режим: Свободный ввод';
+        dom.modeText.classList.add('free-mode');
+        dom.choicesCounter.textContent = `${state.freeModeText.length > 0 ? '✓' : '0'}/∞'`;
+        
+        dom.freeInputText.value = state.freeModeText;
+        dom.freeInputText.disabled = false;
+        
+        const scale = state.settings.scale;
+        const baseHeight = 140;
+        const adjustedHeight = baseHeight * scale;
+        dom.freeInputText.style.height = `${adjustedHeight}px`;
+        dom.freeInputText.style.minHeight = `${adjustedHeight}px`;
+        
+        setTimeout(() => {
+            dom.freeInputText.focus();
+            dom.freeInputText.scrollTop = dom.freeInputText.scrollHeight;
+        }, 100);
+        
+        dom.btnSubmit.disabled = state.freeModeText.trim().length === 0;
+    } else {
+        dom.choicesList.style.display = 'block';
+        dom.freeInputWrapper.style.display = 'none';
+        dom.modeIcon.innerHTML = '<i class="fas fa-list-ul"></i>';
+        dom.modeText.textContent = 'Режим: Варианты';
+        dom.modeText.classList.remove('free-mode');
+    }
+}
 
-// Делаем функции доступными глобально для onclick обработчиков
-window.showGameItemTooltip = showGameItemTooltip;
-window.showStatTooltip = showStatTooltip;
-
+// ====================================================================
+// ЭКСПОРТ ВСЕХ ПУБЛИЧНЫХ ФУНКЦИЙ
+// ====================================================================
 
 export const Render = {
+    // Основные функции рендеринга
+    renderStats,
+    renderScene,
+    renderChoices,
+    renderAllGameItems,
+    renderHistory,
+    renderAll,
+    
+    // Тултипы и анимации
+    showStatTooltip,
+    showGameItemTooltip,
+    showStatChangeAnimation,
+    
+    // Вспомогательные функции
+    getStatDescription,
+    getRelationColor,
+    getRussianStatName,
+    getStatColor,
+    getGameItemIcon,
+    
+    // API Keys и модели
     updateApiKeyFields,
     renderModelSelectorByProvider,
     updateModelDetails,
     updateModelStats,
     updateLogCount,
     renderAuditList,
-    renderScene,
-    startThoughtsOfHeroDisplay,
-    stopThoughtsOfHeroDisplay,
-    getRussianStatName,
+    
+    // UI режимы
     updateUIMode,
-    renderChoices,
-    renderStats,
-    renderAllGameItems,
-    renderHistory,
-    renderAll,
-    getStatDescription,
-    getRelationColor,
-    showGameItemTooltip,
-    showStatTooltip,
-    showStatChangeAnimation,
+    
+    // Эффекты состояния
+    applyStateEffects,
+    
+    // Модалы и алерты
     showAlert,
     showErrorAlert,
     showSuccessAlert,
     showWarningAlert,
+    
+    // Форматирование
     formatDuration,
     formatDurationWithText,
-    getStatColor
+    formatCompactRequirements,
+    formatCompactOperations,
+    
+    // Thoughts of Hero
+    startThoughtsOfHeroDisplay,
+    stopThoughtsOfHeroDisplay,
+    showThoughtsOfHeroLayout,
+    hideThoughtsOfHeroLayout,
+    updateThoughtsOfHeroText
 };
+
+console.log('✅ 5-render.js (NEW STRUCTURE) загружен успешно');

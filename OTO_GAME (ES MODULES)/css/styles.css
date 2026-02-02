@@ -2095,3 +2095,194 @@ input:checked+.slider:before {
 .relation-value.neutral { color: #aaa; }
 .relation-value.negative { color: #e84118; }
 .relation-value.hostile { color: #c23616; }
+
+/* ========== НОВЫЕ СТИЛИ - Blood Gothic Industrial ========== */
+
+/* Анимации */
+@keyframes tooltipFadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tooltipFadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-5px); }
+}
+
+@keyframes flyUp {
+    0% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-30px); }
+}
+
+@keyframes statPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+}
+
+/* Секции game items */
+.game-item-section {
+    margin-bottom: 8px;
+    padding: 6px;
+    background: linear-gradient(135deg, #0d0000 0%, #000000 100%);
+    border: 1px solid #2a0a0a;
+    border-radius: 3px;
+    box-shadow: 0 0 10px #00000080;
+}
+
+.section-header {
+    font-weight: bold;
+    font-size: 0.8em;
+    padding-bottom: 3px;
+    margin-bottom: 4px;
+    text-shadow: 0 0 5px currentColor;
+    font-family: 'Courier New', monospace;
+}
+
+.section-content {
+    font-size: 0.75em;
+}
+
+.game-item-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 3px;
+    transition: all 0.2s ease;
+    font-family: 'Courier New', monospace;
+}
+
+.game-item-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 10px currentColor;
+}
+
+.relation-badge:hover {
+    transform: scale(1.05);
+}
+
+.blood-gothic-panel {
+    font-family: 'Georgia', serif;
+}
+
+/* Тултипы */
+.stat-tooltip,
+.gameitem-tooltip {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    line-height: 1.4;
+}
+
+/* Адаптация */
+@media (max-width: 768px) {
+    .game-item-section {
+        padding: 4px;
+        margin-bottom: 6px;
+    }
+    
+    .section-header {
+        font-size: 0.75em;
+    }
+    
+    .game-item-badge {
+        padding: 1px 4px !important;
+        font-size: 0.7em !important;
+    }
+}
+
+/* Прокрутка */
+#histArea {
+    scroll-behavior: smooth;
+}
+
+/* Кастомная прокрутка */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #0a0000;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #4a0a0a 0%, #2a0000 100%);
+    border-radius: 4px;
+    border: 1px solid #1a0000;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #6a0a0a 0%, #3a0000 100%);
+}
+
+/* Анимации изменения статов */
+/* Вылетающие цифры при изменении статов */
+@keyframes flyUp {
+    0% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-30px);
+        opacity: 0;
+    }
+}
+
+/* Пульсация значения стата */
+@keyframes statPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.15);
+    }
+}
+
+/* Появление тултипа */
+@keyframes tooltipFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Исчезновение тултипа */
+@keyframes tooltipFadeOut {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+}
+
+/* Аккордеон истории */
+.history-accordion-item summary {
+    list-style: none;
+}
+
+.history-accordion-item summary::-webkit-details-marker {
+    display: none;
+}
+
+.history-accordion-item[open] summary {
+    border-bottom: 1px solid #4a0a0a;
+    margin-bottom: 8px;
+}
+
+
+/* Новые цвета для блоков */
+.color-personality { color: #fbc531; } /* Жёлтый */
+.color-typology { color: #4cd137; } /* Зелёный */
+.color-relations { color: #ff9ff3; } /* Нежно-розовый */
+.color-skills { color: #6c5ce7; } /* Тёмно-фиолетовый */
+.color-stat-buffs { color: #3498db; } /* Синий */
+.color-blessings { color: #bdc3c7; } /* Серебряно-белый */
+.color-curses { color: #ff3838; } /* Красный */
+.color-details { color: #00cec9; } /* Голубой */
+.color-inventory { color: #8b4513; } /* Древесный */

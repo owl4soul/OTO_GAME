@@ -40,16 +40,19 @@ class StateObserver {
      * Уведомить всех подписчиков события
      */
     notify(event, data = null) {
-        if (this.observers.has(event)) {
-            this.observers.get(event).forEach(callback => {
-                try {
-                    callback(data, event);
-                } catch (error) {
-                    console.error(`❌ Ошибка в обработчике события ${event}:`, error);
-                }
-            });
-        }
+    if (this.observers.has(event)) {
+        this.observers.get(event).forEach(callback => {
+            try {
+                callback(data, event);
+            } catch (error) {
+                console.error(`❌ Ошибка в обработчике события ${event}:`, error.message);
+                console.error('Тип ошибки:', error.name);
+                console.error('Данные события:', data);
+                console.error('Стек ошибки:', error.stack);
+            }
+        });
     }
+}
 
     /**
      * Удалить все подписки события
@@ -108,7 +111,7 @@ const DEFAULT_HERO_STATE = [
   { "id": "initiation_degree:oto_0", "value": "0° — Минервал (кандидат)" },
   {
     "id": "personality:hero",
-    "value": "Молодой Минервал, полный идеалов, но не испытанный тьмой. Ищет знание и силу в запрещённых учениях."
+    "value": "Молодой Минервал, полный энтузиазма."
   }
 ];
 
@@ -149,6 +152,7 @@ const DEFAULT_STATE = {
   ritualTarget: null,
   freeMode: false,
   freeModeText: '',
+  lastTurnStatChanges: null,
   lastTurnUpdates: "",
   thoughtsOfHero: [],
   pendingRequest: null
@@ -299,152 +303,248 @@ function syncDegree() {
 // ОПЕРАЦИИ НАД GAME_ITEM
 // ========================
 
+
+/**
+ * УЛУЧШЕННАЯ ФУНКЦИЯ: Применение операций к heroState
+ * СТРОГОЕ ПРАВИЛО: Пустые значения НИКОГДА не перезаписывают имеющиеся значения
+ */
 function applyOperations(operations) {
-    console.log('🔧 applyOperations called with:', operations);
-    
-    if (!Array.isArray(operations) || operations.length === 0) {
-        console.log('⚠️ Нет операций для применения');
+  if (!Array.isArray(operations) || operations.length === 0) {
+    console.log('⚠️ Нет операций для применения');
+    return {
+      applied: [],
+      failed: [],
+      changes: 'Нет явных изменений'
+    };
+  }
+  
+  const appliedOps = [];
+  const failedOps = [];
+  const changeLog = [];
+  
+  operations.forEach((op, idx) => {
+    try {
+      if (!op || typeof op !== 'object') {
+        console.warn(`⚠️ Операция ${idx}: Некорректный объект, пропускаем`);
+        failedOps.push({ op, reason: 'Некорректный объект' });
         return;
-    }
-    
-    if (!Array.isArray(state.heroState)) {
-        console.error('❌ heroState не является массивом');
+      }
+      
+      const { operation, id } = op;
+      
+      if (!operation || !id) {
+        console.warn(`⚠️ Операция ${idx}: Отсутствуют обязательные поля operation/id`);
+        failedOps.push({ op, reason: 'Отсутствуют обязательные поля' });
         return;
-    }
-    
-    let hasChanges = false;
-    const operationResults = [];
-    
-    operations.forEach(operation => {
-        if (!operation || !operation.id || !operation.operation) {
-            console.warn('⚠️ Пропускаем некорректную операцию:', operation);
+      }
+      
+      const findItem = (itemId) => state.heroState.find(item => item.id === itemId);
+      const removeItem = (itemId) => {
+        const index = state.heroState.findIndex(item => item.id === itemId);
+        if (index !== -1) {
+          state.heroState.splice(index, 1);
+          return true;
+        }
+        return false;
+      };
+      
+      // ==================================================================
+      // ОПЕРАЦИЯ: ADD
+      // ==================================================================
+      if (operation === 'ADD') {
+        if (op.value === undefined || op.value === null) {
+          console.warn(`⚠️ ADD операция без значения value для ${id}`);
+          failedOps.push({ op, reason: 'Отсутствует value' });
+          return;
+        }
+        
+        const existingItem = findItem(id);
+        
+        // КРИТИЧЕСКАЯ ПРОВЕРКА: если объект уже существует и не пустой - не перезаписываем
+        if (existingItem) {
+          if (existingItem.value && existingItem.value.toString().trim() !== '') {
+            console.warn(`⚠️ Объект ${id} уже существует с непустым значением, пропускаем ADD`);
+            failedOps.push({ op, reason: 'Объект уже существует с непустым значением' });
             return;
+          }
         }
         
-        const existingIndex = state.heroState.findIndex(item => item && item.id === operation.id);
+        const extraFields = {};
+        if (op.description) extraFields.description = op.description;
+        if (op.duration !== undefined) extraFields.duration = op.duration;
+        if (op.max !== undefined) extraFields.max = op.max;
+        if (op.min !== undefined) extraFields.min = op.min;
         
-        try {
-            let eventData = null;
-            
-            switch (operation.operation) {
-                case 'ADD':
-                    if (existingIndex === -1) {
-                        // Сохраняем все поля операции как свойства game_item
-                        const newItem = {
-                            id: operation.id,
-                            value: operation.value
-                        };
-
-                        // Переносим все дополнительные поля из операции в game_item
-                        Object.keys(operation).forEach(key => {
-                            if (key !== 'operation' && key !== 'id' && key !== 'value') {
-                                newItem[key] = operation[key];
-                            }
-                        });
-
-                        state.heroState.push(newItem);
-                        
-                        eventData = { 
-                            id: operation.id, 
-                            value: operation.value,
-                            operation: operation 
-                        };
-                        stateObserver.notify(STATE_EVENTS.HERO_ITEM_ADDED, eventData);
-                        console.log(`➕ Добавлен: ${operation.id} = ${operation.value}`);
-                        hasChanges = true;
-                    }
-                    break;
-                    
-                case 'REMOVE':
-                    if (existingIndex !== -1) {
-                        const removedItem = state.heroState[existingIndex];
-                        state.heroState.splice(existingIndex, 1);
-                        eventData = { id: operation.id, operation: operation };
-                        stateObserver.notify(STATE_EVENTS.HERO_ITEM_REMOVED, eventData);
-                        console.log(`➖ Удален: ${operation.id}`);
-                        hasChanges = true;
-                    }
-                    break;
-                    
-                case 'SET':
-                    if (existingIndex !== -1) {
-                        const oldValue = state.heroState[existingIndex].value;
-                        state.heroState[existingIndex].value = operation.value;
-                        
-                        // Обновляем дополнительные поля, если они есть в операции
-                        Object.keys(operation).forEach(key => {
-                             if (key !== 'operation' && key !== 'id' && key !== 'value') {
-                                state.heroState[existingIndex][key] = operation[key];
-                            }
-                        });
-
-                        eventData = { 
-                            id: operation.id, 
-                            oldValue: oldValue, 
-                            newValue: operation.value, 
-                            operation: operation 
-                        };
-                        stateObserver.notify(STATE_EVENTS.HERO_ITEM_MODIFIED, eventData);
-                        console.log(`✏️ Установлен: ${operation.id} = ${operation.value}`);
-                        hasChanges = true;
-                    }
-                    break;
-                    
-                case 'MODIFY':
-                    if (existingIndex !== -1) {
-                        const currentItem = state.heroState[existingIndex];
-                        if (typeof currentItem.value === 'number') {
-                            const oldValue = currentItem.value;
-                            const newValue = operation.id.startsWith('stat:') 
-                                ? Math.max(0, Math.min(100, oldValue + (operation.delta || 0)))
-                                : oldValue + (operation.delta || 0);
-                            
-                            state.heroState[existingIndex].value = newValue;
-                            
-                            eventData = { 
-                                id: operation.id, 
-                                delta: operation.delta || 0,
-                                oldValue: oldValue,
-                                newValue: newValue,
-                                operation: operation 
-                            };
-                            
-                            if (operation.id.startsWith('stat:')) {
-                                stateObserver.notify(STATE_EVENTS.HERO_STATS_UPDATED, eventData);
-                            } else {
-                                stateObserver.notify(STATE_EVENTS.HERO_ITEM_MODIFIED, eventData);
-                            }
-                            
-                            console.log(`📊 Модифицирован: ${operation.id} ${oldValue} → ${newValue}`);
-                            hasChanges = true;
-                        }
-                    }
-                    break;
-            }
-            
-            if (eventData) {
-                operationResults.push(eventData);
-            }
-            
-        } catch (error) {
-            console.error(`❌ Ошибка при обработке операции ${JSON.stringify(operation)}:`, error);
+        if (existingItem) {
+          // Обновляем существующий объект
+          Object.assign(existingItem, { value: op.value, ...extraFields });
+          console.log(`✅ Обновлен объект: ${id} = ${op.value}`);
+          changeLog.push(`Обновлено: ${id} → ${op.value}`);
+        } else {
+          // Создаем новый объект
+          state.heroState.push({ id, value: op.value, ...extraFields });
+          console.log(`✅ Добавлен новый объект: ${id} = ${op.value}`);
+          changeLog.push(`Добавлено: ${id} = ${op.value}`);
         }
-    });
-    
-    if (hasChanges) {
-        // 🚫🚫🚫 ВАЖНО: Удален вызов processDurations() отсюда.
-        // Уменьшение длительности должно происходить ТОЛЬКО в processTurn в модуле Game.
         
-        stateObserver.notify(STATE_EVENTS.HERO_CHANGED, {
-            operations: operationResults,
-            heroState: state.heroState
-        });
+        appliedOps.push(op);
+        stateObserver.notify(STATE_EVENTS.HERO_ITEM_ADDED, { id, value: op.value });
+        return;
+      }
+      
+      // ==================================================================
+      // ОПЕРАЦИЯ: MODIFY
+      // ==================================================================
+      if (operation === 'MODIFY') {
+        const delta = op.delta !== undefined ? op.delta : 0;
+        let item = findItem(id);
         
-        Saveload.saveState();
-        console.log('✅ Состояние обновлено (applyOperations)');
-    } else {
-        console.log('⚠️ Не было изменений для применения');
+        if (!item) {
+          // Если объект не существует - создаем его с начальным значением
+          const initialValue = op.min !== undefined ? op.min : 0;
+          item = { id, value: initialValue + delta };
+          
+          if (op.max !== undefined) item.max = op.max;
+          if (op.min !== undefined) item.min = op.min;
+          if (op.description) item.description = op.description;
+          
+          state.heroState.push(item);
+          console.log(`✅ Создан новый объект при MODIFY: ${id} = ${item.value}`);
+          changeLog.push(`Создано: ${id} = ${item.value}`);
+        } else {
+          // Модифицируем существующее значение
+          const oldValue = item.value || 0;
+          let newValue = (typeof oldValue === 'number' ? oldValue : 0) + delta;
+          
+          // Применяем ограничения
+          if (op.max !== undefined && newValue > op.max) {
+            newValue = op.max;
+          }
+          if (op.min !== undefined && newValue < op.min) {
+            newValue = op.min;
+          }
+          
+          item.value = newValue;
+          
+          if (op.max !== undefined) item.max = op.max;
+          if (op.min !== undefined) item.min = op.min;
+          
+          console.log(`✅ Модифицирован объект: ${id} ${oldValue} ${delta > 0 ? '+' : ''}${delta} = ${newValue}`);
+          changeLog.push(`${id}: ${oldValue} → ${newValue} (${delta > 0 ? '+' : ''}${delta})`);
+        }
+        
+        appliedOps.push(op);
+        stateObserver.notify(STATE_EVENTS.HERO_ITEM_MODIFIED, { id, value: item.value, delta });
+        
+        if (id.startsWith('stat:')) {
+          stateObserver.notify(STATE_EVENTS.HERO_STATS_UPDATED, { id, value: item.value });
+        }
+        
+        return;
+      }
+      
+      // ==================================================================
+      // ОПЕРАЦИЯ: SET
+      // ==================================================================
+      if (operation === 'SET') {
+        const existingItem = findItem(id);
+        
+        // КРИТИЧЕСКАЯ ПРОВЕРКА: пустые значения не перезаписывают имеющиеся
+        if (existingItem && existingItem.value) {
+          const existingValueStr = existingItem.value.toString().trim();
+          const newValueStr = (op.value !== undefined && op.value !== null) ?
+            op.value.toString().trim() : '';
+          
+          if (existingValueStr !== '' && newValueStr === '') {
+            console.warn(`⚠️ Попытка перезаписать непустое значение "${existingValueStr}" пустым для ${id}, пропускаем`);
+            failedOps.push({ op, reason: 'Попытка перезаписать непустое значение пустым' });
+            return;
+          }
+        }
+        
+        const extraFields = {};
+        if (op.description) extraFields.description = op.description;
+        if (op.duration !== undefined) extraFields.duration = op.duration;
+        if (op.max !== undefined) extraFields.max = op.max;
+        if (op.min !== undefined) extraFields.min = op.min;
+        
+        if (existingItem) {
+          // Обновляем существующий объект
+          const oldValue = existingItem.value;
+          Object.assign(existingItem, { value: op.value, ...extraFields });
+          console.log(`✅ SET для существующего объекта: ${id} = ${op.value}`);
+          changeLog.push(`Установлено: ${id} → ${op.value} (было: ${oldValue})`);
+        } else {
+          // Создаем новый объект
+          state.heroState.push({ id, value: op.value, ...extraFields });
+          console.log(`✅ SET создал новый объект: ${id} = ${op.value}`);
+          changeLog.push(`Создано: ${id} = ${op.value}`);
+        }
+        
+        appliedOps.push(op);
+        stateObserver.notify(STATE_EVENTS.HERO_ITEM_MODIFIED, { id, value: op.value });
+        
+        if (id.startsWith('stat:')) {
+          stateObserver.notify(STATE_EVENTS.HERO_STATS_UPDATED, { id, value: op.value });
+        }
+        
+        return;
+      }
+      
+      // ==================================================================
+      // ОПЕРАЦИЯ: REMOVE
+      // ==================================================================
+      if (operation === 'REMOVE') {
+        const removed = removeItem(id);
+        
+        if (removed) {
+          console.log(`✅ Удален объект: ${id}`);
+          changeLog.push(`Удалено: ${id}`);
+          appliedOps.push(op);
+          stateObserver.notify(STATE_EVENTS.HERO_ITEM_REMOVED, { id });
+        } else {
+          console.warn(`⚠️ Попытка удалить несуществующий объект: ${id}`);
+          failedOps.push({ op, reason: 'Объект не найден' });
+        }
+        
+        return;
+      }
+      
+      // Неизвестная операция
+      console.warn(`⚠️ Неизвестный тип операции: ${operation}`);
+      failedOps.push({ op, reason: `Неизвестный тип операции: ${operation}` });
+      
+    } catch (error) {
+      console.error(`❌ Ошибка при применении операции ${idx}:`, error, op);
+      failedOps.push({ op, reason: error.message });
     }
+  });
+  
+  // Формируем итоговый лог изменений
+  const changesText = changeLog.length > 0 ? changeLog.join('; ') : 'Нет явных изменений';
+  
+  // Уведомляем о глобальных изменениях героя
+  if (appliedOps.length > 0) {
+    stateObserver.notify(STATE_EVENTS.HERO_CHANGED, {
+      type: 'operations_applied',
+      appliedCount: appliedOps.length,
+      failedCount: failedOps.length
+    });
+  }
+  
+  // Проверяем на смерть героя
+  checkHeroDeath();
+  
+  // Синхронизируем степень инициации
+  syncDegree();
+  
+  console.log(`📊 Операций применено: ${appliedOps.length}, провалено: ${failedOps.length}`);
+  
+  return {
+    applied: appliedOps,
+    failed: failedOps,
+    changes: changesText
+  };
 }
 
 function getGameItem(id) {
@@ -540,7 +640,9 @@ function exportFullState() {
       lastSaveTime: state.lastSaveTime,
       totalPlayTime: calculateTotalPlayTime(),
       totalChoices: state.gameState.history.length
-    }
+    },
+    lastTurnUpdates: state.lastTurnUpdates,
+    lastTurnStatChanges: state.lastTurnStatChanges
   };
   
   stateObserver.notify(STATE_EVENTS.STATE_EXPORTED, { data: exportData });
@@ -577,6 +679,14 @@ function importFullState(importData) {
   
   if (importData.gameId) state.gameId = importData.gameId;
   if (importData.exportTime) state.lastSaveTime = importData.exportTime;
+  
+      if (importData.lastTurnUpdates !== undefined) {
+      state.lastTurnUpdates = importData.lastTurnUpdates;
+    }
+    
+    if (importData.lastTurnStatChanges !== undefined) {
+      state.lastTurnStatChanges = importData.lastTurnStatChanges;
+    }
   
   syncDegree();
   
