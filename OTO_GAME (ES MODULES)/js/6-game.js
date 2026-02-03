@@ -236,6 +236,7 @@ function createOperationHTML(operation, source) {
 }
 
 // ИСПРАВЛЕНО: Функция для создания HTML изменений за ход
+// ПЕРЕРАБОТАННАЯ ФУНКЦИЯ: Компактный блок изменений за ход
 function createTurnUpdatesHTML(actionResults, events) {
     console.log('🔍 createTurnUpdatesHTML called with:', { actionResults, events });
     
@@ -245,20 +246,20 @@ function createTurnUpdatesHTML(actionResults, events) {
     }
     
     let html = `
-        <div class="turn-updates-container" style="margin: 20px 0; padding: 15px; background: rgba(0, 0, 0, 0.4); border-radius: 8px; border: 1px solid #444; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
-            <div style="color: #d4af37; font-family: 'Roboto Mono', monospace; font-size: 1.1rem; font-weight: bold; margin-bottom: 15px; letter-spacing: 1px; border-bottom: 2px solid #d4af37; padding-bottom: 5px;">
-                <i class="fas fa-clipboard-list"></i> ИЗМЕНЕНИЯ ЗА ХОД
+        <div class="turn-updates-container" style="margin: 8px 0; padding: 10px; background: rgba(10, 0, 0, 0.7); border: 1px solid #4a0a0a; border-radius: 4px; font-size: 0.85em;">
+            <div style="color: #d4af37; font-weight: bold; font-size: 0.9em; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #4a0a0a; letter-spacing: 0.5px;">
+                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД
             </div>
     `;
     
     let hasActionOperations = false;
     if (actionResults && actionResults.length > 0) {
         html += `
-            <div style="margin-bottom: 20px;">
-                <div style="color: #4cd137; font-size: 0.95rem; font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #4cd137;">
-                    <i class="fas fa-user-check"></i> По результатам выбранных действий
+            <div style="margin-bottom: 12px;">
+                <div style="color: #4cd137; font-size: 0.85em; font-weight: bold; margin-bottom: 6px; padding-bottom: 2px; border-bottom: 1px solid #4cd13740;">
+                    <i class="fas fa-user-check"></i> По результатам действий
                 </div>
-                <div style="font-size: 0.85rem;">
+                <div style="font-size: 0.82em;">
         `;
         
         actionResults.forEach((result, idx) => {
@@ -271,20 +272,25 @@ function createTurnUpdatesHTML(actionResults, events) {
             const partialText = result.partial ? ' (частично)' : '';
             
             html += `
-                <div style="margin-bottom: 12px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 6px; border-left: 4px solid ${successColor};">
-                    <div style="color: ${successColor}; font-weight: bold; font-size: 0.9rem;">
-                        <i class="fas ${successIcon}"></i> Действие ${idx + 1}${partialText}
+                <div style="margin-bottom: 8px; padding: 6px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; border-left: 3px solid ${successColor};">
+                    <div style="color: ${successColor}; font-weight: bold; font-size: 0.85em; display: flex; align-items: center; gap: 5px;">
+                        <i class="fas ${successIcon}" style="font-size: 0.9em;"></i> 
+                        <span>Действие ${idx + 1}${partialText}</span>
                     </div>
-                    <div style="color: #ccc; font-size: 0.85rem; margin-top: 5px;">${result.choice_text || 'Действие'}</div>
-                    <div style="color: #aaa; font-size: 0.8rem; margin-top: 5px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 3px;">
-                        ${result.reason || ''} | 🎯 Сложность: ${result.difficulty} | 🎲 d10: ${result.d10}
+                    <div style="color: #ddd; font-size: 0.85em; margin-top: 4px; padding: 3px; background: rgba(0,0,0,0.2); border-radius: 2px;">
+                        ${result.choice_text || 'Действие'}
+                    </div>
+                    <div style="color: #aaa; font-size: 0.75em; margin-top: 3px; display: flex; gap: 8px;">
+                        <span>🎯 Сложность: ${result.difficulty}</span>
+                        <span>🎲 d10: ${result.d10}</span>
+                        <span>${result.reason || ''}</span>
                     </div>
             `;
             
             if (operations.length > 0) {
-                html += `<div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid ${successColor};">`;
+                html += `<div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid ${successColor}40;">`;
                 operations.forEach(op => {
-                    html += createOperationHTML(op, 'action');
+                    html += createCompactOperationHTML(op, 'action');
                 });
                 html += `</div>`;
             }
@@ -293,7 +299,7 @@ function createTurnUpdatesHTML(actionResults, events) {
         });
         
         if (!hasActionOperations) {
-            html += `<div style="color: #888; font-style: italic; text-align: center; padding: 10px;">Нет операций от действий</div>`;
+            html += `<div style="color: #888; font-style: italic; font-size: 0.85em; text-align: center; padding: 8px;">Нет операций от действий</div>`;
         }
         
         html += `</div></div>`;
@@ -302,11 +308,11 @@ function createTurnUpdatesHTML(actionResults, events) {
     let hasEventOperations = false;
     if (events && events.length > 0) {
         html += `
-            <div style="margin-bottom: 10px;">
-                <div style="color: #00a8ff; font-size: 0.95rem; font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px solid #00a8ff;">
-                    <i class="fas fa-bolt"></i> По результатам произошедших событий
+            <div style="margin-bottom: 8px;">
+                <div style="color: #00a8ff; font-size: 0.85em; font-weight: bold; margin-bottom: 6px; padding-bottom: 2px; border-bottom: 1px solid #00a8ff40;">
+                    <i class="fas fa-bolt"></i> По результатам событий
                 </div>
-                <div style="font-size: 0.85rem;">
+                <div style="font-size: 0.82em;">
         `;
         
         events.forEach((event, idx) => {
@@ -325,19 +331,23 @@ function createTurnUpdatesHTML(actionResults, events) {
             const eventDesc = event.description || 'Событие';
             
             html += `
-                <div style="margin-bottom: 12px; padding: 10px; background: rgba(0, 170, 255, 0.1); border-radius: 6px; border-left: 4px solid #00a8ff;">
-                    <div style="color: #00a8ff; font-weight: bold; font-size: 0.9rem;">
-                        <i class="fas ${icon}"></i> ${event.type ? event.type.toUpperCase() : 'СОБЫТИЕ'}: ${eventDesc.substring(0, 80)}${eventDesc.length > 80 ? '...' : ''}
+                <div style="margin-bottom: 8px; padding: 6px; background: rgba(0, 170, 255, 0.08); border-radius: 3px; border-left: 3px solid #00a8ff;">
+                    <div style="color: #00a8ff; font-weight: bold; font-size: 0.85em; display: flex; align-items: center; gap: 5px;">
+                        <i class="fas ${icon}" style="font-size: 0.9em;"></i>
+                        <span>${event.type ? event.type.toUpperCase() : 'СОБЫТИЕ'}</span>
                     </div>
-                    <div style="color: #aaa; font-size: 0.8rem; margin-top: 5px; background: rgba(0,170,255,0.05); padding: 4px 8px; border-radius: 3px;">
+                    <div style="color: #ddd; font-size: 0.85em; margin-top: 4px; padding: 3px; background: rgba(0,170,255,0.05); border-radius: 2px;">
+                        ${eventDesc}
+                    </div>
+                    <div style="color: #aaa; font-size: 0.75em; margin-top: 3px;">
                         <i class="fas fa-info-circle"></i> ${event.reason || 'Нет описания'}
                     </div>
             `;
             
             if (effects.length > 0) {
-                html += `<div style="margin-top: 10px; padding-left: 10px; border-left: 2px solid #00a8ff;">`;
+                html += `<div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid #00a8ff40;">`;
                 effects.forEach(effect => {
-                    html += createOperationHTML(effect, 'event');
+                    html += createCompactOperationHTML(effect, 'event');
                 });
                 html += `</div>`;
             }
@@ -346,7 +356,7 @@ function createTurnUpdatesHTML(actionResults, events) {
         });
         
         if (!hasEventOperations) {
-            html += `<div style="color: #888; font-style: italic; text-align: center; padding: 10px;">Нет операций от событий</div>`;
+            html += `<div style="color: #888; font-style: italic; font-size: 0.85em; text-align: center; padding: 8px;">Нет операций от событий</div>`;
         }
         
         html += `</div></div>`;
@@ -354,6 +364,162 @@ function createTurnUpdatesHTML(actionResults, events) {
     
     html += `</div>`;
     return html;
+}
+
+// НОВАЯ ФУНКЦИЯ: Компактное отображение операции
+function createCompactOperationHTML(operation, source) {
+    if (!operation || !operation.id || !operation.operation) {
+        console.warn('Некорректная операция:', operation);
+        return '';
+    }
+    
+    const sourceColor = source === 'action' ? '#4cd137' : '#00a8ff';
+    const [type, name] = operation.id.split(':');
+    
+    let displayName = name;
+    let icon = 'fas fa-question';
+    let valueDisplay = '';
+    let color = '#ccc';
+    
+    // Используем value для отображения, а не id
+    let displayValue = operation.value || '';
+    
+    // Унифицируем отображение длительности
+    let displayDuration = '';
+    if (operation.duration !== undefined) {
+        displayDuration = `[${operation.duration} ход.]`;
+    }
+    
+    switch (type) {
+        case 'stat':
+            icon = 'fas fa-chart-line';
+            color = '#fbc531';
+            displayName = getRussianStatName(name);
+            break;
+        case 'skill':
+            icon = 'fas fa-scroll';
+            color = '#9c88ff';
+            displayName = displayValue || name;
+            break;
+        case 'inventory':
+            icon = 'fas fa-box-open';
+            color = '#d4af37';
+            displayName = displayValue || name;
+            break;
+        case 'relations':
+            icon = 'fas fa-handshake';
+            color = '#ff9ff3';
+            displayName = name.replace(/_/g, ' ');
+            break;
+        case 'bless':
+            icon = 'fas fa-star';
+            color = '#fbc531';
+            displayName = displayValue || name;
+            break;
+        case 'curse':
+            icon = 'fas fa-skull-crossbones';
+            color = '#c23616';
+            displayName = displayValue || name;
+            break;
+        case 'buff':
+            icon = 'fas fa-arrow-up';
+            color = '#4cd137';
+            displayName = getRussianStatName(name);
+            break;
+        case 'debuff':
+            icon = 'fas fa-arrow-down';
+            color = '#e84118';
+            displayName = getRussianStatName(name);
+            break;
+        case 'progress':
+            icon = 'fas fa-chart-line';
+            color = '#00a8ff';
+            displayName = displayValue || name;
+            break;
+        case 'personality':
+            icon = 'fas fa-brain';
+            color = '#1dd1a1';
+            displayName = displayValue || name;
+            break;
+        case 'initiation_degree':
+            icon = 'fas fa-graduation-cap';
+            color = '#ff9ff3';
+            displayName = displayValue || name;
+            break;
+    }
+    
+    // Форматируем значение в зависимости от типа операции
+    switch (operation.operation) {
+        case OPERATION_TYPES.ADD:
+            if (type === 'buff' || type === 'debuff') {
+                const sign = operation.value > 0 ? '+' : '';
+                valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                    ${displayName} ${sign}${operation.value} ${displayDuration}
+                </span>`;
+            } else {
+                const addedValue = displayValue ? `: "${displayValue}"` : '';
+                valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                    Добавить ${displayName}${addedValue}
+                </span>`;
+            }
+            break;
+            
+        case OPERATION_TYPES.REMOVE:
+            valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                Удалить: ${displayName}
+            </span>`;
+            break;
+            
+        case OPERATION_TYPES.SET:
+            valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                Установить ${displayName}: "${String(displayValue).substring(0, 50)}"
+            </span>`;
+            break;
+            
+        case OPERATION_TYPES.MODIFY:
+            const sign = operation.delta > 0 ? '+' : '';
+            const deltaColor = operation.delta > 0 ? '#4cd137' : '#e84118';
+            valueDisplay = `<span style="color: ${deltaColor}; font-weight: bold;">
+                ${displayName} ${sign}${operation.delta}
+            </span>`;
+            break;
+    }
+    
+    // Добавляем описание, если есть
+    let description = '';
+    if (operation.description) {
+        description = `<div style="color: #aaa; font-size: 0.75em; margin-top: 2px; font-style: italic;">
+            ${operation.description}
+        </div>`;
+    }
+    
+    // ОТОБРАЖЕНИЕ ВСЕХ НЕПУСТЫХ ПОЛЕЙ
+    let extraFields = '';
+    const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta'];
+    
+    Object.keys(operation).forEach(key => {
+        if (!ignoredKeys.includes(key)) {
+            const val = operation[key];
+            if (val !== undefined && val !== null && val !== '') {
+                extraFields += `<div style="color: #666; font-size: 0.7em;">${key}: ${val}</div>`;
+            }
+        }
+    });
+    
+    return `
+        <div style="display: flex; align-items: flex-start; padding: 5px 0; border-bottom: 1px dotted #333;">
+            <div style="margin-right: 8px; margin-top: 2px;">
+                <i class="${icon}" style="color: ${color}; font-size: 0.8em;"></i>
+            </div>
+            <div style="flex: 1; min-width: 0;">
+                <div style="color: #ddd; font-size: 0.85em; margin-bottom: 1px; word-wrap: break-word;">
+                    ${valueDisplay}
+                </div>
+                ${description}
+                ${extraFields}
+            </div>
+        </div>
+    `;
 }
 
 function calculateChoiceResult(choice, d10) {
