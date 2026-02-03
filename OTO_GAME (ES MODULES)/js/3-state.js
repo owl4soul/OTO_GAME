@@ -11,59 +11,59 @@ import { PROMPTS } from './prompts.js';
 // ========================
 
 class StateObserver {
-    constructor() {
-        this.observers = new Map(); // eventName -> Set<callback>
+  constructor() {
+    this.observers = new Map(); // eventName -> Set<callback>
+  }
+  
+  /**
+   * Подписаться на событие
+   */
+  subscribe(event, callback) {
+    if (!this.observers.has(event)) {
+      this.observers.set(event, new Set());
     }
-
-    /**
-     * Подписаться на событие
-     */
-    subscribe(event, callback) {
-        if (!this.observers.has(event)) {
-            this.observers.set(event, new Set());
-        }
-        this.observers.get(event).add(callback);
-        
-        return () => this.unsubscribe(event, callback);
-    }
-
-    /**
-     * Отписаться от события
-     */
-    unsubscribe(event, callback) {
-        if (this.observers.has(event)) {
-            this.observers.get(event).delete(callback);
-        }
-    }
-
-    /**
-     * Уведомить всех подписчиков события
-     */
-    notify(event, data = null) {
+    this.observers.get(event).add(callback);
+    
+    return () => this.unsubscribe(event, callback);
+  }
+  
+  /**
+   * Отписаться от события
+   */
+  unsubscribe(event, callback) {
     if (this.observers.has(event)) {
-        this.observers.get(event).forEach(callback => {
-            try {
-                callback(data, event);
-            } catch (error) {
-                console.error(`❌ Ошибка в обработчике события ${event}:`, error.message);
-                console.error('Тип ошибки:', error.name);
-                console.error('Данные события:', data);
-                console.error('Стек ошибки:', error.stack);
-            }
-        });
+      this.observers.get(event).delete(callback);
     }
-}
-
-    /**
-     * Удалить все подписки события
-     */
-    clear(event = null) {
-        if (event) {
-            this.observers.delete(event);
-        } else {
-            this.observers.clear();
+  }
+  
+  /**
+   * Уведомить всех подписчиков события
+   */
+  notify(event, data = null) {
+    if (this.observers.has(event)) {
+      this.observers.get(event).forEach(callback => {
+        try {
+          callback(data, event);
+        } catch (error) {
+          console.error(`❌ Ошибка в обработчике события ${event}:`, error.message);
+          console.error('Тип ошибки:', error.name);
+          console.error('Данные события:', data);
+          console.error('Стек ошибки:', error.stack);
         }
+      });
     }
+  }
+  
+  /**
+   * Удалить все подписки события
+   */
+  clear(event = null) {
+    if (event) {
+      this.observers.delete(event);
+    } else {
+      this.observers.clear();
+    }
+  }
 }
 
 // Создаем глобальный экземпляр наблюдателя
@@ -71,31 +71,31 @@ const stateObserver = new StateObserver();
 
 // События состояния
 const STATE_EVENTS = {
-    INITIALIZED: 'state:initialized',
-    LOADED: 'state:loaded',
-    SAVED: 'state:saved',
-    HERO_CHANGED: 'hero:changed',
-    HERO_STATS_UPDATED: 'hero:stats:updated',
-    HERO_ITEM_ADDED: 'hero:item:added',
-    HERO_ITEM_REMOVED: 'hero:item:removed',
-    HERO_ITEM_MODIFIED: 'hero:item:modified',
-    SCENE_CHANGED: 'scene:changed',
-    TURN_COMPLETED: 'turn:completed',
-    CHOICES_CHANGED: 'choices:changed',
-    HISTORY_UPDATED: 'history:updated',
-    UI_STATE_CHANGED: 'ui:changed',
-    SCALE_CHANGED: 'scale:changed',
-    MODE_CHANGED: 'mode:changed',
-    SETTINGS_CHANGED: 'settings:changed',
-    MODEL_CHANGED: 'model:changed',
-    RITUAL_STARTED: 'ritual:started',
-    RITUAL_PROGRESS: 'ritual:progress',
-    DEGREE_UPGRADED: 'degree:upgraded',
-    STATE_EXPORTED: 'state:exported',
-    STATE_IMPORTED: 'state:imported',
-    HERO_DEATH: 'hero:death',
-    VICTORY: 'victory',
-    THOUGHTS_UPDATED: 'thoughts:updated'
+  INITIALIZED: 'state:initialized',
+  LOADED: 'state:loaded',
+  SAVED: 'state:saved',
+  HERO_CHANGED: 'hero:changed',
+  HERO_STATS_UPDATED: 'hero:stats:updated',
+  HERO_ITEM_ADDED: 'hero:item:added',
+  HERO_ITEM_REMOVED: 'hero:item:removed',
+  HERO_ITEM_MODIFIED: 'hero:item:modified',
+  SCENE_CHANGED: 'scene:changed',
+  TURN_COMPLETED: 'turn:completed',
+  CHOICES_CHANGED: 'choices:changed',
+  HISTORY_UPDATED: 'history:updated',
+  UI_STATE_CHANGED: 'ui:changed',
+  SCALE_CHANGED: 'scale:changed',
+  MODE_CHANGED: 'mode:changed',
+  SETTINGS_CHANGED: 'settings:changed',
+  MODEL_CHANGED: 'model:changed',
+  RITUAL_STARTED: 'ritual:started',
+  RITUAL_PROGRESS: 'ritual:progress',
+  DEGREE_UPGRADED: 'degree:upgraded',
+  STATE_EXPORTED: 'state:exported',
+  STATE_IMPORTED: 'state:imported',
+  HERO_DEATH: 'hero:death',
+  VICTORY: 'victory',
+  THOUGHTS_UPDATED: 'thoughts:updated'
 };
 
 // ========================
@@ -119,7 +119,7 @@ const DEFAULT_STATE = {
   version: '4.1.0',
   gameId: Utils.generateUniqueId(),
   lastSaveTime: new Date().toISOString(),
-  turnCount: 0,
+  turnCount: 1,
   heroState: [...DEFAULT_HERO_STATE],
   gameState: {
     summary: "",
@@ -138,7 +138,7 @@ const DEFAULT_STATE = {
     isAutoCollapsed: false
   },
   settings: {
-    apiProvider: 'openrouter',
+    apiProvider: 'vsegpt',
     apiKeyOpenrouter: '',
     apiKeyVsegpt: '',
     model: 'openai/gpt-3.5-turbo-16k',
@@ -177,8 +177,7 @@ function initializeState() {
         const parsed = JSON.parse(savedState);
         
         if (parsed.version !== '4.1.0') {
-          console.error('❌ Неподдерживаемая версия состояния:', parsed.version);
-          throw new Error(`Неподдерживаемая версия состояния: ${parsed.version}. Требуется версия 4.1.0`);
+          console.warn('Версия состояния памяти не совпадает с версией приложения (4.1.0):', parsed.version);
         }
         
         for (const [key, defaultValue] of Object.entries(DEFAULT_STATE)) {
@@ -202,8 +201,21 @@ function initializeState() {
           state.gameState.currentScene = { ...PROMPTS.initialGameState };
         }
         
+        // После загрузки состояния в initializeState добавьте:
         console.log('✅ Состояние загружено из localStorage (формат 4.1)');
         stateObserver.notify(STATE_EVENTS.LOADED, { gameId: state.gameId });
+        
+        // Добавляем начальную сцену в историю, если история пуста
+        if (state.gameState.history.length === 0 && state.gameState.currentScene) {
+          state.gameState.history.push({
+            fullText: state.gameState.currentScene.text || state.gameState.currentScene.scene,
+            choice: "Начало игры",
+            changes: "Новая игра",
+            turn: 1
+          });
+          state.turnCount = 1;
+          console.log('✅ Начальная сцена добавлена в историю как ход #1');
+        }
         
       } catch (parseError) {
         console.error('❌ Ошибка парсинга сохраненного состояния:', parseError);
@@ -548,68 +560,25 @@ function applyOperations(operations) {
 }
 
 function getGameItem(id) {
-    return state.heroState.find(item => item.id === id);
+  return state.heroState.find(item => item.id === id);
 }
 
 function getGameItemsByType(typePrefix) {
-    return state.heroState.filter(item => item.id.startsWith(typePrefix));
+  return state.heroState.filter(item => item.id.startsWith(typePrefix));
 }
 
 function hasGameItem(id) {
-    return state.heroState.some(item => item.id === id);
+  return state.heroState.some(item => item.id === id);
 }
 
 function getGameItemValue(id) {
-    const item = getGameItem(id);
-    return item ? item.value : null;
+  const item = getGameItem(id);
+  return item ? item.value : null;
 }
 
 // ========================
 // СБРОС И ПЕРЕЗАПУСК
 // ========================
-
-function resetGameProgress() {
-  if (confirm("[SOFT RESET] Сбросить прогресс текущей игры?")) {
-    const currentSettings = state.settings;
-    const currentUI = state.ui;
-    const currentModels = state.models;
-    const currentAuditLog = state.auditLog;
-    
-    state.heroState = [...DEFAULT_HERO_STATE];
-    state.gameState = {
-      summary: "",
-      history: [],
-      aiMemory: {},
-      currentScene: { ...PROMPTS.initialGameState },
-      selectedActions: [],
-    };
-    state.settings = currentSettings;
-    state.ui = currentUI;
-    state.models = currentModels;
-    state.auditLog = currentAuditLog;
-    state.turnCount = 0;
-    state.isRitualActive = false;
-    state.ritualProgress = 0;
-    state.ritualTarget = null;
-    state.freeMode = false;
-    state.freeModeText = '';
-    state.lastTurnUpdates = "";
-    state.thoughtsOfHero = [];
-    state.gameId = Utils.generateUniqueId();
-    state.lastSaveTime = new Date().toISOString();
-    
-    syncDegree();
-    
-    stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
-    stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
-    
-    Saveload.saveState();
-    
-    setTimeout(() => {
-      location.reload();
-    }, 100);
-  }
-}
 
 function resetFullGame() {
   if (confirm("[HARD RESET] Сбросить ВСЮ игру, включая настройки?")) {
@@ -680,13 +649,13 @@ function importFullState(importData) {
   if (importData.gameId) state.gameId = importData.gameId;
   if (importData.exportTime) state.lastSaveTime = importData.exportTime;
   
-      if (importData.lastTurnUpdates !== undefined) {
-      state.lastTurnUpdates = importData.lastTurnUpdates;
-    }
-    
-    if (importData.lastTurnStatChanges !== undefined) {
-      state.lastTurnStatChanges = importData.lastTurnStatChanges;
-    }
+  if (importData.lastTurnUpdates !== undefined) {
+    state.lastTurnUpdates = importData.lastTurnUpdates;
+  }
+  
+  if (importData.lastTurnStatChanges !== undefined) {
+    state.lastTurnStatChanges = importData.lastTurnStatChanges;
+  }
   
   syncDegree();
   
@@ -839,6 +808,113 @@ export const State = {
     Saveload.saveState();
   },
   
+  resetGameProgress: (silent = false) => {
+    if (!silent) {
+      if (confirm("[SOFT RESET] Сбросить прогресс текущей игры?")) {
+        const currentSettings = state.settings;
+        const currentUI = state.ui;
+        const currentModels = state.models;
+        const currentAuditLog = state.auditLog;
+        
+        state.heroState = [...DEFAULT_HERO_STATE];
+        // В silent режиме сохраняем установленную новую сцену сгенерированного сюжета:
+        if (!silent) {
+          // Полный сброс
+          state.gameState = {
+            summary: "",
+            history: [],
+            aiMemory: {},
+            currentScene: { ...PROMPTS.initialGameState },
+            selectedActions: [],
+          };
+        } else {
+          // Silent сброс при загрузке нового сюжета - только очищаем историю, но сохраняем currentScene
+          state.gameState.summary = "";
+          state.gameState.history = [];
+          state.gameState.aiMemory = {};
+          state.gameState.selectedActions = [];
+          // currentScene НЕ трогаем - он будет установлен извне
+        }
+        state.settings = currentSettings;
+        state.ui = currentUI;
+        state.models = currentModels;
+        state.auditLog = currentAuditLog;
+        state.turnCount = 0;
+        state.isRitualActive = false;
+        state.ritualProgress = 0;
+        state.ritualTarget = null;
+        state.freeMode = false;
+        state.freeModeText = '';
+        state.lastTurnUpdates = "";
+        state.thoughtsOfHero = [];
+        state.gameId = Utils.generateUniqueId();
+        state.lastSaveTime = new Date().toISOString();
+        
+        syncDegree();
+        
+        stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
+        stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
+        
+        Saveload.saveState();
+        
+        setTimeout(() => {
+          location.reload();
+        }, 100);
+      } else {
+        return;
+      }
+    } else {
+      // SILENT режим - без подтверждения и перезагрузки
+      const currentSettings = state.settings;
+      const currentUI = state.ui;
+      const currentModels = state.models;
+      const currentAuditLog = state.auditLog;
+      
+      state.heroState = [...DEFAULT_HERO_STATE];
+      state.gameState = {
+        summary: "",
+        history: [],
+        aiMemory: {},
+        currentScene: { ...PROMPTS.initialGameState },
+        selectedActions: [],
+      };
+      state.settings = currentSettings;
+      state.ui = currentUI;
+      state.models = currentModels;
+      state.auditLog = currentAuditLog;
+      state.turnCount = 0;
+      state.isRitualActive = false;
+      state.ritualProgress = 0;
+      state.ritualTarget = null;
+      state.freeMode = false;
+      state.freeModeText = '';
+      state.lastTurnUpdates = "";
+      state.thoughtsOfHero = [];
+      state.gameId = Utils.generateUniqueId();
+      state.lastSaveTime = new Date().toISOString();
+      
+      syncDegree();
+      
+      stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
+      stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
+      
+      Saveload.saveState();
+    }
+  },
+  
+  addInitialSceneToHistory: () => {
+    if (state.gameState.history.length === 0 && state.gameState.currentScene) {
+      state.gameState.history.push({
+        fullText: state.gameState.currentScene.text || state.gameState.currentScene.scene,
+        choice: "Начало игры",
+        changes: "Новая игра",
+        turn: 1
+      });
+      state.turnCount = 1; // Устанавливаем счетчик ходов в 1
+      console.log('Начальная сцена добавлена в историю как ход #1');
+    }
+  },
+  
   getHBotBeforeCollapse: () => state.ui.hBotBeforeCollapse,
   setHBotBeforeCollapse: (value) => {
     state.ui.hBotBeforeCollapse = value;
@@ -856,7 +932,6 @@ export const State = {
   
   syncDegree,
   
-  resetGameProgress,
   resetFullGame,
   
   exportFullState,

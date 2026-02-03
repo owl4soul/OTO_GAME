@@ -290,7 +290,7 @@ function setupSettingsModalEvents() {
             }
         };
     }
-    
+    // Принять сгенерированный сюжет (начало игры по сгенерированному сюжету):
     if (btnAccept && plotInput) {
         btnAccept.onclick = () => {
             const text = plotInput.value.trim();
@@ -298,46 +298,54 @@ function setupSettingsModalEvents() {
             
             try {
                 const sceneData = Utils.safeParseAIResponse(text);
-               // if (!sceneData.scene && !sceneData.choices) throw new Error("JSON должен содержать 'scene' и 'choices'.");
                 
-                State.resetGameProgress();
+                // SILENT сброс - без подтверждения и перезагрузки
+                State.resetGameProgress(true);
                 const state = State.getState();
                 
-                state.currentScene = {
-                    text: sceneData.scene,
-                    choices: sceneData.choices,
-                    reflection: sceneData.reflection || ""
+                // Устанавливаем новую сцену
+                state.gameState.currentScene = {
+                    scene: sceneData.scene || sceneData.text || "",
+                    choices: sceneData.choices || [],
+                    reflection: sceneData.reflection || "",
+                    typology: sceneData.typology || "",
+                    thoughts: sceneData.thoughts || [],
+                    summary: sceneData.summary || "",
+                    aiMemory: sceneData.aiMemory || {},
+                    events: sceneData.events || [],
+                    design_notes: sceneData.design_notes || ""
                 };
                 
-                if (sceneData.stat_changes) {
-                    for (const [key, val] of Object.entries(sceneData.stat_changes)) {
-                        State.updateStat(key, state.stats[Utils.normalizeStatKey(key)] + val);
-                    }
-                }
-                if (sceneData.progress_change) {
-                    state.progress += sceneData.progress_change;
-                    State.syncDegree();
-                }
-                if (sceneData.personality_change) {
-                    state.personality = sceneData.personality_change;
-                }
+                // Очищаем историю и добавляем новую начальную сцену
+                state.gameState.history = [{
+                    fullText: sceneData.scene || sceneData.text || "",
+                    choice: "Начало игры (загруженный сюжет)",
+                    changes: "Загружен новый сюжет",
+                    turn: 1
+                }];
                 
-       
+                // Устанавливаем счетчик ходов
+                state.turnCount = 1;
+                
+                // Явное сохранение ВСЕГО состояния:
                 State.setState({
-                    currentScene: state.currentScene,
-                    stats: state.stats,
-                    progress: state.progress,
-                    personality: state.personality,
-                    history: state.history
+                    gameState: state.gameState,
+                    thoughtsOfHero: state.thoughtsOfHero,
+                    turnCount: state.turnCount,
+                    heroState: state.heroState,
+                    lastSaveTime: new Date().toISOString()
                 });
                 
+                // Сохраняем
                 Saveload.saveState();
+                
+                // Рендерим
                 Render.renderAll();
                 UI.closeSettingsModal();
-                Render.showSuccessAlert("Сюжет принят", "Новая сцена загружена.");
+                Render.showSuccessAlert("Сюжет принят", "Сюжет загружен. Начало новой игры.");
                 
             } catch (error) {
-                Render.showErrorAlert("Ошибка принятия", "Текст не является валидным JSON.", error);
+                Render.showErrorAlert("Ошибка загру", "Текст не является валидным JSON или отсутствует поле 'scene'.", error);
             }
         };
     }
