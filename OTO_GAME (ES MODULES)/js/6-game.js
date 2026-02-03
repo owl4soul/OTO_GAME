@@ -78,7 +78,7 @@ function getRussianStatName(key) {
     return map[key] || key;
 }
 
-// 🚫🚫🚫 ПЕРЕПИСАНО ПОЛНОСТЬЮ: Функция для создания HTML операций с отображением всех полей
+// ПЕРЕПИСАНО ПОЛНОСТЬЮ: Функция для создания HTML операций с отображением всех полей
 function createOperationHTML(operation, source) {
     if (!operation || !operation.id || !operation.operation) {
         console.warn('Некорректная операция:', operation);
@@ -205,7 +205,7 @@ function createOperationHTML(operation, source) {
         </div>`;
     }
     
-    // 🚫🚫🚫 ОТОБРАЖЕНИЕ ВСЕХ НЕПУСТЫХ ПОЛЕЙ
+    // ОТОБРАЖЕНИЕ ВСЕХ НЕПУСТЫХ ПОЛЕЙ
     let extraFields = '';
     const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta']; // Эти поля уже обработаны выше
     
@@ -235,7 +235,7 @@ function createOperationHTML(operation, source) {
     `;
 }
 
-// 🚫🚫🚫 ИСПРАВЛЕНО: Функция для создания HTML изменений за ход
+// ИСПРАВЛЕНО: Функция для создания HTML изменений за ход
 function createTurnUpdatesHTML(actionResults, events) {
     console.log('🔍 createTurnUpdatesHTML called with:', { actionResults, events });
     
@@ -528,7 +528,7 @@ function toggleChoice(idx) {
     UI.updateActionButtons();
 }
 
-// 🚫🚫🚫 ИСПРАВЛЕНО: submitTurn для правильной последовательности применения изменений
+// ИСПРАВЛЕНО: submitTurn для правильной последовательности применения изменений
 async function submitTurn(retries = CONFIG.maxRetries) {
     console.log('🔍 submitTurn called');
     
@@ -609,7 +609,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     
     console.log('📊 Результаты действий:', actionResults);
     
-    // 🚫🚫🚫 ВАЖНО: НЕ применяем изменения тут! Только готовим данные для ИИ
+    // ВАЖНО: НЕ применяем изменения тут! Только готовим данные для ИИ
     const selectedActions = actionResults.map(result => ({
         text: result.choice_text,
         difficulty_level: result.difficulty,
@@ -680,7 +680,7 @@ console.log('✅ Данные от ИИ проверены:', {
 });
 
 
-        // 🚫🚫🚫 Теперь передаем actionResults для правильного применения
+        // Теперь передаем actionResults для правильного применения
         processTurn(data, actionResults, d10);
         
     } catch (e) {
@@ -728,7 +728,7 @@ console.log('✅ Данные от ИИ проверены:', {
     }
 }
 
-// 🚫🚫🚫 ПЕРЕПИСАНО ПОЛНОСТЬЮ: processTurn для корректного расчета и отображения
+// ПЕРЕПИСАНО ПОЛНОСТЬЮ: processTurn для корректного расчета и отображения
 function processTurn(data, actionResults, d10) {
     console.log('🔍 processTurn called with:', { data, actionResults, d10 });
     Render.stopThoughtsOfHeroDisplay();
@@ -736,7 +736,7 @@ function processTurn(data, actionResults, d10) {
     const state = State.getState();
     const previousScene = state.gameState.currentScene;
     
-    // 🚫🚫🚫 Шаг 1: Сохраняем старые значения статов
+    // Шаг 1: Сохраняем старые значения статов
     const oldStats = {
         will: State.getGameItemValue('stat:will') || 50,
         stealth: State.getGameItemValue('stat:stealth') || 50,
@@ -744,12 +744,12 @@ function processTurn(data, actionResults, d10) {
         sanity: State.getGameItemValue('stat:sanity') || 50
     };
     
-    // 🚫🚫🚫 Шаг 2: Уменьшаем длительность ВСЕХ временных эффектов ПЕРЕД применением новых
+    // Шаг 2: Уменьшаем длительность ВСЕХ временных эффектов ПЕРЕД применением новых
     // Это обеспечивает правильный отсчет: эффект, примененный в этом ходу, будет иметь полную длительность
     // И это ЕДИНСТВЕННОЕ место, где время идет вперед.
     decreaseBuffDurations();
     
-    // 🚫🚫🚫 Шаг 3: Применяем операции от действий
+    // Шаг 3: Применяем операции от действий
     actionResults.forEach(result => {
         if (result.operations && Array.isArray(result.operations)) {
             console.log('📦 Применяем операции от действия:', result.operations);
@@ -757,7 +757,7 @@ function processTurn(data, actionResults, d10) {
         }
     });
     
-    // 🚫🚫🚫 Шаг 4: Применяем операции от событий
+    // Шаг 4: Применяем операции от событий
     if (data.events && Array.isArray(data.events)) {
         const eventOperations = [];
         data.events.forEach(event => {
@@ -772,7 +772,7 @@ function processTurn(data, actionResults, d10) {
         }
     }
     
-    // 🚫🚫🚫 Шаг 5: Получаем новые значения статов
+    // Шаг 5: Получаем новые значения статов
     const newStats = {
         will: State.getGameItemValue('stat:will') || 50,
         stealth: State.getGameItemValue('stat:stealth') || 50,
@@ -780,7 +780,7 @@ function processTurn(data, actionResults, d10) {
         sanity: State.getGameItemValue('stat:sanity') || 50
     };
     
-    // 🚫🚫🚫 Шаг 6: Рассчитываем изменения статов за этот ход
+    // Шаг 6: Рассчитываем изменения статов за этот ход
     const statChanges = {
         will: newStats.will - oldStats.will,
         stealth: newStats.stealth - oldStats.stealth,
@@ -835,7 +835,7 @@ const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && O
     // ------------------------------------------------------------------
     // ВАЖНО: СНАЧАЛА создаем HTML изменений, ПОТОМ используем!
     // ------------------------------------------------------------------
-    // 🚫🚫🚫 Шаг 7: Создаем и отображаем блок изменений за ход
+    // Шаг 7: Создаем и отображаем блок изменений за ход
     const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
     console.log('📄 Созданный HTML изменений:', updatesHTML);
     
@@ -847,7 +847,7 @@ const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && O
         dom.updates.innerHTML = '';
     }
     
-    // 🚫🚫🚫 Шаг 8: Сохраняем все изменения в состоянии (ТЕПЕРЬ updatesHTML уже создан!)
+    // Шаг 8: Сохраняем все изменения в состоянии (ТЕПЕРЬ updatesHTML уже создан!)
     State.setState({
     gameState: {
         ...state.gameState,
@@ -901,7 +901,7 @@ State.emit(State.EVENTS.TURN_COMPLETED, {
     console.log('✅ processTurn завершен');
 }
 
-// 🚫🚫🚫 ДОБАВЛЕНО: Функция для уменьшения длительности временных эффектов
+// ДОБАВЛЕНО: Функция для уменьшения длительности временных эффектов
 function decreaseBuffDurations() {
     console.log('🕐 Уменьшаем длительность временных эффектов');
     
