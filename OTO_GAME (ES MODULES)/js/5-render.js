@@ -630,7 +630,7 @@ function renderAiMemoryRecursive(obj, depth = 0) {
         } else if (typeof obj === 'string') {
             // Проверяем, не слишком ли длинная строка
             if (obj.length > 150) {
-                value = obj.substring(0, 150) + '...';
+                value = obj;
                 style = 'color: #aaa;';
             }
         }
@@ -910,7 +910,7 @@ function renderHistory() {
             summary = entry.summary;
         } else if (entry.fullText) {
             // Если summary нет, создаем из fullText
-            summary = entry.fullText.replace(/<[^>]*>/g, ' ').substring(0, 150).trim() + '...';
+            summary = entry.fullText.replace(/<[^>]*>/g, ' ');
         } else {
             summary = 'Нет сводки';
         }
@@ -1879,7 +1879,7 @@ function renderAll() {
         
         console.info(`✅ ALL RENDERED (NEW STRUCTURE)`);
     } catch (error) {
-        console.error('❌ Ошибка при рендеринге:', error);
+        console.error('❌ Ошибка при рендеринге:', error.stack);
     }
 }
 

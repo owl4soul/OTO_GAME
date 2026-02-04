@@ -894,7 +894,7 @@ console.log('✅ Данные от ИИ проверены:', {
     }
 }
 
-// ПЕРЕПИСАНО ПОЛНОСТЬЮ: processTurn для корректного расчета и отображения
+// Обработка ответа от ИИ после отправленного хода
 function processTurn(data, actionResults, d10) {
     console.log('🔍 processTurn called with:', { data, actionResults, d10 });
     Render.stopThoughtsOfHeroDisplay();

@@ -10,9 +10,42 @@ import { DOM } from './4-dom.js';
 import { Audit } from './8-audit.js';
 import { PROMPTS } from './prompts.js';
 
+// ============================================================================
+// УНИВЕРСАЛЬНЫЙ КОНСТРУКТОР СИСТЕМНОГО ПРОМПТА
+// ============================================================================
+
 /**
- * Вспомогательная функция для получения специфической информации о текущем API-провайдере
+ * Создает универсальный системный промпт для ЛЮБОГО сценария
+ * Использует только компоненты из PROMPTS.js
+ * @returns {string} Универсальный системный промпт
  */
+function constructUniversalSystemPrompt() {
+    return [
+        PROMPTS.system.gameMaster,
+        PROMPTS.corePrinciples,
+        PROMPTS.absoluteProhibitions,
+        PROMPTS.fundamentalProtocols,
+        PROMPTS.heroStateDescription,
+        `### СТРУКТУРА JSON ОТВЕТА:\n${PROMPTS.jsonStructure}`,
+        PROMPTS.additionalComponents.universalInstructions
+    ].join('\n\n');
+}
+
+/**
+ * Создает системный промпт для автора сценариев (генерации начальной сцены)
+ * Использует универсальный промпт + специфичные инструкции из PROMPTS.js
+ * @returns {string} Промпт для генерации начальных сцен
+ */
+function constructScenarioWriterPrompt() {
+    return [
+        PROMPTS.additionalComponents.scenarioWriterInstructions
+    ].join('\n\n');
+}
+
+// ============================================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (ОСТАВЛЯЕМ БЕЗ ИЗМЕНЕНИЙ, но используем PROMPTS)
+// ============================================================================
+
 function getProviderInfo(state) {
     const isVsegpt = state.settings.apiProvider === 'vsegpt';
     const apiKey = isVsegpt ? state.settings.apiKeyVsegpt : state.settings.apiKeyOpenrouter;
@@ -40,46 +73,12 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
         throw new Error("API Key missing. Please go to Settings and enter your API key.");
     }
     
-    // Подготовка заголовков HTTP-запроса
-    const headers = {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-    };
+    const headers = prepareHeaders(apiKey, isVsegpt);
+    const requestPayload = prepareGameRequestPayload(updatedState, selectedActions, d10);
+    applyProviderSpecificSettings(requestPayload, isVsegpt, updatedState);
     
-    // Для OpenRouter требуются специальные заголовки
-    if (!isVsegpt) {
-        headers['HTTP-Referer'] = 'https://oto-quest.app';
-        headers['X-Title'] = 'OTO Quest';
-    }
+    const auditEntry = createAuditEntryForGameTurn(selectedActions, requestPayload, updatedState, d10);
     
-    // --- ЭТАП 1: ПОДГОТОВКА PAYLOAD ---
-    const requestPayload = API_Request.prepareRequestPayload(updatedState, selectedActions, d10);
-    
-    // Специфические настройки для моделей/провайдеров
-    if (isVsegpt && updatedState.settings.model.includes('gpt-3.5-turbo-16k')) {
-        requestPayload.max_tokens = 1000;
-    }
-    
-    // Включаем "JSON mode" для OpenRouter
-    if (!isVsegpt) {
-        requestPayload.response_format = { type: "json_object" };
-    }
-    
-    // --- ЛОГИРОВАНИЕ: СОЗДАНИЕ ЗАПИСИ ---
-    // Преобразуем массив действий в строку для логгирования
-    const actionsDescription = Array.isArray(selectedActions) 
-        ? selectedActions.map(action => action.text).join(', ') 
-        : String(selectedActions);
-    
-    const auditEntry = Audit.createEntry(
-        `Игровой ход: ${actionsDescription.substring(0, 50)}...`,
-        requestPayload,
-        updatedState.settings.model,
-        updatedState.settings.apiProvider
-    );
-    auditEntry.d10 = d10; // Сохраняем бросок кубика в запись
-    
-    // --- ЭТАП 2: ВЫПОЛНЕНИЕ ЗАПРОСА И ОБРАБОТКА ОТВЕТА ---
     try {
         const startTime = Date.now();
         
@@ -96,78 +95,58 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
         
         const responseTime = Date.now() - startTime;
         
-        // --- ЭТАП 3: ОБНОВЛЕНИЕ ДИНАМИЧЕСКОЙ ПАМЯТИ ---
-        if (processedData.memoryUpdate && Object.keys(processedData.memoryUpdate).length > 0) {
-            const currentState = State.getState();
-            currentState.aiMemory = { ...currentState.aiMemory, ...processedData.memoryUpdate };
-            State.setState({ aiMemory: currentState.aiMemory });
-            console.log("🧠 AI Memory updated:", Object.keys(processedData.memoryUpdate));
-        }
-        
-        // --- ЛОГИРОВАНИЕ: УСПЕХ ---
-        // Передаем СЫРОЙ текст ответа (до парсинга)
+        updateAIMemory(processedData);
         Audit.updateEntrySuccess(auditEntry, rawResponseText);
+        updateModelStats(state, responseTime);
         
-        // Обновление статистики модели
-        const modelInState = state.models.find(model => model.id === state.settings.model);
-        if (modelInState) {
-            modelInState.status = 'success';
-            modelInState.responseTime = responseTime;
-            modelInState.lastTested = new Date().toISOString();
-        }
-        
-        // Возвращаем очищенные игровые данные
-        console.log(`💬  ПОЛУЧЕНО`);
-        console.log(processedData);
+        console.log(`💬 Ответ получен за ${responseTime}мс`);
         return processedData;
         
     } catch (error) {
-        // Если произошла ошибка, помечаем модель как проблемную
-        const modelInState = state.models.find(model => model.id === state.settings.model);
-        if (modelInState) modelInState.status = 'error';
-        
-        // --- ЛОГИРОВАНИЕ: ОШИБКА ---
-        if (error.rawResponse) {
-            auditEntry.fullResponse = error.rawResponse;
-        }
-        
-        Audit.updateEntryError(auditEntry, error);
-        
-        // Пробрасываем ошибку дальше
+        handleRequestError(error, state, auditEntry);
         throw error;
     }
 }
 
-/**
- * Генерирует начальную сцену или кастомный сюжет по запросу из UI Настроек.
- * Теперь тоже полностью логируется через Audit.
- * 
- * @param {string} promptText - Произвольный промпт для генерации сюжета.
- * @returns {Promise<string>} Сырой текстовый контент от LLM.
- */
 async function generateCustomScene(promptText) {
     const state = State.getState();
     const { url, apiKey } = getProviderInfo(state);
     
-    if (!apiKey) throw new Error("API Key needed to generate a custom scene. Please enter it in Settings.");
+    if (!apiKey) {
+        throw new Error("API Key needed to generate a custom scene. Please enter it in Settings.");
+    }
     
-    const headers = {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-    };
+    const headers = prepareHeaders(apiKey, state.settings.apiProvider === 'vsegpt');
+    const systemPrompt = constructScenarioWriterPrompt();
     
+    const userPrompt = `${promptText}
+
+### ИНСТРУКЦИИ:
+1. Верни ТОЛЬКО валидный JSON объект в формате, указанном выше.
+2. Не добавляй никаких пояснений вне JSON.
+3. Убедись, что все обязательные поля присутствуют.
+4. Choices должны иметь требования, соответствующие начальному состоянию героя.`;
+
     const requestBody = {
         model: state.settings.model,
         messages: [
-            { role: "system", content: PROMPTS.system.scenarioWriter },
-            { role: "user", content: promptText }
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
         ],
         max_tokens: 10000,
         temperature: 0.85
     };
     
-    // Создаем лог
-    const auditEntry = Audit.createEntry("Генерация Сюжета", requestBody, state.settings.model, state.settings.apiProvider);
+    if (state.settings.apiProvider !== 'vsegpt') {
+        requestBody.response_format = { type: "json_object" };
+    }
+    
+    const auditEntry = Audit.createEntry(
+        "Генерация Начальной Сцены", 
+        requestBody, 
+        state.settings.model, 
+        state.settings.apiProvider
+    );
     
     try {
         // Получаем сырой ответ
@@ -178,6 +157,15 @@ async function generateCustomScene(promptText) {
             // Парсим для извлечения контента
             const parsed = JSON.parse(rawResponseText);
             content = parsed.choices?.[0]?.message?.content || "";
+            
+            if (content.startsWith('{') && content.endsWith('}')) {
+                try {
+                    const jsonContent = JSON.parse(content);
+                    content = JSON.stringify(jsonContent, null, 2);
+                } catch (e) {
+                    // Оставляем как есть
+                }
+            }
         } catch (parseError) {
             console.warn("Не удалось распарсить ответ при генерации сцены:", parseError);
             content = rawResponseText;
@@ -202,7 +190,7 @@ async function generateCustomScene(promptText) {
  */
 async function testCurrentProvider() {
     const currentState = State.getState();
-    const domElements = DOM.getDOM(); // Получаем ссылки на DOM-элементы ввода.
+    const domElements = DOM.getDOM();
     
     const selectedProvider = domElements.inputs.provider.value;
     let apiKeyForTest;
@@ -214,48 +202,57 @@ async function testCurrentProvider() {
     }
     
     if (!apiKeyForTest) {
-        if (Render) Render.showErrorAlert("Testing Error", `Please enter the API Key for ${selectedProvider} provider first.`);
+        if (Render) Render.showErrorAlert(
+            "Testing Error", 
+            `Please enter the API Key for ${selectedProvider} provider first.`
+        );
         return;
     }
     
     const testButton = document.getElementById('testCurrentProviderBtn');
     const originalButtonHtml = testButton ? testButton.innerHTML : "Test Provider";
+    
     if (testButton) {
         testButton.innerHTML = '<span class="spinner"></span> Checking connection...';
         testButton.disabled = true;
     }
     
     const isSelectedVsegpt = selectedProvider === 'vsegpt';
-    const apiTestUrl = isSelectedVsegpt ? 'https://api.vsegpt.ru/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
-    const testHeaders = {
-        'Authorization': `Bearer ${apiKeyForTest}`,
-        'Content-Type': 'application/json'
-    };
-    if (!isSelectedVsegpt) testHeaders['HTTP-Referer'] = 'https://oto-quest.app';
+    const apiTestUrl = isSelectedVsegpt ? 
+        'https://api.vsegpt.ru/v1/chat/completions' : 
+        'https://openrouter.ai/api/v1/chat/completions';
     
+    const headers = prepareHeaders(apiKeyForTest, isSelectedVsegpt);
     const testBody = {
         model: isSelectedVsegpt ? 'openai/gpt-3.5-turbo-16k' : 'gpt-3.5-turbo',
-        messages: [{ role: "user", content: PROMPTS.testProvider }],
+        messages: [{ role: "user", content: getProviderTestPrompt() }],
         max_tokens: 10
     };
     
-    // Создаем лог
-    const auditEntry = Audit.createEntry("Тест Провайдера", testBody, testBody.model, selectedProvider);
+    const auditEntry = Audit.createEntry(
+        "Тест Провайдера", 
+        testBody, 
+        testBody.model, 
+        selectedProvider
+    );
     
     try {
-        // Получаем сырой ответ
-        const rawResponseText = await API_Request.executeFetchRaw(apiTestUrl, testHeaders, testBody);
-        
-        // Лог успеха
+        const rawResponseText = await API_Request.executeFetchRaw(apiTestUrl, headers, testBody);
         Audit.updateEntrySuccess(auditEntry, rawResponseText);
         
-        if (Render) Render.showSuccessAlert("Connection Successful", `API Key for ${selectedProvider} is valid and connection works!`);
+        if (Render) Render.showSuccessAlert(
+            "Connection Successful", 
+            `API Key for ${selectedProvider} is valid and connection works!`
+        );
         
     } catch (error) {
-        // Лог ошибки
         Audit.updateEntryError(auditEntry, error);
         
-        if (Render) Render.showErrorAlert("Connection Error", `Failed to connect to ${selectedProvider}. \nDetails: ${error.message}`, error);
+        if (Render) Render.showErrorAlert(
+            "Connection Error", 
+            `Failed to connect to ${selectedProvider}. \nDetails: ${error.message}`, 
+            error
+        );
     } finally {
         if (testButton) {
             testButton.innerHTML = originalButtonHtml;
@@ -281,41 +278,48 @@ async function testSelectedModel() {
     }
     
     const selectedProvider = domElements.inputs.provider.value;
-    const apiKeyForModel = selectedProvider === 'vsegpt' ? domElements.inputs.keyVsegpt.value : domElements.inputs.keyOpenrouter.value;
+    const apiKeyForModel = selectedProvider === 'vsegpt' ? 
+        domElements.inputs.keyVsegpt.value : 
+        domElements.inputs.keyOpenrouter.value;
     
     if (!apiKeyForModel) {
-        if (Render) Render.showErrorAlert("Testing Error", `Please enter the API Key for ${selectedProvider} provider first.`);
+        if (Render) Render.showErrorAlert(
+            "Testing Error", 
+            `Please enter the API Key for ${selectedProvider} provider first.`
+        );
         return;
     }
     
     const testButton = document.getElementById('testSelectedModelBtn');
     const originalButtonHtml = testButton ? testButton.innerHTML : "Test Model";
+    
     if (testButton) {
         testButton.innerHTML = '<span class="spinner"></span> Testing Model...';
         testButton.disabled = true;
     }
     
     const isSelectedVsegpt = selectedProvider === 'vsegpt';
-    const apiTestUrl = isSelectedVsegpt ? 'https://api.vsegpt.ru/v1/chat/completions' : 'https://openrouter.ai/api/v1/chat/completions';
-    const testHeaders = {
-        'Authorization': `Bearer ${apiKeyForModel}`,
-        'Content-Type': 'application/json'
-    };
-    if (!isSelectedVsegpt) testHeaders['HTTP-Referer'] = 'https://oto-quest.app';
+    const apiTestUrl = isSelectedVsegpt ? 
+        'https://api.vsegpt.ru/v1/chat/completions' : 
+        'https://openrouter.ai/api/v1/chat/completions';
     
+    const headers = prepareHeaders(apiKeyForModel, isSelectedVsegpt);
     const testBody = {
         model: modelToTestId,
-        messages: [{ role: "user", content: PROMPTS.testModel }],
+        messages: [{ role: "user", content: getModelTestPrompt() }],
         max_tokens: 100
     };
     
-    // Создаем лог
-    const auditEntry = Audit.createEntry(`Тест Модели: ${modelToTestId}`, testBody, modelToTestId, selectedProvider);
+    const auditEntry = Audit.createEntry(
+        `Тест Модели: ${modelToTestId}`, 
+        testBody, 
+        modelToTestId, 
+        selectedProvider
+    );
     
     try {
         const startTime = Date.now();
-        // Получаем сырой ответ
-        const rawResponseText = await API_Request.executeFetchRaw(apiTestUrl, testHeaders, testBody);
+        const rawResponseText = await API_Request.executeFetchRaw(apiTestUrl, headers, testBody);
         const duration = Date.now() - startTime;
         
         let result;
@@ -328,64 +332,250 @@ async function testSelectedModel() {
         // Лог успеха
         Audit.updateEntrySuccess(auditEntry, rawResponseText);
         
-        const modelResponseText = result.choices?.[0]?.message?.content || "No text output received from model.";
-        const modelInState = currentState.models.find(model => model.id === modelToTestId);
-        if (modelInState) {
-            modelInState.status = 'success';
-            modelInState.lastTested = new Date().toISOString();
-            modelInState.responseTime = duration;
-            // Если модель вернула описание — сохраняем
-            if (modelResponseText.length > 0) {
-                modelInState.description = modelResponseText.trim();
-            } else {
-                if (result.choices?.[0]?.message?.content) {
-                    modelInState.description = result.choices[0].message.content;
-                }
-            }
-        }
+        const modelResponseText = result.choices?.[0]?.message?.content || 
+            "No text output received from model.";
+        
+        updateModelTestResult(currentState, modelToTestId, duration, modelResponseText);
         
         if (Render) {
-            Render.showSuccessAlert("Модель успешно протестирована!", `Ответ получен за: ${duration}мс.\n\nСодержание: \n${modelResponseText}`);
+            Render.showSuccessAlert(
+                "Модель успешно протестирована!", 
+                `Ответ получен за: ${duration}мс.\n\nСодержание: \n${modelResponseText}`
+            );
         }
         
     } catch (error) {
-        // Лог ошибки
-        Audit.updateEntryError(auditEntry, error);
-        
-        const modelInState = currentState.models.find(model => model.id === modelToTestId);
-        if (modelInState) modelInState.status = 'error';
-        
-        if (Render) {
-            Render.showErrorAlert(
-                "Модель провалила тест",
-                `Модель '${modelToTestId}' не ответила или вернула ошибку. \nДетали: ${error.message}`,
-                error
-            );
-        }
+        handleModelTestError(error, currentState, modelToTestId, auditEntry);
     } finally {
-        if (testButton) {
-            testButton.innerHTML = originalButtonHtml;
-            testButton.disabled = false;
-        }
-        if (Render) {
-            // Сохраняем в память браузера
-            localStorage.setItem('oto_models_status', JSON.stringify(currentState.models));
-            // ВАЖНО: Обновляем 4 значка статистики
-            Render.updateModelStats();
-            // Обновляем список (чтобы появилась галочка)
-            Render.renderModelSelectorByProvider();
-            // Обновляем текст деталей
-            Render.updateModelDetails();
-            // Обновляем аудит
-            Render.renderAuditList();
+        cleanupTestButton(testButton, originalButtonHtml);
+        updateUIAfterTest(currentState);
+    }
+}
+
+// ============================================================================
+// ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ 
+// ============================================================================
+
+/**
+ * Подготавливает заголовки HTTP-запроса
+ * @param {string} apiKey - API ключ
+ * @param {boolean} isVsegpt - Флаг провайдера VSEGPT
+ * @returns {Object} Заголовки HTTP-запроса
+ */
+function prepareHeaders(apiKey, isVsegpt) {
+    const headers = {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+    };
+    
+    if (!isVsegpt) {
+        headers['HTTP-Referer'] = 'https://oto-quest.app';
+        headers['X-Title'] = 'OTO Quest';
+    }
+    
+    return headers;
+}
+
+/**
+ * Подготавливает payload для игрового запроса с универсальным системным промптом
+ * @param {Object} updatedState - Состояние игры
+ * @param {Array} selectedActions - Выбранные действия
+ * @param {number} d10 - Бросок удачи
+ * @returns {Object} Payload запроса
+ */
+function prepareGameRequestPayload(updatedState, selectedActions, d10) {
+    // Используем API_Request для подготовки, но заменяем системный промпт на универсальный
+    const payload = API_Request.prepareRequestPayload(updatedState, selectedActions, d10);
+    
+    // Системный промпт уже сконструирован в вызывающем коде:
+    // в payload.messages[0].content;
+    
+    return payload;
+}
+
+/**
+ * Применяет специфичные настройки для провайдера и модели
+ * @param {Object} payload - Payload запроса
+ * @param {boolean} isVsegpt - Флаг провайдера VSEGPT
+ * @param {Object} state - Состояние игры
+ */
+function applyProviderSpecificSettings(payload, isVsegpt, state) {
+    // Ограничение токенов для VSEGPT с определенной моделью
+    if (isVsegpt && state.settings.model.includes('gpt-3.5-turbo-16k')) {
+        payload.max_tokens = 1000;
+    }
+    
+    // Включаем JSON mode для OpenRouter
+    if (!isVsegpt) {
+        payload.response_format = { type: "json_object" };
+    }
+}
+
+/**
+ * Создает запись аудита для игрового хода
+ * @param {Array} selectedActions - Выбранные действия
+ * @param {Object} payload - Payload запроса
+ * @param {Object} state - Состояние игры
+ * @param {number} d10 - Бросок удачи
+ * @returns {Object} Запись аудита
+ */
+function createAuditEntryForGameTurn(selectedActions, payload, state, d10) {
+    const actionsDescription = Array.isArray(selectedActions) ?
+        selectedActions.map(action => action.text).join(', ') :
+        String(selectedActions);
+    
+    const auditEntry = Audit.createEntry(
+        `Игровой ход: ${actionsDescription.substring(0, 50)}...`,
+        payload,
+        state.settings.model,
+        state.settings.apiProvider
+    );
+    auditEntry.d10 = d10;
+    
+    return auditEntry;
+}
+
+/**
+ * Обновляет память AI на основе ответа
+ * @param {Object} processedData - Обработанные данные ответа
+ */
+function updateAIMemory(processedData) {
+    if (processedData.memoryUpdate && Object.keys(processedData.memoryUpdate).length > 0) {
+        const currentState = State.getState();
+        currentState.aiMemory = {
+            ...currentState.aiMemory,
+            ...processedData.memoryUpdate
+        };
+        State.setState({ aiMemory: currentState.aiMemory });
+        console.log("🧠 AI Memory updated:", Object.keys(processedData.memoryUpdate));
+    }
+}
+
+/**
+ * Обновляет статистику модели после успешного запроса
+ * @param {Object} state - Состояние игры
+ * @param {number} responseTime - Время ответа в миллисекундах
+ */
+function updateModelStats(state, responseTime) {
+    const modelInState = state.models.find(model => model.id === state.settings.model);
+    if (modelInState) {
+        modelInState.status = 'success';
+        modelInState.responseTime = responseTime;
+        modelInState.lastTested = new Date().toISOString();
+    }
+}
+
+/**
+ * Обрабатывает ошибки запроса
+ * @param {Error} error - Ошибка
+ * @param {Object} state - Состояние игры
+ * @param {Object} auditEntry - Запись аудита
+ */
+function handleRequestError(error, state, auditEntry) {
+    const modelInState = state.models.find(model => model.id === state.settings.model);
+    if (modelInState) modelInState.status = 'error';
+    
+    if (error.rawResponse) {
+        auditEntry.fullResponse = error.rawResponse;
+    }
+    
+    Audit.updateEntryError(auditEntry, error);
+}
+
+/**
+ * Обновляет результат тестирования модели
+ * @param {Object} state - Состояние игры
+ * @param {string} modelId - ID модели
+ * @param {number} duration - Время ответа
+ * @param {string} responseText - Текст ответа
+ */
+function updateModelTestResult(state, modelId, duration, responseText) {
+    const modelInState = state.models.find(model => model.id === modelId);
+    if (modelInState) {
+        modelInState.status = 'success';
+        modelInState.lastTested = new Date().toISOString();
+        modelInState.responseTime = duration;
+        
+        if (responseText.length > 0) {
+            modelInState.description = responseText.trim();
         }
     }
 }
 
-// ЭКСПОРТ ЕДИНОГО ИНТЕРФЕЙСА API ДЛЯ ДРУГИХ МОДУЛЕЙ.
+/**
+ * Обрабатывает ошибки тестирования модели
+ * @param {Error} error - Ошибка
+ * @param {Object} state - Состояние игры
+ * @param {string} modelId - ID модели
+ * @param {Object} auditEntry - Запись аудита
+ */
+function handleModelTestError(error, state, modelId, auditEntry) {
+    const modelInState = state.models.find(model => model.id === modelId);
+    if (modelInState) modelInState.status = 'error';
+    
+    Audit.updateEntryError(auditEntry, error);
+    
+    if (Render) {
+        Render.showErrorAlert(
+            "Модель провалила тест",
+            `Модель '${modelId}' не ответила или вернула ошибку. \nДетали: ${error.message}`,
+            error
+        );
+    }
+}
+
+/**
+ * Очищает кнопку тестирования после завершения
+ * @param {HTMLElement} testButton - DOM элемент кнопки
+ * @param {string} originalHtml - Оригинальный HTML кнопки
+ */
+function cleanupTestButton(testButton, originalHtml) {
+    if (testButton) {
+        testButton.innerHTML = originalHtml;
+        testButton.disabled = false;
+    }
+}
+
+/**
+ * Обновляет UI после тестирования
+ * @param {Object} state - Состояние игры
+ */
+function updateUIAfterTest(state) {
+    if (Render) {
+        localStorage.setItem('oto_models_status', JSON.stringify(state.models));
+        Render.updateModelStats();
+        Render.renderModelSelectorByProvider();
+        Render.updateModelDetails();
+        Render.renderAuditList();
+    }
+}
+
+// ============================================================================
+// ЭКСПОРТ ЕДИНОГО ИНТЕРФЕЙСА API
+// ============================================================================
+
 export const API = {
+    // Основные функции
     sendAIRequest,
     generateCustomScene,
     testCurrentProvider,
-    testSelectedModel
+    testSelectedModel,
+    
+    // Конструкторы промптов
+    constructUniversalSystemPrompt,
+    constructScenarioWriterPrompt,
+    
+    // Вспомогательные функции (для тестирования и отладки)
+    getProviderInfo,
+    prepareHeaders,
+    prepareGameRequestPayload,
+    applyProviderSpecificSettings,
+    createAuditEntryForGameTurn,
+    updateAIMemory,
+    updateModelStats,
+    handleRequestError,
+    updateModelTestResult,
+    handleModelTestError,
+    cleanupTestButton,
+    updateUIAfterTest
 };

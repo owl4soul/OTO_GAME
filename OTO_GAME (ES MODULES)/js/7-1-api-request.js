@@ -5,126 +5,20 @@ import { CONFIG } from './1-config.js';
 import { State } from './3-state.js';
 import { PROMPTS } from './prompts.js';
 
-/**
- * Динамическое формирование системных инъекций для формата 4.1
- */
-function getDynamicSystemInjections(state) {
-    const injections = [];
-    const turn = state.turnCount;
-    
-    // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА
-    if (turn > 0 && turn % 10 === 0) {
-        console.log(`🌀 [Client Director] Turn ${turn}: Injecting Narrative Twist.`);
-        injections.push(`>>> [TRIGGER: TURN ${turn}] ${PROMPTS.injections.twist}`);
-    }
-    
-    // 2. ИНЪЕКЦИЯ БЕЗУМИЯ
-    const sanityItem = State.getGameItem('stat:sanity');
-    if (sanityItem && sanityItem.value < 20) {
-        console.log(`🌀 [Client Director] Sanity Low (${sanityItem.value}): Injecting Insanity.`);
-        injections.push(`>>> [TRIGGER: LOW SANITY] ${PROMPTS.injections.insanity}`);
-    }
-    
-    // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ ПЕТЕЛЬ СЮЖЕТА
-    if (state.gameState.history.length > 0) {
-        const lastHistory = state.gameState.history[state.gameState.history.length - 1];
-        const lastSceneText = lastHistory.fullText || '';
-        const currentSceneText = state.gameState.currentScene.text || '';
-        const comparisonLength = 50;
-        
-        if (lastSceneText.length >= comparisonLength && currentSceneText.length >= comparisonLength) {
-            const startOfLastScene = lastSceneText.substring(0, comparisonLength).trim();
-            const startOfCurrentScene = currentSceneText.substring(0, comparisonLength).trim();
-            
-            if (startOfLastScene === startOfCurrentScene ||
-                lastSceneText.includes(startOfCurrentScene) ||
-                currentSceneText.includes(startOfLastScene))
-            {
-                console.log(`🌀 [Client Director] Loop/Repetition Detected: Injecting Anti-Loop.`);
-                injections.push(`>>> [TRIGGER: LOOP DETECTED] ${PROMPTS.injections.antiLoop}`);
-            }
-        }
-    }
-    
-    // 4. ИНЪЕКЦИЯ РИТУАЛА
-    if (state.isRitualActive) {
-        console.log(`🕯️ [Client Director] RITUAL MODE ACTIVE.`);
-        injections.push(`>>> [CRITICAL MODE: RITUAL OF INITIATION]
-        ТЕКУЩИЙ СТАТУС: Игрок проходит Ритуал Посвящения.
-        
-        ИНСТРУКЦИИ ДЛЯ РИТУАЛА:
-        1. ТОН: Торжественный, архаичный, мистический, пугающий. Используй символизм Телемы.
-        2. СТРУКТУРА: Ритуал — это испытание. Не давай простых путей. Проверяй Волю и Разум.
-        3. ПРОГРЕСС: Не начисляй очки прогресса (progress:oto) пока ритуал не завершится успехом.
-        4. ЗАВЕРШЕНИЕ: Когда игрок пройдет испытание, ОБЯЗАТЕЛЬНО добавь в JSON поле "ritual_completed": true.
-        5. ВИЗУАЛ: Описывай запахи, звуки, свет свечей, тени.`);
-    }
-    
-    // 5. БАЗОВЫЕ ИНСТРУКЦИИ
-    injections.push(PROMPTS.injections.coreMovement);
-    
-    return injections.join('\n\n');
-}
+// ============================================================================
+// КОНСТРУКТОР ПОЛНОГО СИСТЕМНОГО ПРОМПТА
+// ============================================================================
 
 /**
- * Сборка блока контекста для USER-промпта (ФОРМАТ 4.1)
- * 🚫🚫🚫 ИЗМЕНЕНО: Обновлена логика чтения истории для поддержки actionResults
+ * Конструирует полный системный промт, объединяя все компоненты из PROMPTS
+ * @param {Object} state - Текущее состояние игры
+ * @returns {string} Полный системный промт для отправки в API
  */
-function buildContextBlock(state) {
-    let parts = [];
-    
-    // А. ГЛОБАЛЬНАЯ ЛЕТОПИСЬ
-    if (state.gameState.summary && state.gameState.summary.length > 0) {
-        parts.push(`### ГЛОБАЛЬНАЯ ЛЕТОПИСЬ\n${state.gameState.summary}`);
-    }
-    
-    // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ ИИ (aiMemory)
-    if (state.gameState.aiMemory && Object.keys(state.gameState.aiMemory).length > 0) {
-        parts.push(`### ТВОЯ ДИНАМИЧЕСКАЯ ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(state.gameState.aiMemory, null, 2)}`);
-    }
-    
-    // В. КРАТКОСРОЧНАЯ ИСТОРИЯ
-    const turnsToTake = state.gameState.summary ? CONFIG.activeContextTurns : CONFIG.historyContext;
-    const historySlice = state.gameState.history.slice(-turnsToTake);
-    
-    if (historySlice.length > 0) {
-        const historyString = historySlice.map(entry => {
-            // 🚫🚫🚫 Извлечение текста выбора из массива actionResults или fallback к старому полю choice
-            const choiceText = entry.actionResults 
-                ? entry.actionResults.map(a => `${a.text}${a.success ? '' : ' (Провал)'}`).join(', ') 
-                : (entry.choice || 'Нет выбора');
-                
-            return `СЦЕНА: ${entry.fullText}\nВЫБОР: ${choiceText}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`;
-        }).join('\n---\n');
-        parts.push(`### КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ${historySlice.length} ходов)\n${historyString}`);
-    }
-    
-    return parts.length > 0 ? parts.join('\n\n') : "История: Это начало пути. Предыдущих событий нет.";
-}
+function constructFullSystemPrompt(state) {
 
-/**
- * Форматирование selectedActions для промпта (ФОРМАТ 4.1)
- */
-function formatSelectedActionsForPrompt(selectedActions) {
-    if (!selectedActions || selectedActions.length === 0) {
-        return "Действия не выбраны";
-    }
-    
-    return selectedActions.map(action => {
-        const status = action.success ? '✅ УСПЕХ' :
-            action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ' : '❌ ПРОВАЛ';
-        return `"${action.text}" → ${status} (Сложность: ${action.difficulty_level})`;
-    }).join('\n');
-}
-
-/**
- * Подготовка полного тела запроса для формата 4.1
- */
-function prepareRequestPayload(state, selectedActions, d10) {
-    // 1. Формируем ПОЛНЫЙ СИСТЕМНЫЙ ПРОМПТ
-    const dynamicSystemPart = getDynamicSystemInjections(state);
-    
-    const systemPromptFull = `${PROMPTS.system.gameMaster}
+    // Собираем полный системный промт из модульных компонентов
+    const fullSystemPrompt = `
+${PROMPTS.system.gameMaster}
 
 ${PROMPTS.corePrinciples}
 
@@ -164,13 +58,150 @@ ${PROMPTS.outputFormat}
 ### СТРУКТУРА JSON ОТВЕТА:
 ${PROMPTS.jsonStructure}
 
-${dynamicSystemPart}
-
 ### ПРИМЕР CHOICE СО ВСЕМИ ТИПАМИ ТРЕБОВАНИЙ:
 ${PROMPTS.exampleChoiceWithAllTypes}
 
 ### ЧАСТЫЕ ОШИБКИ:
 ${PROMPTS.commonErrors}`;
+
+    return fullSystemPrompt;
+}
+
+// ============================================================================
+// ДИНАМИЧЕСКИЕ ИНЪЕКЦИИ ДЛЯ ФОРМАТА 4.1
+// ============================================================================
+
+/**
+ * Формирует динамические системные инъекции на основе текущего состояния игры
+ * @param {Object} state - Текущее состояние игры
+ * @returns {string} Динамические инъекции для промпта
+ */
+function getDynamicSystemInjections(state) {
+    const injections = [];
+    const turn = state.turnCount;
+    
+    // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА (каждые 10 ходов)
+    if (turn > 0 && turn % 10 === 0) {
+        console.log(`🌀 [Client Director] Turn ${turn}: Injecting Narrative Twist.`);
+        injections.push(`>>> [TRIGGER: TURN ${turn}] ${PROMPTS.injections.twist}`);
+    }
+    
+    // 2. ИНЪЕКЦИЯ БЕЗУМИЯ (при низком уровне рассудка)
+    const sanityItem = State.getGameItem('stat:sanity');
+    if (sanityItem && sanityItem.value < 20) {
+        console.log(`🌀 [Client Director] Sanity Low (${sanityItem.value}): Injecting Insanity.`);
+        injections.push(`>>> [TRIGGER: LOW SANITY] ${PROMPTS.injections.insanity}`);
+    }
+    
+    // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ СЮЖЕТНЫХ ПЕТЕЛЬ
+    if (state.gameState.history.length > 0) {
+        const lastHistory = state.gameState.history[state.gameState.history.length - 1];
+        const lastSceneText = lastHistory.fullText || '';
+        const currentSceneText = state.gameState.currentScene.text || '';
+        const comparisonLength = 50;
+        
+        if (lastSceneText.length >= comparisonLength && currentSceneText.length >= comparisonLength) {
+            const startOfLastScene = lastSceneText.substring(0, comparisonLength).trim();
+            const startOfCurrentScene = currentSceneText.substring(0, comparisonLength).trim();
+            
+            if (startOfLastScene === startOfCurrentScene ||
+                lastSceneText.includes(startOfCurrentScene) ||
+                currentSceneText.includes(startOfLastScene))
+            {
+                console.log(`🌀 [Client Director] Loop/Repetition Detected: Injecting Anti-Loop.`);
+                injections.push(`>>> [TRIGGER: LOOP DETECTED] ${PROMPTS.injections.antiLoop}`);
+            }
+        }
+    }
+    
+    // 4. ИНЪЕКЦИЯ РИТУАЛА (если активен ритуальный режим)
+    if (state.isRitualActive) {
+        console.log(`🕯️ [Client Director] RITUAL MODE ACTIVE.`);
+        injections.push(`>>> [CRITICAL MODE: RITUAL OF INITIATION]
+        ТЕКУЩИЙ СТАТУС: Игрок проходит Ритуал Посвящения.
+        
+        ИНСТРУКЦИИ ДЛЯ РИТУАЛА:
+        1. ТОН: Торжественный, архаичный, мистический, пугающий. Используй символизм Телемы.
+        2. СТРУКТУРА: Ритуал — это испытание. Не давай простых путей. Проверяй Волю и Разум.
+        3. ПРОГРЕСС: Не начисляй очки прогресса (progress:oto) пока ритуал не завершится успехом.
+        4. ЗАВЕРШЕНИЕ: Когда игрок пройдет испытание, ОБЯЗАТЕЛЬНО добавь в JSON поле "ritual_completed": true.
+        5. ВИЗУАЛ: Описывай запахи, звуки, свет свечей, тени.`);
+    }
+    
+    // 5. БАЗОВЫЕ ИНСТРУКЦИИ (всегда добавляются)
+    injections.push(PROMPTS.injections.coreMovement);
+    
+    return injections.join('\n\n');
+}
+
+// ============================================================================
+// КОНТЕКСТ И ПОДГОТОВКА ЗАПРОСА
+// ============================================================================
+
+/**
+ * Собирает блок контекста для USER-промпта из истории и состояния игры
+ * @param {Object} state - Текущее состояние игры
+ * @returns {string} Отформатированный блок контекста
+ */
+function buildContextBlock(state) {
+    let parts = [];
+    
+    // А. ГЛОБАЛЬНАЯ ЛЕТОПИСЬ (общая сводка сюжета)
+    if (state.gameState.summary && state.gameState.summary.length > 0) {
+        parts.push(`### ГЛОБАЛЬНАЯ ЛЕТОПИСЬ\n${state.gameState.summary}`);
+    }
+    
+    // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ ИИ (aiMemory) - контекст для Гейм-мастера
+    if (state.gameState.aiMemory && Object.keys(state.gameState.aiMemory).length > 0) {
+        parts.push(`### ТВОЯ ДИНАМИЧЕСКАЯ ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(state.gameState.aiMemory, null, 2)}`);
+    }
+    
+    // В. КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ходы)
+    const turnsToTake = state.gameState.summary ? CONFIG.activeContextTurns : CONFIG.historyContext;
+    const historySlice = state.gameState.history.slice(-turnsToTake);
+    
+    if (historySlice.length > 0) {
+        const historyString = historySlice.map(entry => {
+            // Извлечение текста выбора из массива actionResults или fallback к старому полю choice
+            const choiceText = entry.actionResults 
+                ? entry.actionResults.map(a => `${a.text}${a.success ? '' : ' (Провал)'}`).join(', ') 
+                : (entry.choice || 'Нет выбора');
+                
+            return `СЦЕНА: ${entry.fullText}\nВЫБОР: ${choiceText}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`;
+        }).join('\n---\n');
+        parts.push(`### КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ${historySlice.length} ходов)\n${historyString}`);
+    }
+    
+    return parts.length > 0 ? parts.join('\n\n') : "История: Это начало пути. Предыдущих событий нет.";
+}
+
+/**
+ * Форматирует выбранные действия для отображения в промпте
+ * @param {Array} selectedActions - Массив выбранных действий
+ * @returns {string} Отформатированная строка с результатами действий
+ */
+function formatSelectedActionsForPrompt(selectedActions) {
+    if (!selectedActions || selectedActions.length === 0) {
+        return "Действия не выбраны";
+    }
+    
+    return selectedActions.map(action => {
+        const status = action.success ? '✅ УСПЕХ' :
+            action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ' : '❌ ПРОВАЛ';
+        return `"${action.text}" → ${status} (Сложность: ${action.difficulty_level})`;
+    }).join('\n');
+}
+
+/**
+ * Подготавливает полное тело запроса для формата 4.1
+ * @param {Object} state - Текущее состояние игры
+ * @param {Array} selectedActions - Выбранные игроком действия
+ * @param {number} d10 - Результат броска d10 для хода
+ * @returns {Object} Полный payload для отправки в API
+ */
+function prepareRequestPayload(state, selectedActions, d10) {
+    // 1. Формируем ПОЛНЫЙ СИСТЕМНЫЙ ПРОМПТ
+    const systemPromptFull = constructFullSystemPrompt(state);
     
     // 2. Формируем ПОЛЬЗОВАТЕЛЬСКИЙ ПРОМПТ
     const contextBlock = buildContextBlock(state);
@@ -186,14 +217,12 @@ ${PROMPTS.commonErrors}`;
     // Проверяем, нужно ли запросить новые "мысли героя"
     const needsHeroPhrases = State.needsHeroPhrases();
     
-    const userPrompt = `### ЗАДАНИЕ:
-Сгенерируй продолжение игры.
+        // Получаем динамические инъекции на основе состояния игры
+    const dynamicSystemPart = getDynamicSystemInjections(state);
+    
+    const userPrompt = `## ПРОМТ ПОЛЬЗОВАТЕЛЯ
 
-### ИНСТРУКЦИИ:
-1. Используй ПОШАГОВЫЙ АЛГОРИТМ ГЕНЕРАЦИИ ОТВЕТА из системного промпта.
-2. ВСЕ изменения состояния должны быть явно указаны через операции (ADD, REMOVE, SET, MODIFY).
-3. Генерируй 5-10 choices, 0-3 events, 10+ thoughts.
-4. Используй HTML-разметку для сцены.
+${dynamicSystemPart}
 
 ### БРОСОК УДАЧИ НА ХОД:
 d10 = ${d10}
@@ -210,11 +239,12 @@ ${heroStateSummary}
 ### ВЫБРАННЫЕ ДЕЙСТВИЯ И ИХ РЕЗУЛЬТАТЫ:
 ${formatSelectedActionsForPrompt(selectedActions)}
 
-${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сгенерируй 10+ мыслей героя (thoughts) для отображения в интерфейсе.' : ''}
+${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сгенерируй 10+ мыслей героя (thoughts).' : ''}
 
 ### ТРЕБОВАНИЯ К ОТВЕТУ:
-Продолжи игру, сгенерировав весь контент для следующего хода в виде валидного JSON, согласно инструкциям`;
+Продолжи игру, сгенерировав валидный JSON, согласно инструкциям`;
     
+    // 3. Формируем финальный payload
     return {
         messages: [
             { role: "system", content: systemPromptFull },
@@ -226,9 +256,18 @@ ${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сг
     };
 }
 
+// ============================================================================
+// HTTP-ЗАПРОСЫ И СЕТЕВЫЕ ОПЕРАЦИИ
+// ============================================================================
+
 /**
- * Базовая функция выполнения сетевого запроса
+ * Выполняет сетевой запрос с повторными попытками при ошибках
+ * @param {string} url - URL для запроса
+ * @param {Object} headers - HTTP-заголовки
+ * @param {Object} payload - Тело запроса
+ * @param {AbortController} abortController - Контроллер для отмены запроса
  * @returns {Promise<Object>} Распарсенный JSON-ответ
+ * @throws {Error} При превышении попыток или критической ошибке
  */
 async function executeFetch(url, headers, payload, abortController) {
     const maxAttempts = CONFIG.maxRetries || 3;
@@ -271,8 +310,13 @@ async function executeFetch(url, headers, payload, abortController) {
 }
 
 /**
- * Выполняет запрос и возвращает сырой текст ответа (до парсинга)
- * @returns {Promise<string>} Сырой текст ответа
+ * Выполняет сетевой запрос и возвращает сырой текст ответа (без парсинга JSON)
+ * @param {string} url - URL для запроса
+ * @param {Object} headers - HTTP-заголовки
+ * @param {Object} payload - Тело запроса
+ * @param {AbortController} abortController - Контроллер для отмены запроса
+ * @returns {Promise<string>} Сырой текст ответа (для аудита и отладки)
+ * @throws {Error} При превышении попыток или критической ошибке
  */
 async function executeFetchRaw(url, headers, payload, abortController) {
     const maxAttempts = CONFIG.maxRetries || 3;
@@ -316,8 +360,15 @@ async function executeFetchRaw(url, headers, payload, abortController) {
     throw lastError;
 }
 
-// Экспортируем публичные методы модуля
+// ============================================================================
+// ЭКСПОРТ ПУБЛИЧНОГО ИНТЕРФЕЙСА МОДУЛЯ
+// ============================================================================
+
 export const API_Request = {
+    constructFullSystemPrompt,
+    getDynamicSystemInjections,
+    buildContextBlock,
+    formatSelectedActionsForPrompt,
     prepareRequestPayload,
     executeFetch,
     executeFetchRaw
