@@ -20,7 +20,7 @@ export const DebugState = {
     console.log(`🔄 Ход: ${s.turnCount}`);
     
     const degree = s.heroState.find(item => item.id.startsWith('initiation_degree:'));
-    const progress = s.heroState.find(item => item.id === 'progress:oto');
+    const progress = s.heroState.find(item => item.id === 'progress:level');
     const personality = s.heroState.find(item => item.id === 'personality:hero');
     
     console.log(`🎓 Степень: ${degree?.value || 'Нет'}`);

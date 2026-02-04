@@ -95,7 +95,8 @@ const STATE_EVENTS = {
   STATE_IMPORTED: 'state:imported',
   HERO_DEATH: 'hero:death',
   VICTORY: 'victory',
-  THOUGHTS_UPDATED: 'thoughts:updated'
+  THOUGHTS_UPDATED: 'thoughts:updated',
+  GAME_TYPE_CHANGED: 'game:type:changed'
 };
 
 // ========================
@@ -107,11 +108,11 @@ const DEFAULT_HERO_STATE = [
   { "id": "stat:sanity", "value": 50 },
   { "id": "stat:stealth", "value": 50 },
   { "id": "stat:influence", "value": 50 },
-  { "id": "progress:oto", "value": 0 },
-  { "id": "initiation_degree:oto_0", "value": "0° — Минервал (кандидат)" },
+  { "id": "progress:level", "value": 0 },
+  { "id": "initiation_degree:main_0", "value": "0° — Неофит (кандидат)" },
   {
     "id": "personality:hero",
-    "value": "Молодой Минервал, полный энтузиазма."
+    "value": "Молодой искатель приключений, полный энтузиазма."
   }
 ];
 
@@ -120,12 +121,13 @@ const DEFAULT_STATE = {
   gameId: Utils.generateUniqueId(),
   lastSaveTime: new Date().toISOString(),
   turnCount: 1,
+  gameType: 'standard', // 'standard' или 'custom'
   heroState: [...DEFAULT_HERO_STATE],
   gameState: {
     summary: "",
     history: [],
     aiMemory: {},
-    currentScene: { ...PROMPTS.initialGameState },
+    currentScene: { ...PROMPTS.standardGameOTO.initialGameState },
     selectedActions: [],
   },
   ui: {
@@ -196,14 +198,25 @@ function initializeState() {
           }
         }
         
-        if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
-          console.warn('⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
-          state.gameState.currentScene = { ...PROMPTS.initialGameState };
+        // Восстанавливаем gameType, если есть
+        if (parsed.gameType) {
+          state.gameType = parsed.gameType;
         }
         
-        // После загрузки состояния в initializeState добавьте:
+        // Проверяем currentScene
+        if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
+          console.warn('⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
+          state.gameState.currentScene = state.gameType === 'standard' 
+            ? { ...PROMPTS.standardGameOTO.initialGameState }
+            : { scene: "Сцена не загружена", choices: [], aiMemory: {}, gameType: 'custom' };
+        }
+        
+        // После загрузки состояния
         console.log('✅ Состояние загружено из localStorage (формат 4.1)');
-        stateObserver.notify(STATE_EVENTS.LOADED, { gameId: state.gameId });
+        stateObserver.notify(STATE_EVENTS.LOADED, { 
+          gameId: state.gameId,
+          gameType: state.gameType 
+        });
         
         // Добавляем начальную сцену в историю, если история пуста
         if (state.gameState.history.length === 0 && state.gameState.currentScene) {
@@ -229,7 +242,9 @@ function initializeState() {
     }
     
     checkHeroDeath();
-    syncDegree();
+    if (state.gameType === 'standard') {
+      syncDegree();
+    }
     
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
     document.documentElement.style.fontSize = `${state.settings.scale * 16}px`;
@@ -238,7 +253,8 @@ function initializeState() {
     stateObserver.notify(STATE_EVENTS.INITIALIZED, {
       gameId: state.gameId,
       turnCount: state.turnCount,
-      heroItems: state.heroState.length
+      heroItems: state.heroState.length,
+      gameType: state.gameType
     });
     
   } catch (error) {
@@ -269,7 +285,10 @@ function checkHeroDeath() {
 }
 
 function syncDegree() {
-  const progressItem = state.heroState.find(item => item.id === 'progress:oto');
+  // Только для стандартной игры О.Т.О.
+  if (state.gameType !== 'standard') return;
+  
+  const progressItem = state.heroState.find(item => item.id === 'progress:level');
   const progress = progressItem ? progressItem.value : 0;
   
   let newDegreeIndex = 0;
@@ -282,7 +301,7 @@ function syncDegree() {
     parseInt(currentDegreeItem.id.split('_').pop()) || 0 : 0;
   
   if (newDegreeIndex > currentDegreeIndex) {
-    const newDegreeId = `initiation_degree:oto_${newDegreeIndex}`;
+    const newDegreeId = `initiation_degree:main_${newDegreeIndex}`;
     const newDegreeValue = CONFIG.degrees[newDegreeIndex].name;
     
     state.heroState = state.heroState.filter(item => !item.id.startsWith('initiation_degree:'));
@@ -314,7 +333,6 @@ function syncDegree() {
 // ========================
 // ОПЕРАЦИИ НАД GAME_ITEM
 // ========================
-
 
 /**
  * УЛУЧШЕННАЯ ФУНКЦИЯ: Применение операций к heroState
@@ -547,8 +565,10 @@ function applyOperations(operations) {
   // Проверяем на смерть героя
   checkHeroDeath();
   
-  // Синхронизируем степень инициации
-  syncDegree();
+  // Синхронизируем степень инициации (только для стандартной игры)
+  if (state.gameType === 'standard') {
+    syncDegree();
+  }
   
   console.log(`📊 Операций применено: ${appliedOps.length}, провалено: ${failedOps.length}`);
   
@@ -598,6 +618,7 @@ function exportFullState() {
   const exportData = {
     version: '4.1.0',
     gameId: state.gameId,
+    gameType: state.gameType,
     exportTime: new Date().toISOString(),
     heroState: [...state.heroState],
     gameState: { ...state.gameState },
@@ -647,6 +668,7 @@ function importFullState(importData) {
   }
   
   if (importData.gameId) state.gameId = importData.gameId;
+  if (importData.gameType) state.gameType = importData.gameType;
   if (importData.exportTime) state.lastSaveTime = importData.exportTime;
   
   if (importData.lastTurnUpdates !== undefined) {
@@ -657,8 +679,11 @@ function importFullState(importData) {
     state.lastTurnStatChanges = importData.lastTurnStatChanges;
   }
   
-  syncDegree();
+  if (state.gameType === 'standard') {
+    syncDegree();
+  }
   
+  stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, { gameType: state.gameType });
   stateObserver.notify(STATE_EVENTS.STATE_IMPORTED, { data: importData });
   stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'import', heroState: state.heroState });
   stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
@@ -683,6 +708,7 @@ function exportAllAppData() {
       auditLog: [...state.auditLog],
       metadata: {
         gameId: state.gameId,
+        gameType: state.gameType,
         lastSaveTime: state.lastSaveTime,
         totalPlayTime: calculateTotalPlayTime()
       }
@@ -730,9 +756,11 @@ function importAllAppData(importData) {
   
   if (importData.appData.metadata) {
     state.gameId = importData.appData.metadata.gameId || state.gameId;
+    state.gameType = importData.appData.metadata.gameType || state.gameType;
     state.lastSaveTime = importData.appData.metadata.lastSaveTime || state.lastSaveTime;
   }
   
+  stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, { gameType: state.gameType });
   stateObserver.notify(STATE_EVENTS.SETTINGS_CHANGED);
   stateObserver.notify(STATE_EVENTS.MODEL_CHANGED);
   
@@ -785,6 +813,59 @@ function needsHeroPhrases() {
 }
 
 // ========================
+// УПРАВЛЕНИЕ ТИПОМ ИГРЫ
+// ========================
+
+function setGameType(gameType, initialScene = null) {
+  if (!['standard', 'custom'].includes(gameType)) {
+    throw new Error('Неподдерживаемый тип игры. Допустимые значения: standard, custom');
+  }
+  
+  const oldGameType = state.gameType;
+  state.gameType = gameType;
+  
+  // Если переключаемся на кастомную игру и есть начальная сцена
+  if (gameType === 'custom' && initialScene) {
+    state.gameState.currentScene = {
+      ...initialScene,
+      gameType: 'custom'
+    };
+    
+    // Обновляем aiMemory, чтобы добавить gameType
+    if (!state.gameState.currentScene.aiMemory) {
+      state.gameState.currentScene.aiMemory = {};
+    }
+    state.gameState.currentScene.aiMemory.gameType = 'custom';
+  }
+  
+  // Если переключаемся на стандартную игру
+  if (gameType === 'standard' && oldGameType !== 'standard') {
+    state.gameState.currentScene = { 
+      ...PROMPTS.standardGameOTO.initialGameState,
+      gameType: 'standard'
+    };
+    
+    // Сбрасываем ритуальные параметры
+    state.isRitualActive = false;
+    state.ritualProgress = 0;
+    state.ritualTarget = null;
+  }
+  
+  stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, { 
+    oldGameType, 
+    newGameType: gameType 
+  });
+  
+  stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { 
+    scene: state.gameState.currentScene,
+    gameType: state.gameType
+  });
+  
+  console.log(`🎮 Тип игры изменен: ${oldGameType} → ${gameType}`);
+  Saveload.saveState();
+}
+
+// ========================
 // ПУБЛИЧНЫЙ ИНТЕРФЕЙС
 // ========================
 
@@ -815,30 +896,33 @@ export const State = {
         const currentUI = state.ui;
         const currentModels = state.models;
         const currentAuditLog = state.auditLog;
+        const currentGameType = state.gameType;
         
         state.heroState = [...DEFAULT_HERO_STATE];
-        // В silent режиме сохраняем установленную новую сцену сгенерированного сюжета:
-        if (!silent) {
-          // Полный сброс
+        
+        if (currentGameType === 'standard') {
+          // Полный сброс для стандартной игры
           state.gameState = {
             summary: "",
             history: [],
             aiMemory: {},
-            currentScene: { ...PROMPTS.initialGameState },
+            currentScene: { ...PROMPTS.standardGameOTO.initialGameState },
             selectedActions: [],
           };
         } else {
-          // Silent сброс при загрузке нового сюжета - только очищаем историю, но сохраняем currentScene
+          // Для кастомной игры очищаем всё, кроме текущей сцены
           state.gameState.summary = "";
           state.gameState.history = [];
           state.gameState.aiMemory = {};
           state.gameState.selectedActions = [];
-          // currentScene НЕ трогаем - он будет установлен извне
+          // currentScene НЕ трогаем - он уже содержит кастомную сцену
         }
+        
         state.settings = currentSettings;
         state.ui = currentUI;
         state.models = currentModels;
         state.auditLog = currentAuditLog;
+        state.gameType = currentGameType;
         state.turnCount = 0;
         state.isRitualActive = false;
         state.ritualProgress = 0;
@@ -850,7 +934,9 @@ export const State = {
         state.gameId = Utils.generateUniqueId();
         state.lastSaveTime = new Date().toISOString();
         
-        syncDegree();
+        if (state.gameType === 'standard') {
+          syncDegree();
+        }
         
         stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
         stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
@@ -869,19 +955,30 @@ export const State = {
       const currentUI = state.ui;
       const currentModels = state.models;
       const currentAuditLog = state.auditLog;
+      const currentGameType = state.gameType;
       
       state.heroState = [...DEFAULT_HERO_STATE];
-      state.gameState = {
-        summary: "",
-        history: [],
-        aiMemory: {},
-        currentScene: { ...PROMPTS.initialGameState },
-        selectedActions: [],
-      };
+      
+      if (currentGameType === 'standard') {
+        state.gameState = {
+          summary: "",
+          history: [],
+          aiMemory: {},
+          currentScene: { ...PROMPTS.standardGameOTO.initialGameState },
+          selectedActions: [],
+        };
+      } else {
+        state.gameState.summary = "";
+        state.gameState.history = [];
+        state.gameState.aiMemory = {};
+        state.gameState.selectedActions = [];
+      }
+      
       state.settings = currentSettings;
       state.ui = currentUI;
       state.models = currentModels;
       state.auditLog = currentAuditLog;
+      state.gameType = currentGameType;
       state.turnCount = 0;
       state.isRitualActive = false;
       state.ritualProgress = 0;
@@ -893,7 +990,9 @@ export const State = {
       state.gameId = Utils.generateUniqueId();
       state.lastSaveTime = new Date().toISOString();
       
-      syncDegree();
+      if (state.gameType === 'standard') {
+        syncDegree();
+      }
       
       stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
       stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
@@ -931,6 +1030,7 @@ export const State = {
   getGameItemValue,
   
   syncDegree,
+  setGameType,
   
   resetFullGame,
   
@@ -1012,6 +1112,7 @@ export const State = {
   onSceneChange: (callback) => stateObserver.subscribe(STATE_EVENTS.SCENE_CHANGED, callback),
   onTurnComplete: (callback) => stateObserver.subscribe(STATE_EVENTS.TURN_COMPLETED, callback),
   onSettingsChange: (callback) => stateObserver.subscribe(STATE_EVENTS.SETTINGS_CHANGED, callback),
+  onGameTypeChange: (callback) => stateObserver.subscribe(STATE_EVENTS.GAME_TYPE_CHANGED, callback),
   
   EVENTS: STATE_EVENTS
 };

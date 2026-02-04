@@ -568,7 +568,7 @@ function renderStats() {
         }
     });
     
-    const progressValue = State.getGameItemValue('progress:oto') || 0;
+    const progressValue = State.getGameItemValue('progress:level') || 0;
     const maxScore = 110;
     const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
     if (dom.tube) {

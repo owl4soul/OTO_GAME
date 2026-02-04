@@ -10,15 +10,19 @@ import { PROMPTS } from './prompts.js';
 // ============================================================================
 
 /**
- * Конструирует полный системный промт, объединяя все компоненты из PROMPTS
+ * Конструирует полный системный промт на основе типа игры
  * @param {Object} state - Текущее состояние игры
  * @returns {string} Полный системный промт для отправки в API
  */
 function constructFullSystemPrompt(state) {
+  // Определяем основной системный промпт в зависимости от типа игры
+  const mainSystemPrompt = state.gameType === 'standard' 
+    ? PROMPTS.standardGameOTO.system.gameMaster 
+    : PROMPTS.system.gameMaster;
 
-    // Собираем полный системный промт из модульных компонентов
-    const fullSystemPrompt = `
-${PROMPTS.system.gameMaster}
+  // Собираем полный системный промт из модульных компонентов
+  const fullSystemPrompt = `
+${mainSystemPrompt}
 
 ${PROMPTS.corePrinciples}
 
@@ -64,7 +68,7 @@ ${PROMPTS.exampleChoiceWithAllTypes}
 ### ЧАСТЫЕ ОШИБКИ:
 ${PROMPTS.commonErrors}`;
 
-    return fullSystemPrompt;
+  return fullSystemPrompt;
 }
 
 // ============================================================================
@@ -77,61 +81,60 @@ ${PROMPTS.commonErrors}`;
  * @returns {string} Динамические инъекции для промпта
  */
 function getDynamicSystemInjections(state) {
-    const injections = [];
-    const turn = state.turnCount;
+  const injections = [];
+  const turn = state.turnCount;
+  
+  // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА (каждые 10 ходов)
+  if (turn > 0 && turn % 10 === 0) {
+    console.log(`🌀 [Client Director] Turn ${turn}: Injecting Narrative Twist.`);
+    injections.push(`>>> [TRIGGER: TURN ${turn}] ${PROMPTS.injections.twist}`);
+  }
+  
+  // 2. ИНЪЕКЦИЯ БЕЗУМИЯ (при низком уровне рассудка)
+  const sanityItem = State.getGameItem('stat:sanity');
+  if (sanityItem && sanityItem.value < 20) {
+    console.log(`🌀 [Client Director] Sanity Low (${sanityItem.value}): Injecting Insanity.`);
+    injections.push(`>>> [TRIGGER: LOW SANITY] ${PROMPTS.injections.insanity}`);
+  }
+  
+  // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ СЮЖЕТНЫХ ПЕТЕЛЬ
+  if (state.gameState.history.length > 0) {
+    const lastHistory = state.gameState.history[state.gameState.history.length - 1];
+    const lastSceneText = lastHistory.fullText || '';
+    const currentSceneText = state.gameState.currentScene.text || '';
+    const comparisonLength = 50;
     
-    // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА (каждые 10 ходов)
-    if (turn > 0 && turn % 10 === 0) {
-        console.log(`🌀 [Client Director] Turn ${turn}: Injecting Narrative Twist.`);
-        injections.push(`>>> [TRIGGER: TURN ${turn}] ${PROMPTS.injections.twist}`);
+    if (lastSceneText.length >= comparisonLength && currentSceneText.length >= comparisonLength) {
+      const startOfLastScene = lastSceneText.substring(0, comparisonLength).trim();
+      const startOfCurrentScene = currentSceneText.substring(0, comparisonLength).trim();
+      
+      if (startOfLastScene === startOfCurrentScene ||
+          lastSceneText.includes(startOfCurrentScene) ||
+          currentSceneText.includes(startOfLastScene))
+      {
+        console.log(`🌀 [Client Director] Loop/Repetition Detected: Injecting Anti-Loop.`);
+        injections.push(`>>> [TRIGGER: LOOP DETECTED] ${PROMPTS.injections.antiLoop}`);
+      }
     }
-    
-    // 2. ИНЪЕКЦИЯ БЕЗУМИЯ (при низком уровне рассудка)
-    const sanityItem = State.getGameItem('stat:sanity');
-    if (sanityItem && sanityItem.value < 20) {
-        console.log(`🌀 [Client Director] Sanity Low (${sanityItem.value}): Injecting Insanity.`);
-        injections.push(`>>> [TRIGGER: LOW SANITY] ${PROMPTS.injections.insanity}`);
-    }
-    
-    // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ СЮЖЕТНЫХ ПЕТЕЛЬ
-    if (state.gameState.history.length > 0) {
-        const lastHistory = state.gameState.history[state.gameState.history.length - 1];
-        const lastSceneText = lastHistory.fullText || '';
-        const currentSceneText = state.gameState.currentScene.text || '';
-        const comparisonLength = 50;
-        
-        if (lastSceneText.length >= comparisonLength && currentSceneText.length >= comparisonLength) {
-            const startOfLastScene = lastSceneText.substring(0, comparisonLength).trim();
-            const startOfCurrentScene = currentSceneText.substring(0, comparisonLength).trim();
-            
-            if (startOfLastScene === startOfCurrentScene ||
-                lastSceneText.includes(startOfCurrentScene) ||
-                currentSceneText.includes(startOfLastScene))
-            {
-                console.log(`🌀 [Client Director] Loop/Repetition Detected: Injecting Anti-Loop.`);
-                injections.push(`>>> [TRIGGER: LOOP DETECTED] ${PROMPTS.injections.antiLoop}`);
-            }
-        }
-    }
-    
-    // 4. ИНЪЕКЦИЯ РИТУАЛА (если активен ритуальный режим)
-    if (state.isRitualActive) {
-        console.log(`🕯️ [Client Director] RITUAL MODE ACTIVE.`);
-        injections.push(`>>> [CRITICAL MODE: RITUAL OF INITIATION]
-        ТЕКУЩИЙ СТАТУС: Игрок проходит Ритуал Посвящения.
-        
-        ИНСТРУКЦИИ ДЛЯ РИТУАЛА:
-        1. ТОН: Торжественный, архаичный, мистический, пугающий. Используй символизм Телемы.
-        2. СТРУКТУРА: Ритуал — это испытание. Не давай простых путей. Проверяй Волю и Разум.
-        3. ПРОГРЕСС: Не начисляй очки прогресса (progress:oto) пока ритуал не завершится успехом.
-        4. ЗАВЕРШЕНИЕ: Когда игрок пройдет испытание, ОБЯЗАТЕЛЬНО добавь в JSON поле "ritual_completed": true.
-        5. ВИЗУАЛ: Описывай запахи, звуки, свет свечей, тени.`);
-    }
-    
-    // 5. БАЗОВЫЕ ИНСТРУКЦИИ (всегда добавляются)
-    injections.push(PROMPTS.injections.coreMovement);
-    
-    return injections.join('\n\n');
+  }
+  
+  // 4. ИНЪЕКЦИЯ РИТУАЛА (только для стандартной игры О.Т.О.)
+  if (state.gameType === 'standard' && state.isRitualActive) {
+    console.log(`🕯️ [Client Director] RITUAL MODE ACTIVE (О.Т.О.).`);
+    injections.push(PROMPTS.injections.otoRitual);
+  }
+  
+  // 5. БАЗОВЫЕ ИНСТРУКЦИИ (всегда добавляются)
+  injections.push(PROMPTS.injections.coreMovement);
+  
+  // 6. УКАЗАНИЕ ТИПА ИГРЫ (для лучшего понимания контекста ИИ)
+  if (state.gameType === 'standard') {
+    injections.push(`>>> [КОНТЕКСТ ИГРЫ: Стандартная игра "Орден О.Т.О."]`);
+  } else {
+    injections.push(`>>> [КОНТЕКСТ ИГРЫ: Кастомный сценарий]`);
+  }
+  
+  return injections.join('\n\n');
 }
 
 // ============================================================================
@@ -144,35 +147,40 @@ function getDynamicSystemInjections(state) {
  * @returns {string} Отформатированный блок контекста
  */
 function buildContextBlock(state) {
-    let parts = [];
-    
-    // А. ГЛОБАЛЬНАЯ ЛЕТОПИСЬ (общая сводка сюжета)
-    if (state.gameState.summary && state.gameState.summary.length > 0) {
-        parts.push(`### ГЛОБАЛЬНАЯ ЛЕТОПИСЬ\n${state.gameState.summary}`);
+  let parts = [];
+  
+  // А. ГЛОБАЛЬНАЯ ЛЕТОПИСЬ (общая сводка сюжета)
+  if (state.gameState.summary && state.gameState.summary.length > 0) {
+    parts.push(`### ГЛОБАЛЬНАЯ ЛЕТОПИСЬ\n${state.gameState.summary}`);
+  }
+  
+  // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ ИИ (aiMemory) - контекст для Гейм-мастера
+  if (state.gameState.aiMemory && Object.keys(state.gameState.aiMemory).length > 0) {
+    const memoryForPrompt = { ...state.gameState.aiMemory };
+    // Убедимся, что gameType есть в памяти ИИ
+    if (!memoryForPrompt.gameType) {
+      memoryForPrompt.gameType = state.gameType;
     }
-    
-    // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ ИИ (aiMemory) - контекст для Гейм-мастера
-    if (state.gameState.aiMemory && Object.keys(state.gameState.aiMemory).length > 0) {
-        parts.push(`### ТВОЯ ДИНАМИЧЕСКАЯ ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(state.gameState.aiMemory, null, 2)}`);
-    }
-    
-    // В. КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ходы)
-    const turnsToTake = state.gameState.summary ? CONFIG.activeContextTurns : CONFIG.historyContext;
-    const historySlice = state.gameState.history.slice(-turnsToTake);
-    
-    if (historySlice.length > 0) {
-        const historyString = historySlice.map(entry => {
-            // Извлечение текста выбора из массива actionResults или fallback к старому полю choice
-            const choiceText = entry.actionResults 
-                ? entry.actionResults.map(a => `${a.text}${a.success ? '' : ' (Провал)'}`).join(', ') 
-                : (entry.choice || 'Нет выбора');
-                
-            return `СЦЕНА: ${entry.fullText}\nВЫБОР: ${choiceText}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`;
-        }).join('\n---\n');
-        parts.push(`### КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ${historySlice.length} ходов)\n${historyString}`);
-    }
-    
-    return parts.length > 0 ? parts.join('\n\n') : "История: Это начало пути. Предыдущих событий нет.";
+    parts.push(`### ТВОЯ ДИНАМИЧЕСКАЯ ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(memoryForPrompt, null, 2)}`);
+  }
+  
+  // В. КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ходы)
+  const turnsToTake = state.gameState.summary ? CONFIG.activeContextTurns : CONFIG.historyContext;
+  const historySlice = state.gameState.history.slice(-turnsToTake);
+  
+  if (historySlice.length > 0) {
+    const historyString = historySlice.map(entry => {
+      // Извлечение текста выбора из массива actionResults или fallback к старому полю choice
+      const choiceText = entry.actionResults 
+        ? entry.actionResults.map(a => `${a.text}${a.success ? '' : ' (Провал)'}`).join(', ') 
+        : (entry.choice || 'Нет выбора');
+        
+      return `СЦЕНА: ${entry.fullText}\nВЫБОР: ${choiceText}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`;
+    }).join('\n---\n');
+    parts.push(`### КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ${historySlice.length} ходов)\n${historyString}`);
+  }
+  
+  return parts.length > 0 ? parts.join('\n\n') : "История: Это начало пути. Предыдущих событий нет.";
 }
 
 /**
@@ -181,15 +189,15 @@ function buildContextBlock(state) {
  * @returns {string} Отформатированная строка с результатами действий
  */
 function formatSelectedActionsForPrompt(selectedActions) {
-    if (!selectedActions || selectedActions.length === 0) {
-        return "Действия не выбраны";
-    }
-    
-    return selectedActions.map(action => {
-        const status = action.success ? '✅ УСПЕХ' :
-            action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ' : '❌ ПРОВАЛ';
-        return `"${action.text}" → ${status} (Сложность: ${action.difficulty_level})`;
-    }).join('\n');
+  if (!selectedActions || selectedActions.length === 0) {
+    return "Действия не выбраны";
+  }
+  
+  return selectedActions.map(action => {
+    const status = action.success ? '✅ УСПЕХ' :
+      action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ' : '❌ ПРОВАЛ';
+    return `"${action.text}" → ${status} (Сложность: ${action.difficulty_level})`;
+  }).join('\n');
 }
 
 /**
@@ -200,27 +208,27 @@ function formatSelectedActionsForPrompt(selectedActions) {
  * @returns {Object} Полный payload для отправки в API
  */
 function prepareRequestPayload(state, selectedActions, d10) {
-    // 1. Формируем ПОЛНЫЙ СИСТЕМНЫЙ ПРОМПТ
-    const systemPromptFull = constructFullSystemPrompt(state);
-    
-    // 2. Формируем ПОЛЬЗОВАТЕЛЬСКИЙ ПРОМПТ
-    const contextBlock = buildContextBlock(state);
-    
-    // Собираем геройское состояние в читаемом формате
-    const heroStateSummary = state.heroState.map(item => {
-        let line = `• ${item.id}: ${item.value}`;
-        if (item.description) line += ` (${item.description})`;
-        if (item.duration !== undefined) line += ` [длительность: ${item.duration}]`;
-        return line;
-    }).join('\n');
-    
-    // Проверяем, нужно ли запросить новые "мысли героя"
-    const needsHeroPhrases = State.needsHeroPhrases();
-    
-        // Получаем динамические инъекции на основе состояния игры
-    const dynamicSystemPart = getDynamicSystemInjections(state);
-    
-    const userPrompt = `## ПРОМТ ПОЛЬЗОВАТЕЛЯ
+  // 1. Формируем ПОЛНЫЙ СИСТЕМНЫЙ ПРОМПТ
+  const systemPromptFull = constructFullSystemPrompt(state);
+  
+  // 2. Формируем ПОЛЬЗОВАТЕЛЬСКИЙ ПРОМПТ
+  const contextBlock = buildContextBlock(state);
+  
+  // Собираем геройское состояние в читаемом формате
+  const heroStateSummary = state.heroState.map(item => {
+    let line = `• ${item.id}: ${item.value}`;
+    if (item.description) line += ` (${item.description})`;
+    if (item.duration !== undefined) line += ` [длительность: ${item.duration}]`;
+    return line;
+  }).join('\n');
+  
+  // Проверяем, нужно ли запросить новые "мысли героя"
+  const needsHeroPhrases = State.needsHeroPhrases();
+  
+  // Получаем динамические инъекции на основе состояния игры
+  const dynamicSystemPart = getDynamicSystemInjections(state);
+  
+  const userPrompt = `## ПРОМТ ПОЛЬЗОВАТЕЛЯ
 
 ${dynamicSystemPart}
 
@@ -243,17 +251,17 @@ ${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сг
 
 ### ТРЕБОВАНИЯ К ОТВЕТУ:
 Продолжи игру, сгенерировав валидный JSON, согласно инструкциям`;
-    
-    // 3. Формируем финальный payload
-    return {
-        messages: [
-            { role: "system", content: systemPromptFull },
-            { role: "user", content: userPrompt }
-        ],
-        model: state.settings.model,
-        temperature: 0.9,
-        max_tokens: 10000
-    };
+  
+  // 3. Формируем финальный payload
+  return {
+    messages: [
+      { role: "system", content: systemPromptFull },
+      { role: "user", content: userPrompt }
+    ],
+    model: state.settings.model,
+    temperature: 0.9,
+    max_tokens: 10000
+  };
 }
 
 // ============================================================================
@@ -270,43 +278,43 @@ ${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сг
  * @throws {Error} При превышении попыток или критической ошибке
  */
 async function executeFetch(url, headers, payload, abortController) {
-    const maxAttempts = CONFIG.maxRetries || 3;
-    let lastError;
-    
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-            const options = {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(payload)
-            };
-            
-            if (abortController) {
-                options.signal = abortController.signal;
-            }
-            
-            const response = await fetch(url, options);
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP Error ${response.status}: ${errorText}`);
-            }
-            
-            return await response.json();
-        } catch (error) {
-            lastError = error;
-            
-            if (error.name === 'AbortError') throw error;
-            
-            console.warn(`[API_Request] Попытка ${attempt}/${maxAttempts} не удалась: ${error.message}`);
-            
-            if (attempt < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, CONFIG.retryDelayMs));
-            }
-        }
+  const maxAttempts = CONFIG.maxRetries || 3;
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const options = {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(payload)
+      };
+      
+      if (abortController) {
+        options.signal = abortController.signal;
+      }
+      
+      const response = await fetch(url, options);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      
+      if (error.name === 'AbortError') throw error;
+      
+      console.warn(`[API_Request] Попытка ${attempt}/${maxAttempts} не удалась: ${error.message}`);
+      
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, CONFIG.retryDelayMs));
+      }
     }
-    
-    throw lastError;
+  }
+  
+  throw lastError;
 }
 
 /**
@@ -319,45 +327,45 @@ async function executeFetch(url, headers, payload, abortController) {
  * @throws {Error} При превышении попыток или критической ошибке
  */
 async function executeFetchRaw(url, headers, payload, abortController) {
-    const maxAttempts = CONFIG.maxRetries || 3;
-    let lastError;
-    
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-            const options = {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(payload)
-            };
-            
-            if (abortController) {
-                options.signal = abortController.signal;
-            }
-            
-            const response = await fetch(url, options);
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(`HTTP Error ${response.status}: ${errorText}`);
-            }
-            
-            // Возвращаем сырой текст (важно для аудита)
-            return await response.text();
-            
-        } catch (error) {
-            lastError = error;
-            
-            if (error.name === 'AbortError') throw error;
-            
-            console.warn(`[API_Request] Попытка ${attempt}/${maxAttempts} не удалась: ${error.message}`);
-            
-            if (attempt < maxAttempts) {
-                await new Promise(resolve => setTimeout(resolve, CONFIG.retryDelayMs));
-            }
-        }
+  const maxAttempts = CONFIG.maxRetries || 3;
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const options = {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(payload)
+      };
+      
+      if (abortController) {
+        options.signal = abortController.signal;
+      }
+      
+      const response = await fetch(url, options);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+      }
+      
+      // Возвращаем сырой текст (важно для аудита)
+      return await response.text();
+      
+    } catch (error) {
+      lastError = error;
+      
+      if (error.name === 'AbortError') throw error;
+      
+      console.warn(`[API_Request] Попытка ${attempt}/${maxAttempts} не удалась: ${error.message}`);
+      
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, CONFIG.retryDelayMs));
+      }
     }
-    
-    throw lastError;
+  }
+  
+  throw lastError;
 }
 
 // ============================================================================
@@ -365,11 +373,11 @@ async function executeFetchRaw(url, headers, payload, abortController) {
 // ============================================================================
 
 export const API_Request = {
-    constructFullSystemPrompt,
-    getDynamicSystemInjections,
-    buildContextBlock,
-    formatSelectedActionsForPrompt,
-    prepareRequestPayload,
-    executeFetch,
-    executeFetchRaw
+  constructFullSystemPrompt,
+  getDynamicSystemInjections,
+  buildContextBlock,
+  formatSelectedActionsForPrompt,
+  prepareRequestPayload,
+  executeFetch,
+  executeFetchRaw
 };
