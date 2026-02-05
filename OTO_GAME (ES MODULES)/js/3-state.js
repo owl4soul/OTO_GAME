@@ -113,10 +113,10 @@ const DEFAULT_HERO_STATE = [
   { "id": "stat:stealth", "value": 50 },
   { "id": "stat:influence", "value": 50 },
   { "id": "progress:level", "value": 0 },
-  { 
-    "id": "organization_rank:oto", 
-    "value": 0, 
-    "description": "0° — Минервал (кандидат)" 
+  {
+    "id": "organization_rank:oto",
+    "value": 0,
+    "description": "0° — Минервал (кандидат)"
   },
   {
     "id": "personality:hero",
@@ -220,16 +220,16 @@ function initializeState() {
         // Проверяем currentScene
         if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
           console.warn('⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
-          state.gameState.currentScene = state.gameType === 'standard' 
-            ? { ...PROMPTS.standardGameOTO.initialGameState }
-            : { scene: "Сцена не загружена", choices: [], aiMemory: {}, gameType: 'custom' };
+          state.gameState.currentScene = state.gameType === 'standard' ?
+            { ...PROMPTS.standardGameOTO.initialGameState } :
+            { scene: "Сцена не загружена", choices: [], aiMemory: {}, gameType: 'custom' };
         }
         
         // После загрузки состояния
         console.log('✅ Состояние загружено из localStorage (формат 4.1)');
-        stateObserver.notify(STATE_EVENTS.LOADED, { 
+        stateObserver.notify(STATE_EVENTS.LOADED, {
           gameId: state.gameId,
-          gameType: state.gameType 
+          gameType: state.gameType
         });
         
         // Добавляем начальную сцену в историю, если история пуста
@@ -463,8 +463,8 @@ function syncOrganizationRank() {
     // Добавляем временный бафф ко всем статам
     state.heroState = state.heroState.map(item => {
       if (item.id.startsWith('stat:')) {
-        return { 
-          ...item, 
+        return {
+          ...item,
           value: Math.min(100, item.value + 5) // Бонус при повышении
         };
       }
@@ -1174,7 +1174,7 @@ function setGameType(gameType, initialScene = null) {
   
   // Если переключаемся на стандартную игру
   if (gameType === 'standard' && oldGameType !== 'standard') {
-    state.gameState.currentScene = { 
+    state.gameState.currentScene = {
       ...PROMPTS.standardGameOTO.initialGameState,
       gameType: 'standard'
     };
@@ -1188,12 +1188,12 @@ function setGameType(gameType, initialScene = null) {
     initializeOrganizationHierarchies();
   }
   
-  stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, { 
-    oldGameType, 
-    newGameType: gameType 
+  stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, {
+    oldGameType,
+    newGameType: gameType
   });
   
-  stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { 
+  stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, {
     scene: state.gameState.currentScene,
     gameType: state.gameType
   });

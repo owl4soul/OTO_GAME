@@ -888,28 +888,28 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         console.log('✅ Получен ответ от ИИ:', data);
         
         // Проверяем, что данные от ИИ валидны
-if (!data) {
-    throw new Error("Ответ от ИИ пустой");
-}
-
-if (!data.scene || typeof data.scene !== 'string' || data.scene.trim() === '') {
-    console.warn('⚠️ Ответ ИИ не содержит сцены:', data);
-    // Пытаемся исправить
-    data.scene = data.scene || "Сцена не была сгенерирована. Пожалуйста, попробуйте еще раз.";
-}
-
-if (!data.choices || !Array.isArray(data.choices)) {
-    console.warn('⚠️ Ответ ИИ не содержит choices или это не массив:', data);
-    data.choices = data.choices || [];
-}
-
-console.log('✅ Данные от ИИ проверены:', {
-    hasScene: !!data.scene,
-    sceneLength: data.scene ? data.scene.length : 0,
-    choicesCount: data.choices ? data.choices.length : 0
-});
-
-
+        if (!data) {
+            throw new Error("Ответ от ИИ пустой");
+        }
+        
+        if (!data.scene || typeof data.scene !== 'string' || data.scene.trim() === '') {
+            console.warn('⚠️ Ответ ИИ не содержит сцены:', data);
+            // Пытаемся исправить
+            data.scene = data.scene || "Сцена не была сгенерирована. Пожалуйста, попробуйте еще раз.";
+        }
+        
+        if (!data.choices || !Array.isArray(data.choices)) {
+            console.warn('⚠️ Ответ ИИ не содержит choices или это не массив:', data);
+            data.choices = data.choices || [];
+        }
+        
+        console.log('✅ Данные от ИИ проверены:', {
+            hasScene: !!data.scene,
+            sceneLength: data.scene ? data.scene.length : 0,
+            choicesCount: data.choices ? data.choices.length : 0
+        });
+        
+        
         // Теперь передаем actionResults для правильного применения
         processTurn(data, actionResults, d10);
         
@@ -1021,9 +1021,9 @@ function processTurn(data, actionResults, d10) {
     console.log('📊 Изменения статов за ход:', statChanges);
     
     // Обновляем память ИИ (заменяем только непустым значением)
-const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && Object.keys(data.aiMemory).length > 0) 
-    ? data.aiMemory 
-    : state.gameState.aiMemory;
+    const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && Object.keys(data.aiMemory).length > 0) ?
+        data.aiMemory :
+        state.gameState.aiMemory;
     
     // Добавляем мысли героя
     if (data.thoughts && Array.isArray(data.thoughts)) {
@@ -1032,15 +1032,15 @@ const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && O
     
     // Обновляем сцену
     const updatedScene = {
-    scene: data.scene || state.gameState.currentScene.scene,
-    reflection: data.reflection || "",
-    choices: data.choices || state.gameState.currentScene.choices,
-    typology: data.typology || "",
-    design_notes: data.design_notes || "",
-    aiMemory: updatedAiMemory,
-    thoughts: data.thoughts || [],
-    summary: data.summary || ""
-};
+        scene: data.scene || state.gameState.currentScene.scene,
+        reflection: data.reflection || "",
+        choices: data.choices || state.gameState.currentScene.choices,
+        typology: data.typology || "",
+        design_notes: data.design_notes || "",
+        aiMemory: updatedAiMemory,
+        thoughts: data.thoughts || [],
+        summary: data.summary || ""
+    };
     
     // Добавляем запись в историю
     const newHistoryEntry = {
@@ -1060,91 +1060,91 @@ const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && O
         updatedHistory.shift();
     }
     
-  // Шаг 7: Обновляем организации из ответа ИИ (если есть)
-  if (data._organizationsHierarchy && typeof data._organizationsHierarchy === 'object') {
-    console.log('🏛️ Обновление иерархий организаций из ответа ИИ');
-    
-    let updatedHierarchies = 0;
-    // Сохраняем иерархии в состояние
-    for (const orgId in data._organizationsHierarchy) {
-      const hierarchy = data._organizationsHierarchy[orgId];
-      if (hierarchy && hierarchy.value && hierarchy.description) {
-        const success = State.setOrganizationHierarchy(orgId, hierarchy);
-        if (success) {
-          updatedHierarchies++;
+    // Шаг 7: Обновляем организации из ответа ИИ (если есть)
+    if (data._organizationsHierarchy && typeof data._organizationsHierarchy === 'object') {
+        console.log('🏛️ Обновление иерархий организаций из ответа ИИ');
+        
+        let updatedHierarchies = 0;
+        // Сохраняем иерархии в состояние
+        for (const orgId in data._organizationsHierarchy) {
+            const hierarchy = data._organizationsHierarchy[orgId];
+            if (hierarchy && hierarchy.value && hierarchy.description) {
+                const success = State.setOrganizationHierarchy(orgId, hierarchy);
+                if (success) {
+                    updatedHierarchies++;
+                }
+            }
         }
-      }
+        
+        if (updatedHierarchies > 0) {
+            console.log(`✅ Обновлено иерархий организаций: ${updatedHierarchies}`);
+        }
     }
     
-    if (updatedHierarchies > 0) {
-      console.log(`✅ Обновлено иерархий организаций: ${updatedHierarchies}`);
-    }
-  }
-  
     // Проверяем операции на предмет вступления/выхода из организаций
-const organizationOperations = [];
-
-// Собираем все операции с организациями из actionResults
-actionResults.forEach(result => {
-  if (result.operations && Array.isArray(result.operations)) {
-    result.operations.forEach(op => {
-      if (op.id && op.id.startsWith('organization_rank:')) {
-        organizationOperations.push({
-          operation: op.operation,
-          id: op.id,
-          value: op.value,
-          delta: op.delta,
-          description: op.description,
-          source: 'action'
-        });
-      }
-    });
-  }
-});
-
-// Собираем все операции с организациями из events
-if (data.events && Array.isArray(data.events)) {
-  data.events.forEach(event => {
-    if (event.effects && Array.isArray(event.effects)) {
-      event.effects.forEach(effect => {
-        if (effect.id && effect.id.startsWith('organization_rank:')) {
-          organizationOperations.push({
-            operation: effect.operation,
-            id: effect.id,
-            value: effect.value,
-            delta: effect.delta,
-            description: effect.description,
-            source: 'event'
-          });
-        }
-      });
-    }
-  });
-}
-
-// Логируем операции с организациями
-if (organizationOperations.length > 0) {
-  console.log('🏛️ Найдены операции с организациями:', organizationOperations);
-  
-  organizationOperations.forEach(op => {
-    const orgId = op.id.split(':')[1];
+    const organizationOperations = [];
     
-    switch (op.operation) {
-      case 'ADD':
-        console.log(`🎉 Вступление в организацию ${orgId}, ранг: ${op.value}`);
-        break;
-      case 'MODIFY':
-        console.log(`📈 Изменение ранга в ${orgId}: delta=${op.delta}`);
-        break;
-      case 'SET':
-        console.log(`🎯 Установка ранга в ${orgId}: ${op.value}`);
-        break;
-      case 'REMOVE':
-        console.log(`🚪 Выход из организации ${orgId}`);
-        break;
+    // Собираем все операции с организациями из actionResults
+    actionResults.forEach(result => {
+        if (result.operations && Array.isArray(result.operations)) {
+            result.operations.forEach(op => {
+                if (op.id && op.id.startsWith('organization_rank:')) {
+                    organizationOperations.push({
+                        operation: op.operation,
+                        id: op.id,
+                        value: op.value,
+                        delta: op.delta,
+                        description: op.description,
+                        source: 'action'
+                    });
+                }
+            });
+        }
+    });
+    
+    // Собираем все операции с организациями из events
+    if (data.events && Array.isArray(data.events)) {
+        data.events.forEach(event => {
+            if (event.effects && Array.isArray(event.effects)) {
+                event.effects.forEach(effect => {
+                    if (effect.id && effect.id.startsWith('organization_rank:')) {
+                        organizationOperations.push({
+                            operation: effect.operation,
+                            id: effect.id,
+                            value: effect.value,
+                            delta: effect.delta,
+                            description: effect.description,
+                            source: 'event'
+                        });
+                    }
+                });
+            }
+        });
     }
-  });
-}
+    
+    // Логируем операции с организациями
+    if (organizationOperations.length > 0) {
+        console.log('🏛️ Найдены операции с организациями:', organizationOperations);
+        
+        organizationOperations.forEach(op => {
+            const orgId = op.id.split(':')[1];
+            
+            switch (op.operation) {
+                case 'ADD':
+                    console.log(`🎉 Вступление в организацию ${orgId}, ранг: ${op.value}`);
+                    break;
+                case 'MODIFY':
+                    console.log(`📈 Изменение ранга в ${orgId}: delta=${op.delta}`);
+                    break;
+                case 'SET':
+                    console.log(`🎯 Установка ранга в ${orgId}: ${op.value}`);
+                    break;
+                case 'REMOVE':
+                    console.log(`🚪 Выход из организации ${orgId}`);
+                    break;
+            }
+        });
+    }
     
     // Шаг 8: Создаем и отображаем блок изменений за ход
     const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
@@ -1160,18 +1160,18 @@ if (organizationOperations.length > 0) {
     
     // Шаг 9: Сохраняем все изменения в состоянии (ТЕПЕРЬ updatesHTML уже создан!)
     State.setState({
-    gameState: {
-        ...state.gameState,
-        currentScene: updatedScene,
-        history: updatedHistory,
-        summary: data.summary || state.gameState.summary,
-        selectedActions: [],
-        aiMemory: updatedAiMemory
-    },
-    thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
-    lastTurnStatChanges: statChanges,
-    lastTurnUpdates: updatesHTML
-});
+        gameState: {
+            ...state.gameState,
+            currentScene: updatedScene,
+            history: updatedHistory,
+            summary: data.summary || state.gameState.summary,
+            selectedActions: [],
+            aiMemory: updatedAiMemory
+        },
+        thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
+        lastTurnStatChanges: statChanges,
+        lastTurnUpdates: updatesHTML
+    });
     
     // Увеличиваем счетчик ходов
     State.incrementTurnCount();
@@ -1180,24 +1180,24 @@ if (organizationOperations.length > 0) {
     UI.setFreeModeUI(false);
     
     // Отправляем события
-// В начале игры previousScene не существует
-const safePreviousScene = previousScene || {
-    scene: "В начале игры предыдущая сцена отсутствует.",
-    choices: []
-};
-
-// Отправляем событие изменения сцены
-State.emit(State.EVENTS.SCENE_CHANGED, {
-    scene: updatedScene,
-    previousScene: safePreviousScene
-});
-
-// Отправляем событие завершения хода
-State.emit(State.EVENTS.TURN_COMPLETED, {
-    turnCount: state.turnCount,
-    actions: actionResults,
-    statChanges: statChanges
-});
+    // В начале игры previousScene не существует
+    const safePreviousScene = previousScene || {
+        scene: "В начале игры предыдущая сцена отсутствует.",
+        choices: []
+    };
+    
+    // Отправляем событие изменения сцены
+    State.emit(State.EVENTS.SCENE_CHANGED, {
+        scene: updatedScene,
+        previousScene: safePreviousScene
+    });
+    
+    // Отправляем событие завершения хода
+    State.emit(State.EVENTS.TURN_COMPLETED, {
+        turnCount: state.turnCount,
+        actions: actionResults,
+        statChanges: statChanges
+    });
     
     // Восстанавливаем UI элементы
     dom.freeInputText.disabled = false;

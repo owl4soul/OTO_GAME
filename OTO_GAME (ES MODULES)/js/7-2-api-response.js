@@ -31,8 +31,7 @@ function extractOrganizationHierarchies(parsedData) {
                 return {
                   lvl: typeof item.lvl === 'number' ? item.lvl : parseInt(item.lvl) || 0,
                   rank: item.rank || `Ранг ${item.lvl}`,
-                  threshold: typeof item.threshold === 'number' ? item.threshold : 
-                            (typeof item.lvl === 'number' ? item.lvl * 10 : 0)
+                  threshold: typeof item.threshold === 'number' ? item.threshold : (typeof item.lvl === 'number' ? item.lvl * 10 : 0)
                 };
               }
               return null;
@@ -426,42 +425,41 @@ function validateAndNormalizeResponse(parsedData) {
  */
 function createDefaultChoices() {
   return [
-    {
-      text: "[[парсинг не удался - попробуем снова]]",
-      difficulty_level: 3,
-      requirements: [],
-      success_rewards: [],
-      fail_penalties: []
-    },
-    {
-      text: "Подумать о ситуации",
-      difficulty_level: 2,
-      requirements: [],
-      success_rewards: [],
-      fail_penalties: []
-    },
-    {
-      text: "Действовать осторожно",
-      difficulty_level: 5,
-      requirements: [],
-      success_rewards: [],
-      fail_penalties: []
-    },
-    {
-      text: "Рискнуть и действовать смело",
-      difficulty_level: 7,
-      requirements: [],
-      success_rewards: [],
-      fail_penalties: []
-    },
-    {
-      text: "Попытаться вспомнить что-то важное",
-      difficulty_level: 4,
-      requirements: [],
-      success_rewards: [],
-      fail_penalties: []
-    }
-  ];
+  {
+    text: "[[парсинг не удался - попробуем снова]]",
+    difficulty_level: 3,
+    requirements: [],
+    success_rewards: [],
+    fail_penalties: []
+  },
+  {
+    text: "Подумать о ситуации",
+    difficulty_level: 2,
+    requirements: [],
+    success_rewards: [],
+    fail_penalties: []
+  },
+  {
+    text: "Действовать осторожно",
+    difficulty_level: 5,
+    requirements: [],
+    success_rewards: [],
+    fail_penalties: []
+  },
+  {
+    text: "Рискнуть и действовать смело",
+    difficulty_level: 7,
+    requirements: [],
+    success_rewards: [],
+    fail_penalties: []
+  },
+  {
+    text: "Попытаться вспомнить что-то важное",
+    difficulty_level: 4,
+    requirements: [],
+    success_rewards: [],
+    fail_penalties: []
+  }];
 }
 
 /**

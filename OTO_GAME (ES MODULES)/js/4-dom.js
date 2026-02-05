@@ -45,7 +45,7 @@ const dom = {
     turnCounter: document.getElementById('turnCounter'),
     modeText: document.getElementById('modeText'),
     modeIcon: document.getElementById('modeIcon'),
-
+    
     // Статистика (Top Row)
     vals: {
         will: document.getElementById('valWill'),
@@ -63,7 +63,7 @@ const dom = {
     // Внутренние элементы сцены
     reflection: document.getElementById('sceneReflection'),
     updates: document.getElementById('sceneUpdates'),
-
+    
     // Модальные окна
     modal: document.getElementById('settingsModal'),
     alertModal: document.getElementById('alertModal'),
@@ -98,7 +98,7 @@ const dom = {
 
 // Валидация наличия всех необходимых элементов
 const requiredElements = [
-    'sceneText', 'choicesList', 'freeInputText', 'btnSubmit', 'btnClear', 'btnSettings',  'btnScaleUp', 'btnScaleDown', 'btnFullscreen',
+    'sceneText', 'choicesList', 'freeInputText', 'btnSubmit', 'btnClear', 'btnSettings', 'btnScaleUp', 'btnScaleDown', 'btnFullscreen',
     'modal', 'alertModal', 'overlay'
 ];
 
@@ -122,7 +122,7 @@ export const DOM = {
     setValue: (key, value) => {
         if (dom.inputs[key]) dom.inputs[key].value = value;
     },
-
+    
     // Метод обновления кэша (для динамических элементов)
     refresh: () => {
         dom.plotGenerator.input = document.getElementById('plotInput');

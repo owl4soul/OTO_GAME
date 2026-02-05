@@ -241,7 +241,7 @@ export const Calculations = {
         // 5. Форматирование результата для ИИ
         const resultTextMap = {
             'full_success': 'полный успех',
-            'partial_success': 'частичный успех', 
+            'partial_success': 'частичный успех',
             'partial_failure': 'частичная неудача',
             'full_failure': 'полная неудача'
         };
@@ -321,7 +321,7 @@ export const Calculations = {
         }
         
         if (changes.inventory_remove && Array.isArray(changes.inventory_remove)) {
-            state.inventory = state.inventory.filter(item => 
+            state.inventory = state.inventory.filter(item =>
                 !changes.inventory_remove.includes(String(item).trim())
             );
             changes.inventory_remove.forEach(item => {
@@ -411,7 +411,7 @@ export const Calculations = {
         
         // Удаление предметов
         if (inventoryChanges.remove && Array.isArray(inventoryChanges.remove)) {
-            state.inventory = state.inventory.filter(item => 
+            state.inventory = state.inventory.filter(item =>
                 !inventoryChanges.remove.includes(String(item).trim())
             );
             inventoryChanges.remove.forEach(item => {

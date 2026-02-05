@@ -6,7 +6,7 @@ import { Init } from './11-init.js';
 import { Render } from './5-render.js';
 import { Saveload } from './9-saveload.js';
 import { Game } from './6-game.js';
-import { UI } from './ui.js';  
+import { UI } from './ui.js';
 
 console.log('🚀 O.T.O. QUEST загружается (ESM)...');
 
@@ -166,8 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
     initGame();
     
     window.onerror = (msg, url, line, col, err) => {
-  UI.Logger.error('Global', { msg, url, line, col, stack: err?.stack });
-};
+        UI.Logger.error('Global', { msg, url, line, col, stack: err?.stack });
+    };
 });
 
 /**

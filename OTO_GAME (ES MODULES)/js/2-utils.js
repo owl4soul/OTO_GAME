@@ -89,8 +89,10 @@ function repairTruncatedJSON(text) {
     }
     
     // 3. Балансируем скобки
-    let openCurly = 0, closeCurly = 0;
-    let openSquare = 0, closeSquare = 0;
+    let openCurly = 0,
+        closeCurly = 0;
+    let openSquare = 0,
+        closeSquare = 0;
     inString = false;
     escapeNext = false;
     
@@ -240,8 +242,8 @@ function robustJsonParse(rawContent) {
     // 3.1. Извлекаем scene (КРИТИЧЕСКИ ВАЖНО)
     const scenePatterns = [
         /"scene"\s*:\s*"((?:[^"\\]|\\["\\\/bfnrt]|\\u[0-9a-fA-F]{4})*)"/s,
-        /"scene"\s*:\s*"([^"]*)"/s,  // Более простой паттерн
-        /"scene"\s*:\s*"([\s\S]*?)(?:"|$)/s  // Максимально агрессивный
+        /"scene"\s*:\s*"([^"]*)"/s, // Более простой паттерн
+        /"scene"\s*:\s*"([\s\S]*?)(?:"|$)/s // Максимально агрессивный
     ];
     
     for (const pattern of scenePatterns) {
@@ -381,28 +383,27 @@ function robustJsonParse(rawContent) {
     if (result.choices.length === 0) {
         console.warn('⚠️ [Robust Parse] Choices пустой, добавляем дефолтные');
         result.choices = [
-            {
-                text: "Осмотреться",
-                difficulty_level: 3,
-                requirements: [],
-                success_rewards: [],
-                fail_penalties: []
-            },
-            {
-                text: "Подумать",
-                difficulty_level: 2,
-                requirements: [],
-                success_rewards: [],
-                fail_penalties: []
-            },
-            {
-                text: "Действовать",
-                difficulty_level: 5,
-                requirements: [],
-                success_rewards: [],
-                fail_penalties: []
-            }
-        ];
+        {
+            text: "Осмотреться",
+            difficulty_level: 3,
+            requirements: [],
+            success_rewards: [],
+            fail_penalties: []
+        },
+        {
+            text: "Подумать",
+            difficulty_level: 2,
+            requirements: [],
+            success_rewards: [],
+            fail_penalties: []
+        },
+        {
+            text: "Действовать",
+            difficulty_level: 5,
+            requirements: [],
+            success_rewards: [],
+            fail_penalties: []
+        }];
     }
     
     // 3.4. Извлекаем thoughts

@@ -33,11 +33,26 @@ export const DebugState = {
     
     // Группируем по типам
     const grouped = {
-      'stat': [], 'skill': [], 'ability': [], 'trait': [], 'item': [],
-      'effect': [], 'status': [], 'buff': [], 'debuff': [], 'ritual': [],
-      'knowledge': [], 'secret': [], 'relationship': [], 'location': [],
-      'event': [], 'quest': [], 'initiation_degree': [], 'progress': [],
-      'personality': [], 'other': []
+      'stat': [],
+      'skill': [],
+      'ability': [],
+      'trait': [],
+      'item': [],
+      'effect': [],
+      'status': [],
+      'buff': [],
+      'debuff': [],
+      'ritual': [],
+      'knowledge': [],
+      'secret': [],
+      'relationship': [],
+      'location': [],
+      'event': [],
+      'quest': [],
+      'initiation_degree': [],
+      'progress': [],
+      'personality': [],
+      'other': []
     };
     
     s.heroState.forEach(item => {
@@ -50,7 +65,7 @@ export const DebugState = {
       if (grouped[type].length > 0) {
         console.group(`📁 ${type.toUpperCase()} (${grouped[type].length}):`);
         grouped[type].forEach(item => {
-          const prefix = item.id.startsWith('stat:') ? 
+          const prefix = item.id.startsWith('stat:') ?
             (item.value <= 20 ? '🔴' : item.value <= 50 ? '🟡' : '🟢') : '📌';
           
           console.log(`${prefix} ${item.id}: ${item.value}`);
@@ -87,8 +102,7 @@ export const DebugState = {
       console.table(stats.map(item => ({
         'Стат': item.id.replace('stat:', ''),
         'Значение': item.value,
-        'Состояние': item.value <= 20 ? 'КРИТИЧЕСКОЕ' : 
-                    item.value <= 50 ? 'НИЗКОЕ' : 'НОРМАЛЬНОЕ',
+        'Состояние': item.value <= 20 ? 'КРИТИЧЕСКОЕ' : item.value <= 50 ? 'НИЗКОЕ' : 'НОРМАЛЬНОЕ',
         'Доп. поля': Object.keys(item).filter(k => !['id', 'value'].includes(k)).length
       })));
       console.groupEnd();
@@ -153,7 +167,7 @@ export const DebugState = {
     console.log(`🔍 ПОИСК: "${searchTerm}"`);
     console.log('='.repeat(40));
     
-    const results = s.heroState.filter(item => 
+    const results = s.heroState.filter(item =>
       item.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       JSON.stringify(item.value).toLowerCase().includes(searchTerm.toLowerCase())
     );

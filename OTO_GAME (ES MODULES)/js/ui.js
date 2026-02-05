@@ -51,7 +51,8 @@ function distributeDebit(amountNeeded, val1, val2) {
     const surplus1 = Math.max(0, val1 - MIN_PCT);
     const surplus2 = Math.max(0, val2 - MIN_PCT);
     
-    let take1 = 0, take2 = 0;
+    let take1 = 0,
+        take2 = 0;
     const halfNeed = amountNeeded / 2;
     
     if (surplus1 >= halfNeed) take1 = halfNeed;

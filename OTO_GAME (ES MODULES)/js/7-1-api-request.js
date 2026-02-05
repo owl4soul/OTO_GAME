@@ -16,10 +16,10 @@ import { PROMPTS } from './prompts.js';
  */
 function constructFullSystemPrompt(state) {
   // Определяем основной системный промпт в зависимости от типа игры
-  const mainSystemPrompt = state.gameType === 'standard' 
-    ? PROMPTS.standardGameOTO.system.gameMaster 
-    : PROMPTS.system.gameMaster;
-
+  const mainSystemPrompt = state.gameType === 'standard' ?
+    PROMPTS.standardGameOTO.system.gameMaster :
+    PROMPTS.system.gameMaster;
+  
   // Собираем полный системный промт из модульных компонентов
   /*
   ### РАСЧЁТ УСПЕХА/ПРОВАЛА ДЕЙСТВИЯ:
@@ -71,7 +71,7 @@ ${PROMPTS.exampleChoiceWithAllTypes}
 
 ### ЧАСТЫЕ ОШИБКИ:
 ${PROMPTS.commonErrors}`;
-
+  
   return fullSystemPrompt;
 }
 
@@ -113,8 +113,8 @@ function getDynamicSystemInjections(state) {
       const startOfCurrentScene = currentSceneText.substring(0, comparisonLength).trim();
       
       if (startOfLastScene === startOfCurrentScene ||
-          lastSceneText.includes(startOfCurrentScene) ||
-          currentSceneText.includes(startOfLastScene))
+        lastSceneText.includes(startOfCurrentScene) ||
+        currentSceneText.includes(startOfLastScene))
       {
         console.log(`🌀 [Client Director] Loop/Repetition Detected: Injecting Anti-Loop.`);
         injections.push(`>>> [TRIGGER: LOOP DETECTED] ${PROMPTS.injections.antiLoop}`);
@@ -192,10 +192,10 @@ function buildContextBlock(state) {
   if (historySlice.length > 0) {
     const historyString = historySlice.map(entry => {
       // Извлечение текста выбора из массива actionResults или fallback к старому полю choice
-      const choiceText = entry.actionResults 
-        ? entry.actionResults.map(a => `${a.text}${a.success ? '' : ' (Провал)'}`).join(', ') 
-        : (entry.choice || 'Нет выбора');
-        
+      const choiceText = entry.actionResults ?
+        entry.actionResults.map(a => `${a.text}${a.success ? '' : ' (Провал)'}`).join(', ') :
+        (entry.choice || 'Нет выбора');
+      
       return `СЦЕНА: ${entry.fullText}\nВЫБОР: ${choiceText}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`;
     }).join('\n---\n');
     parts.push(`### КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ${historySlice.length} ходов)\n${historyString}`);
@@ -261,7 +261,7 @@ function formatHeroStateForPrompt(heroState) {
     
     const line = `• ${item.id}: ${displayValue}${extraInfo}`;
     
-    switch(type) {
+    switch (type) {
       case 'stat':
         sections.stats.push(line);
         break;

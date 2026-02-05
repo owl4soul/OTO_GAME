@@ -127,11 +127,11 @@ function getStatDescription(statName, value) {
  * Получение русского названия стата
  */
 function getRussianStatName(key) {
-    const map = { 
-        'will': 'Воля', 
-        'stealth': 'Скрытность', 
-        'influence': 'Влияние', 
-        'sanity': 'Разум' 
+    const map = {
+        'will': 'Воля',
+        'stealth': 'Скрытность',
+        'influence': 'Влияние',
+        'sanity': 'Разум'
     };
     return map[key] || key;
 }
@@ -437,17 +437,17 @@ function showGameItemTooltip(element, gameItem) {
  * Рендерит информацию об организациях героя
  */
 function renderOrganizations() {
-  const orgContainer = document.getElementById('organizationsContainer');
-  if (!orgContainer) return;
-  
-  const html = createOrganizationsHTML();
-  orgContainer.innerHTML = html;
-  
-  if (html) {
-    orgContainer.style.display = 'block';
-  } else {
-    orgContainer.style.display = 'none';
-  };
+    const orgContainer = document.getElementById('organizationsContainer');
+    if (!orgContainer) return;
+    
+    const html = createOrganizationsHTML();
+    orgContainer.innerHTML = html;
+    
+    if (html) {
+        orgContainer.style.display = 'block';
+    } else {
+        orgContainer.style.display = 'none';
+    };
 }
 
 // ====================================================================
@@ -1075,8 +1075,8 @@ function renderHistory() {
         }
         
         // PERSONALITY
-        const personality = reverseIndex === 0 ? 
-            (state.gameState.currentScene?.personality || State.getGameItemValue('personality:hero')) : 
+        const personality = reverseIndex === 0 ?
+            (state.gameState.currentScene?.personality || State.getGameItemValue('personality:hero')) :
             entry.personality;
         if (personality && personality.trim() !== '') {
             contentHTML += `
@@ -1694,8 +1694,9 @@ function renderAllGameItems() {
     // =============================================
     // БЛОК 9: ДЕТАЛИ (бывш. ЭФФЕКТЫ) - ГОЛУБОЙ (был серый)
     // =============================================
-    const knownPrefixes = ['stat:', 'skill:', 'inventory:', 'relations:', 'bless:', 'curse:', 
-                           'buff:', 'debuff:', 'personality:', 'initiation_degree:', 'progress:'];
+    const knownPrefixes = ['stat:', 'skill:', 'inventory:', 'relations:', 'bless:', 'curse:',
+        'buff:', 'debuff:', 'personality:', 'initiation_degree:', 'progress:'
+    ];
     
     const allItems = state.heroState || [];
     const unknownItems = allItems.filter(item => {
@@ -2162,10 +2163,10 @@ function renderAuditList() {
             statusColor = '#fbc531';
             borderColor = '#e1b12c';
         }
-
+        
         let headerText = `<span style="color:${statusColor}; font-weight:bold;">${entry.timestamp}</span>: [${entry.status.toUpperCase()}] - ${entry.request}`;
         if (entry.d10) headerText += ` (d10=${entry.d10})`;
-
+        
         let requestHtml = '';
         if (entry.requestDebug && entry.requestDebug.body) {
             const formattedRequest = Utils.formatJsonWithUnicode(entry.requestDebug.body);
@@ -2175,7 +2176,7 @@ function renderAuditList() {
                 <pre style="font-size:0.65rem; color:#ccc; background:#111; padding:5px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #333;">${formattedRequest}</pre>
             </details>`;
         }
-
+        
         let responseHtml = '';
         if (entry.fullResponse) {
             const formattedResponse = Utils.formatJsonWithUnicode(entry.fullResponse);
@@ -2185,7 +2186,7 @@ function renderAuditList() {
                 <pre style="font-size:0.65rem; color:${statusColor}; background:#1a1a1a; padding:5px; overflow-x:auto; white-space: pre-wrap; border: 1px solid ${borderColor};">${formattedResponse}</pre>
             </details>`;
         }
-
+        
         let errorHtml = '';
         if (entry.rawError) {
             const formattedError = Utils.formatJsonWithUnicode(entry.rawError);
@@ -2195,7 +2196,7 @@ function renderAuditList() {
                 <pre style="font-size:0.65rem; color:#e84118; background:#2d0000; padding:5px; overflow-x:auto; white-space: pre-wrap;">${formattedError}</pre>
             </details>`;
         }
-
+        
         const actionButtons = `
         <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end;">
             <button onclick="window.Audit.exportSingleAuditEntry(${entry.id})" 
@@ -2207,7 +2208,7 @@ function renderAuditList() {
                 <i class="fas fa-copy"></i> Копировать
             </button>
         </div>`;
-
+        
         return `
         <div style="padding:0.5rem; border-bottom:1px solid #333; border-left: 4px solid ${borderColor}; margin-bottom: 5px; background: rgba(0,0,0,0.2);">
             <div style="font-size: 0.8rem; margin-bottom: 5px;">${headerText}</div>
@@ -2303,9 +2304,9 @@ function showAlert(title, message, details = null, type = 'error') {
     const alertStack = document.getElementById('alertStack');
     const alertTimestamp = document.getElementById('alertTimestamp');
     const copyErrorBtn = document.getElementById('copyErrorBtn');
-
+    
     if (!alertModal) return;
-
+    
     if (type === 'error') {
         alertModalContent.className = 'alert-modal-content error';
         alertModalHeader.className = 'modal-header alert-modal-header error';
@@ -2322,14 +2323,14 @@ function showAlert(title, message, details = null, type = 'error') {
         alertModalTitle.innerHTML = '<i class="fas fa-exclamation-circle"></i> Внимание';
         copyErrorBtn.style.display = details ? 'block' : 'none';
     }
-
+    
     alertMessage.innerHTML = `<h3 style="margin-bottom: 0.5rem;">${title}</h3><p>${message}</p>`;
-
+    
     if (details) {
         const formattedDetails = Utils.formatErrorDetails(details);
         alertDetails.value = formattedDetails;
         alertDetails.style.display = 'block';
-
+        
         copyErrorBtn.onclick = () => {
             if (!navigator.clipboard) return;
             navigator.clipboard.writeText(formattedDetails).then(() => {
@@ -2341,7 +2342,7 @@ function showAlert(title, message, details = null, type = 'error') {
                 console.error('Ошибка копирования:', err);
             });
         };
-
+        
         if (details instanceof Error && details.stack) {
             alertStack.textContent = details.stack;
             alertStack.style.display = 'block';
@@ -2352,18 +2353,18 @@ function showAlert(title, message, details = null, type = 'error') {
         alertDetails.style.display = 'none';
         alertStack.style.display = 'none';
     }
-
+    
     alertTimestamp.textContent = `Время: ${Utils.formatMoscowTime(new Date())}`;
     alertTimestamp.className = `alert-details ${type}`;
-
+    
     alertModal.classList.add('active');
-
+    
     const closeModal = () => alertModal.classList.remove('active');
     const closeBtn = document.getElementById('closeAlertModalBtn');
     const okBtn = document.getElementById('alertModalOkBtn');
     if (closeBtn) closeBtn.onclick = closeModal;
     if (okBtn) okBtn.onclick = closeModal;
-
+    
     alertModal.querySelector('.modal-overlay').onclick = (e) => {
         if (e.target === alertModal.querySelector('.modal-overlay')) closeModal();
     };
