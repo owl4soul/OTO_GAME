@@ -433,6 +433,23 @@ function showGameItemTooltip(element, gameItem) {
     setTimeout(removeTooltip, 7000);
 }
 
+/**
+ * Рендерит информацию об организациях героя
+ */
+function renderOrganizations() {
+  const orgContainer = document.getElementById('organizationsContainer');
+  if (!orgContainer) return;
+  
+  const html = createOrganizationsHTML();
+  orgContainer.innerHTML = html;
+  
+  if (html) {
+    orgContainer.style.display = 'block';
+  } else {
+    orgContainer.style.display = 'none';
+  };
+}
+
 // ====================================================================
 // РЕНДЕРИНГ СТАТОВ С АНИМАЦИЕЙ
 // ====================================================================
@@ -1779,7 +1796,10 @@ function renderAllGameItems() {
     
     fragment.appendChild(inventoryDiv);
     
+    
     container.appendChild(fragment);
+    
+    renderOrganizations();
     
     console.log('✅ renderAllGameItems completed with new colors and order');
 }
@@ -2482,6 +2502,8 @@ export const Render = {
     renderAllGameItems,
     renderHistory,
     renderAll,
+    
+    renderOrganizations,
     
     // Тултипы и анимации
     showStatTooltip,

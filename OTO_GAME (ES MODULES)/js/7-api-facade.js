@@ -19,14 +19,21 @@ import { PROMPTS } from './prompts.js';
  * Использует только компоненты из PROMPTS.js
  * @returns {string} Универсальный системный промпт
  */
-function constructUniversalSystemPrompt() {
+function constructUniversalInstructionsPrompt() {
   return [
     PROMPTS.system.gameMaster,
     PROMPTS.corePrinciples,
     PROMPTS.absoluteProhibitions,
     PROMPTS.fundamentalProtocols,
     PROMPTS.heroStateDescription,
-    `### СТРУКТУРА JSON ОТВЕТА:\n${PROMPTS.jsonStructure}`,
+    PROMPTS.organizationsProtocol,
+    PROMPTS.gameItemProtocol,
+    PROMPTS.operationsProtocol,
+    PROMPTS.choicesProtocol,
+    PROMPTS.eventsProtocol,
+    PROMPTS.outputFormat,
+    `### СТРУКТУРА JSON ОТВЕТА:
+    \n${PROMPTS.jsonStructure}`,
     PROMPTS.additionalComponents.universalInstructions
   ].join('\n\n');
 }
@@ -122,17 +129,15 @@ async function generateCustomScene(promptText) {
   }
   
   const headers = prepareHeaders(apiKey, state.settings.apiProvider === 'vsegpt');
+  
   const systemPrompt = constructScenarioWriterPrompt();
   
+  const universalInstructions = constructUniversalInstructionsPrompt();
+  
   const userPrompt = `${promptText}
-
-### ИНСТРУКЦИИ:
-1. Верни ТОЛЬКО валидный JSON объект в формате, указанном выше.
-2. Не добавляй никаких пояснений вне JSON.
-3. Убедись, что все обязательные поля присутствуют.
-4. Choices должны иметь требования, соответствующие начальному состоянию героя.
-5. В поле aiMemory обязательно добавь поле "gameType": "custom".`;
-
+  ### ИНСТРУКЦИИ:
+  ${universalInstructions}`;
+  
   const requestBody = {
     model: state.settings.model,
     messages: [
@@ -148,9 +153,9 @@ async function generateCustomScene(promptText) {
   }
   
   const auditEntry = Audit.createEntry(
-    "Генерация Начальной Сцены", 
-    requestBody, 
-    state.settings.model, 
+    "Генерация Начальной Сцены",
+    requestBody,
+    state.settings.model,
     state.settings.apiProvider
   );
   
@@ -207,7 +212,7 @@ async function testCurrentProvider() {
   
   if (!apiKeyForTest) {
     if (Render) Render.showErrorAlert(
-      "Testing Error", 
+      "Testing Error",
       `Please enter the API Key for ${selectedProvider} provider first.`
     );
     return;
@@ -222,8 +227,8 @@ async function testCurrentProvider() {
   }
   
   const isSelectedVsegpt = selectedProvider === 'vsegpt';
-  const apiTestUrl = isSelectedVsegpt ? 
-    'https://api.vsegpt.ru/v1/chat/completions' : 
+  const apiTestUrl = isSelectedVsegpt ?
+    'https://api.vsegpt.ru/v1/chat/completions' :
     'https://openrouter.ai/api/v1/chat/completions';
   
   const headers = prepareHeaders(apiKeyForTest, isSelectedVsegpt);
@@ -234,9 +239,9 @@ async function testCurrentProvider() {
   };
   
   const auditEntry = Audit.createEntry(
-    "Тест Провайдера", 
-    testBody, 
-    testBody.model, 
+    "Тест Провайдера",
+    testBody,
+    testBody.model,
     selectedProvider
   );
   
@@ -245,7 +250,7 @@ async function testCurrentProvider() {
     Audit.updateEntrySuccess(auditEntry, rawResponseText);
     
     if (Render) Render.showSuccessAlert(
-      "Connection Successful", 
+      "Connection Successful",
       `API Key for ${selectedProvider} is valid and connection works!`
     );
     
@@ -253,8 +258,8 @@ async function testCurrentProvider() {
     Audit.updateEntryError(auditEntry, error);
     
     if (Render) Render.showErrorAlert(
-      "Connection Error", 
-      `Failed to connect to ${selectedProvider}. \nDetails: ${error.message}`, 
+      "Connection Error",
+      `Failed to connect to ${selectedProvider}. \nDetails: ${error.message}`,
       error
     );
   } finally {
@@ -280,13 +285,13 @@ async function testSelectedModel() {
   }
   
   const selectedProvider = domElements.inputs.provider.value;
-  const apiKeyForModel = selectedProvider === 'vsegpt' ? 
-    domElements.inputs.keyVsegpt.value : 
+  const apiKeyForModel = selectedProvider === 'vsegpt' ?
+    domElements.inputs.keyVsegpt.value :
     domElements.inputs.keyOpenrouter.value;
   
   if (!apiKeyForModel) {
     if (Render) Render.showErrorAlert(
-      "Testing Error", 
+      "Testing Error",
       `Please enter the API Key for ${selectedProvider} provider first.`
     );
     return;
@@ -301,8 +306,8 @@ async function testSelectedModel() {
   }
   
   const isSelectedVsegpt = selectedProvider === 'vsegpt';
-  const apiTestUrl = isSelectedVsegpt ? 
-    'https://api.vsegpt.ru/v1/chat/completions' : 
+  const apiTestUrl = isSelectedVsegpt ?
+    'https://api.vsegpt.ru/v1/chat/completions' :
     'https://openrouter.ai/api/v1/chat/completions';
   
   const headers = prepareHeaders(apiKeyForModel, isSelectedVsegpt);
@@ -313,9 +318,9 @@ async function testSelectedModel() {
   };
   
   const auditEntry = Audit.createEntry(
-    `Тест Модели: ${modelToTestId}`, 
-    testBody, 
-    modelToTestId, 
+    `Тест Модели: ${modelToTestId}`,
+    testBody,
+    modelToTestId,
     selectedProvider
   );
   
@@ -334,14 +339,14 @@ async function testSelectedModel() {
     // Лог успеха
     Audit.updateEntrySuccess(auditEntry, rawResponseText);
     
-    const modelResponseText = result.choices?.[0]?.message?.content || 
+    const modelResponseText = result.choices?.[0]?.message?.content ||
       "No text output received from model.";
     
     updateModelTestResult(currentState, modelToTestId, duration, modelResponseText);
     
     if (Render) {
       Render.showSuccessAlert(
-        "Модель успешно протестирована!", 
+        "Модель успешно протестирована!",
         `Ответ получен за: ${duration}мс.\n\nСодержание: \n${modelResponseText}`
       );
     }
@@ -454,11 +459,11 @@ function updateAIMemory(processedData) {
     }
     
     currentState.gameState.aiMemory = updatedMemory;
-    State.setState({ 
-      gameState: { 
-        ...currentState.gameState, 
-        aiMemory: updatedMemory 
-      } 
+    State.setState({
+      gameState: {
+        ...currentState.gameState,
+        aiMemory: updatedMemory
+      }
     });
     
     console.log("🧠 AI Memory updated:", Object.keys(processedData.aiMemory));
@@ -576,7 +581,7 @@ export const API = {
   testSelectedModel,
   
   // Конструкторы промптов
-  constructUniversalSystemPrompt,
+  constructUniversalInstructionsPrompt,
   constructScenarioWriterPrompt,
   
   // Вспомогательные функции (для тестирования и отладки)

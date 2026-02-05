@@ -78,6 +78,70 @@ function getRussianStatName(key) {
     return map[key] || key;
 }
 
+/**
+ * Создает HTML для отображения информации об организациях героя
+ */
+function createOrganizationsHTML() {
+    const organizations = State.getHeroOrganizations();
+    
+    if (organizations.length === 0) {
+        return '';
+    }
+    
+    let html = `
+    <div class="organizations-container" style="margin: 15px 0; padding: 12px; background: rgba(20, 0, 0, 0.8); border: 1px solid #8b0000; border-radius: 6px;">
+      <div style="color: #d4af37; font-weight: bold; font-size: 0.95em; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #d4af37; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-users"></i>
+        <span>ВАШИ ОРГАНИЗАЦИИ</span>
+      </div>
+  `;
+    
+    organizations.forEach(org => {
+        html += `
+      <div style="margin-bottom: 10px; padding: 8px; background: rgba(0, 0, 0, 0.4); border-radius: 4px; border-left: 4px solid #8b0000;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+          <span style="color: #fbc531; font-weight: bold; font-size: 0.9em;">${org.id.toUpperCase()}</span>
+          <span style="color: #d4af37; font-weight: bold; background: rgba(139, 0, 0, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 0.85em;">
+            ${org.rankName}
+          </span>
+        </div>
+        <div style="color: #ccc; font-size: 0.85em; margin-bottom: 5px;">
+          ${org.description}
+        </div>
+    `;
+        
+        // Показываем иерархию организации
+        if (org.hierarchy && org.hierarchy.description) {
+            html += `
+        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #444;">
+          <div style="color: #888; font-size: 0.8em; margin-bottom: 5px;">Путь в организации:</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+      `;
+            
+            org.hierarchy.description.forEach(rank => {
+                const isCurrent = rank.lvl === org.rank;
+                const isPast = rank.lvl < org.rank;
+                
+                html += `
+          <div style="padding: 3px 6px; background: ${isCurrent ? '#8b0000' : isPast ? '#444' : '#222'}; 
+                color: ${isCurrent ? '#fff' : isPast ? '#ccc' : '#666'}; 
+                border-radius: 3px; font-size: 0.75em; border: 1px solid ${isCurrent ? '#d4af37' : '#333'};">
+            ${rank.rank}
+          </div>
+        `;
+            });
+            
+            html += `</div></div>`;
+        }
+        
+        html += `</div>`;
+    });
+    
+    html += `</div>`;
+    
+    return html;
+}
+
 // ПЕРЕПИСАНО ПОЛНОСТЬЮ: Функция для создания HTML операций с отображением всех полей
 function createOperationHTML(operation, source) {
     if (!operation || !operation.id || !operation.operation) {
@@ -978,8 +1042,6 @@ const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && O
     summary: data.summary || ""
 };
     
-
-    
     // Добавляем запись в историю
     const newHistoryEntry = {
         fullText: data.scene || "",
@@ -998,10 +1060,93 @@ const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && O
         updatedHistory.shift();
     }
     
-    // ------------------------------------------------------------------
-    // ВАЖНО: СНАЧАЛА создаем HTML изменений, ПОТОМ используем!
-    // ------------------------------------------------------------------
-    // Шаг 7: Создаем и отображаем блок изменений за ход
+  // Шаг 7: Обновляем организации из ответа ИИ (если есть)
+  if (data._organizationsHierarchy && typeof data._organizationsHierarchy === 'object') {
+    console.log('🏛️ Обновление иерархий организаций из ответа ИИ');
+    
+    let updatedHierarchies = 0;
+    // Сохраняем иерархии в состояние
+    for (const orgId in data._organizationsHierarchy) {
+      const hierarchy = data._organizationsHierarchy[orgId];
+      if (hierarchy && hierarchy.value && hierarchy.description) {
+        const success = State.setOrganizationHierarchy(orgId, hierarchy);
+        if (success) {
+          updatedHierarchies++;
+        }
+      }
+    }
+    
+    if (updatedHierarchies > 0) {
+      console.log(`✅ Обновлено иерархий организаций: ${updatedHierarchies}`);
+    }
+  }
+  
+    // Проверяем операции на предмет вступления/выхода из организаций
+const organizationOperations = [];
+
+// Собираем все операции с организациями из actionResults
+actionResults.forEach(result => {
+  if (result.operations && Array.isArray(result.operations)) {
+    result.operations.forEach(op => {
+      if (op.id && op.id.startsWith('organization_rank:')) {
+        organizationOperations.push({
+          operation: op.operation,
+          id: op.id,
+          value: op.value,
+          delta: op.delta,
+          description: op.description,
+          source: 'action'
+        });
+      }
+    });
+  }
+});
+
+// Собираем все операции с организациями из events
+if (data.events && Array.isArray(data.events)) {
+  data.events.forEach(event => {
+    if (event.effects && Array.isArray(event.effects)) {
+      event.effects.forEach(effect => {
+        if (effect.id && effect.id.startsWith('organization_rank:')) {
+          organizationOperations.push({
+            operation: effect.operation,
+            id: effect.id,
+            value: effect.value,
+            delta: effect.delta,
+            description: effect.description,
+            source: 'event'
+          });
+        }
+      });
+    }
+  });
+}
+
+// Логируем операции с организациями
+if (organizationOperations.length > 0) {
+  console.log('🏛️ Найдены операции с организациями:', organizationOperations);
+  
+  organizationOperations.forEach(op => {
+    const orgId = op.id.split(':')[1];
+    
+    switch (op.operation) {
+      case 'ADD':
+        console.log(`🎉 Вступление в организацию ${orgId}, ранг: ${op.value}`);
+        break;
+      case 'MODIFY':
+        console.log(`📈 Изменение ранга в ${orgId}: delta=${op.delta}`);
+        break;
+      case 'SET':
+        console.log(`🎯 Установка ранга в ${orgId}: ${op.value}`);
+        break;
+      case 'REMOVE':
+        console.log(`🚪 Выход из организации ${orgId}`);
+        break;
+    }
+  });
+}
+    
+    // Шаг 8: Создаем и отображаем блок изменений за ход
     const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
     console.log('📄 Созданный HTML изменений:', updatesHTML);
     
@@ -1013,7 +1158,7 @@ const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && O
         dom.updates.innerHTML = '';
     }
     
-    // Шаг 8: Сохраняем все изменения в состоянии (ТЕПЕРЬ updatesHTML уже создан!)
+    // Шаг 9: Сохраняем все изменения в состоянии (ТЕПЕРЬ updatesHTML уже создан!)
     State.setState({
     gameState: {
         ...state.gameState,
@@ -1366,5 +1511,6 @@ export const Game = {
     calculateChoiceResult,
     decreaseBuffDurations,
     createTurnUpdatesHTML,
-    createSimplifiedTurnUpdatesHTML
+    createSimplifiedTurnUpdatesHTML,
+    createOrganizationsHTML
 };

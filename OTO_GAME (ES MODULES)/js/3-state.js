@@ -96,7 +96,11 @@ const STATE_EVENTS = {
   HERO_DEATH: 'hero:death',
   VICTORY: 'victory',
   THOUGHTS_UPDATED: 'thoughts:updated',
-  GAME_TYPE_CHANGED: 'game:type:changed'
+  GAME_TYPE_CHANGED: 'game:type:changed',
+  ORGANIZATION_JOINED: 'organization:joined',
+  ORGANIZATION_RANK_CHANGED: 'organization:rank:changed',
+  ORGANIZATION_LEFT: 'organization:left',
+  ORGANIZATION_HIERARCHY_UPDATED: 'organization:hierarchy:updated'
 };
 
 // ========================
@@ -109,7 +113,11 @@ const DEFAULT_HERO_STATE = [
   { "id": "stat:stealth", "value": 50 },
   { "id": "stat:influence", "value": 50 },
   { "id": "progress:level", "value": 0 },
-  { "id": "initiation_degree:main_0", "value": "0° — Неофит (кандидат)" },
+  { 
+    "id": "organization_rank:oto", 
+    "value": 0, 
+    "description": "0° — Минервал (кандидат)" 
+  },
   {
     "id": "personality:hero",
     "value": "Молодой искатель приключений, полный энтузиазма."
@@ -129,6 +137,7 @@ const DEFAULT_STATE = {
     aiMemory: {},
     currentScene: { ...PROMPTS.standardGameOTO.initialGameState },
     selectedActions: [],
+    organizationsHierarchy: {} // Хранит иерархии всех организаций
   },
   ui: {
     hTop: 50,
@@ -188,6 +197,11 @@ function initializeState() {
               state.heroState = parsed[key];
             } else if (key === 'gameState' && typeof parsed[key] === 'object') {
               state.gameState = { ...defaultValue.gameState, ...parsed[key] };
+              
+              // Проверяем наличие organizationsHierarchy
+              if (!state.gameState.organizationsHierarchy) {
+                state.gameState.organizationsHierarchy = {};
+              }
             } else if (key === 'ui' && typeof parsed[key] === 'object') {
               state.ui = { ...defaultValue.ui, ...parsed[key] };
             } else if (key === 'settings' && typeof parsed[key] === 'object') {
@@ -230,20 +244,25 @@ function initializeState() {
           console.log('✅ Начальная сцена добавлена в историю как ход #1');
         }
         
+        // Инициализируем иерархии организаций
+        initializeOrganizationHierarchies();
+        
       } catch (parseError) {
         console.error('❌ Ошибка парсинга сохраненного состояния:', parseError);
         state = { ...DEFAULT_STATE };
         state.gameId = Utils.generateUniqueId();
+        initializeOrganizationHierarchies();
       }
     } else {
       console.log('🆕 Первый запуск, используем дефолтное состояние');
       state = { ...DEFAULT_STATE };
       state.gameId = Utils.generateUniqueId();
+      initializeOrganizationHierarchies();
     }
     
     checkHeroDeath();
     if (state.gameType === 'standard') {
-      syncDegree();
+      syncOrganizationRank();
     }
     
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
@@ -254,7 +273,8 @@ function initializeState() {
       gameId: state.gameId,
       turnCount: state.turnCount,
       heroItems: state.heroState.length,
-      gameType: state.gameType
+      gameType: state.gameType,
+      organizations: Object.keys(state.gameState.organizationsHierarchy).length
     });
     
   } catch (error) {
@@ -271,6 +291,121 @@ function initializeState() {
   }
 }
 
+/**
+ * Инициализирует иерархии организаций из начальной сцены
+ */
+function initializeOrganizationHierarchies() {
+  try {
+    console.log('🏛️ Инициализация иерархий организаций...');
+    
+    // Получаем иерархию О.Т.О. из начальной сцены стандартной игры
+    const initialScene = PROMPTS.standardGameOTO.initialGameState;
+    
+    // Ищем organization_rank_hierarchy в начальной сцене
+    if (initialScene['organization_rank_hierarchy:oto']) {
+      state.gameState.organizationsHierarchy['oto'] = initialScene['organization_rank_hierarchy:oto'];
+      console.log('✅ Иерархия О.Т.О. инициализирована');
+    }
+    
+    // Проверяем текущие иерархии в состоянии (из сохраненной игры)
+    const orgIds = Object.keys(state.gameState.organizationsHierarchy);
+    if (orgIds.length > 0) {
+      console.log(`✅ Загружено иерархий организаций: ${orgIds.join(', ')}`);
+    } else {
+      console.log('ℹ️ Нет сохраненных иерархий организаций');
+    }
+    
+  } catch (error) {
+    console.error('❌ Ошибка инициализации иерархий организаций:', error);
+  }
+}
+
+/**
+ * Получает иерархию организации по ID
+ */
+function getOrganizationHierarchy(orgId) {
+  return state.gameState.organizationsHierarchy[orgId];
+}
+
+/**
+ * Получает все иерархии организаций, в которых состоит игрок
+ */
+function getHeroOrganizationHierarchies() {
+  const hierarchies = {};
+  
+  // Получаем все organization_rank у героя
+  const orgRanks = state.heroState.filter(item => item.id.startsWith('organization_rank:'));
+  
+  orgRanks.forEach(rankItem => {
+    const orgId = rankItem.id.split(':')[1];
+    const hierarchy = state.gameState.organizationsHierarchy[orgId];
+    if (hierarchy) {
+      hierarchies[orgId] = hierarchy;
+    }
+  });
+  
+  return hierarchies;
+}
+
+/**
+ * Сохраняет иерархию организации
+ */
+function setOrganizationHierarchy(orgId, hierarchy) {
+  if (hierarchy && typeof hierarchy === 'object') {
+    state.gameState.organizationsHierarchy[orgId] = hierarchy;
+    console.log(`✅ Иерархия организации ${orgId} сохранена`);
+    
+    // Обновляем описание ранга, если игрок состоит в этой организации
+    const rankItem = state.heroState.find(item => item.id === `organization_rank:${orgId}`);
+    if (rankItem && hierarchy.description) {
+      const rankInfo = hierarchy.description.find(item => item.lvl === rankItem.value);
+      if (rankInfo) {
+        rankItem.description = rankInfo.rank;
+      }
+    }
+    
+    stateObserver.notify(STATE_EVENTS.ORGANIZATION_HIERARCHY_UPDATED, {
+      organization: orgId,
+      hierarchy: hierarchy
+    });
+    
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Получает название ранга организации
+ */
+function getOrganizationRankName(orgId, rankValue) {
+  const hierarchy = getOrganizationHierarchy(orgId);
+  if (hierarchy && hierarchy.description && Array.isArray(hierarchy.description)) {
+    const rankInfo = hierarchy.description.find(item => item.lvl === rankValue);
+    return rankInfo ? rankInfo.rank : `Ранг ${rankValue}`;
+  }
+  return `Ранг ${rankValue}`;
+}
+
+/**
+ * Получает список организаций, в которых состоит герой
+ */
+function getHeroOrganizations() {
+  const orgRanks = state.heroState.filter(item => item.id.startsWith('organization_rank:'));
+  return orgRanks.map(rankItem => {
+    const orgId = rankItem.id.split(':')[1];
+    const hierarchy = getOrganizationHierarchy(orgId);
+    const rankName = getOrganizationRankName(orgId, rankItem.value);
+    
+    return {
+      id: orgId,
+      rank: rankItem.value,
+      rankName: rankName,
+      description: rankItem.description || rankName,
+      hierarchy: hierarchy
+    };
+  });
+}
+
 function checkHeroDeath() {
   const stats = state.heroState.filter(item => item.id.startsWith('stat:'));
   const deadStats = stats.filter(stat => stat.value <= 0);
@@ -284,54 +419,83 @@ function checkHeroDeath() {
   }
 }
 
-function syncDegree() {
+/**
+ * Синхронизирует ранг в организации с прогрессом (только для стандартной игры О.Т.О.)
+ */
+function syncOrganizationRank() {
   // Только для стандартной игры О.Т.О.
   if (state.gameType !== 'standard') return;
   
   const progressItem = state.heroState.find(item => item.id === 'progress:level');
   const progress = progressItem ? progressItem.value : 0;
   
-  let newDegreeIndex = 0;
-  CONFIG.degrees.forEach((d, i) => {
-    if (progress >= d.threshold) newDegreeIndex = i;
-  });
+  const orgRankItem = state.heroState.find(item => item.id === 'organization_rank:oto');
+  if (!orgRankItem) {
+    console.warn('⚠️ Нет organization_rank:oto для синхронизации');
+    return;
+  }
   
-  const currentDegreeItem = state.heroState.find(item => item.id.startsWith('initiation_degree:'));
-  const currentDegreeIndex = currentDegreeItem ?
-    parseInt(currentDegreeItem.id.split('_').pop()) || 0 : 0;
+  const currentRank = orgRankItem.value;
+  const hierarchy = getOrganizationHierarchy('oto');
   
-  if (newDegreeIndex > currentDegreeIndex) {
-    const newDegreeId = `initiation_degree:main_${newDegreeIndex}`;
-    const newDegreeValue = CONFIG.degrees[newDegreeIndex].name;
+  if (!hierarchy || !hierarchy.description) {
+    console.warn('⚠️ Нет иерархии О.Т.О. для синхронизации');
+    return;
+  }
+  
+  // Находим максимальный доступный ранг по прогрессу
+  let newRank = 0;
+  for (const rankInfo of hierarchy.description) {
+    const threshold = rankInfo.threshold || (rankInfo.lvl * 10);
+    if (progress >= threshold) {
+      newRank = rankInfo.lvl;
+    }
+  }
+  
+  if (newRank > currentRank) {
+    const oldRankName = orgRankItem.description;
+    const newRankName = getOrganizationRankName('oto', newRank);
     
-    state.heroState = state.heroState.filter(item => !item.id.startsWith('initiation_degree:'));
-    state.heroState.push({
-      id: newDegreeId,
-      value: newDegreeValue
-    });
+    // Обновляем ранг
+    orgRankItem.value = newRank;
+    orgRankItem.description = newRankName;
     
+    // Добавляем временный бафф ко всем статам
     state.heroState = state.heroState.map(item => {
       if (item.id.startsWith('stat:')) {
-        return { ...item, value: Math.min(100, item.value + 1) };
+        return { 
+          ...item, 
+          value: Math.min(100, item.value + 5) // Бонус при повышении
+        };
       }
       return item;
     });
     
     state.isRitualActive = true;
     state.ritualProgress = 0;
-    state.ritualTarget = newDegreeIndex;
+    state.ritualTarget = newRank;
     
-    console.log(`🎓 Повышение степени: ${currentDegreeIndex} → ${newDegreeIndex}`);
+    console.log(`🎓 Повышение ранга в О.Т.О.: ${oldRankName} (${currentRank}) → ${newRankName} (${newRank})`);
+    
     stateObserver.notify(STATE_EVENTS.DEGREE_UPGRADED, {
-      oldDegree: currentDegreeIndex,
-      newDegree: newDegreeIndex,
-      degreeName: newDegreeValue
+      organization: 'oto',
+      oldRank: currentRank,
+      newRank: newRank,
+      oldRankName: oldRankName,
+      newRankName: newRankName
+    });
+    
+    stateObserver.notify(STATE_EVENTS.ORGANIZATION_RANK_CHANGED, {
+      organization: 'oto',
+      oldRank: currentRank,
+      newRank: newRank,
+      rankName: newRankName
     });
   }
 }
 
 // ========================
-// ОПЕРАЦИИ НАД GAME_ITEM
+// ОПЕРАЦИИ НАД GAME_ITEM (обновленные для организаций)
 // ========================
 
 /**
@@ -368,6 +532,13 @@ function applyOperations(operations) {
         return;
       }
       
+      // Специальная обработка для organization_rank
+      if (id.startsWith('organization_rank:')) {
+        handleOrganizationRankOperation(op, idx, appliedOps, failedOps, changeLog);
+        return;
+      }
+      
+      // Остальные типы game_items обрабатываем как обычно
       const findItem = (itemId) => state.heroState.find(item => item.id === itemId);
       const removeItem = (itemId) => {
         const index = state.heroState.findIndex(item => item.id === itemId);
@@ -532,6 +703,12 @@ function applyOperations(operations) {
           changeLog.push(`Удалено: ${id}`);
           appliedOps.push(op);
           stateObserver.notify(STATE_EVENTS.HERO_ITEM_REMOVED, { id });
+          
+          // Если удаляем organization_rank, отправляем событие
+          if (id.startsWith('organization_rank:')) {
+            const orgId = id.split(':')[1];
+            stateObserver.notify(STATE_EVENTS.ORGANIZATION_LEFT, { organization: orgId });
+          }
         } else {
           console.warn(`⚠️ Попытка удалить несуществующий объект: ${id}`);
           failedOps.push({ op, reason: 'Объект не найден' });
@@ -565,9 +742,9 @@ function applyOperations(operations) {
   // Проверяем на смерть героя
   checkHeroDeath();
   
-  // Синхронизируем степень инициации (только для стандартной игры)
+  // Синхронизируем ранг в организации (только для стандартной игры)
   if (state.gameType === 'standard') {
-    syncDegree();
+    syncOrganizationRank();
   }
   
   console.log(`📊 Операций применено: ${appliedOps.length}, провалено: ${failedOps.length}`);
@@ -577,6 +754,161 @@ function applyOperations(operations) {
     failed: failedOps,
     changes: changesText
   };
+}
+
+/**
+ * Обрабатывает операции с organization_rank
+ */
+function handleOrganizationRankOperation(op, idx, appliedOps, failedOps, changeLog) {
+  const { operation, id, value, delta, description } = op;
+  const orgId = id.split(':')[1];
+  
+  const findItem = (itemId) => state.heroState.find(item => item.id === itemId);
+  
+  switch (operation) {
+    case 'ADD':
+      // Вступление в организацию
+      if (value === undefined || value === null) {
+        console.warn(`⚠️ ADD для organization_rank без значения: ${id}`);
+        failedOps.push({ op, reason: 'Отсутствует value' });
+        return;
+      }
+      
+      const existingRank = findItem(id);
+      if (existingRank) {
+        console.warn(`⚠️ organization_rank ${id} уже существует`);
+        failedOps.push({ op, reason: 'Уже состоит в организации' });
+        return;
+      }
+      
+      // Проверяем иерархию организации
+      const hierarchy = getOrganizationHierarchy(orgId);
+      let rankName = description || getOrganizationRankName(orgId, value);
+      
+      const newRankItem = {
+        id,
+        value: value,
+        description: rankName
+      };
+      
+      state.heroState.push(newRankItem);
+      console.log(`✅ Вступление в организацию ${orgId}, ранг: ${rankName}`);
+      changeLog.push(`Вступил в ${orgId}: ${rankName}`);
+      
+      appliedOps.push(op);
+      stateObserver.notify(STATE_EVENTS.ORGANIZATION_JOINED, {
+        organization: orgId,
+        rank: value,
+        rankName: rankName,
+        hierarchy: hierarchy
+      });
+      break;
+      
+    case 'MODIFY':
+      // Изменение ранга в организации
+      const rankItem = findItem(id);
+      if (!rankItem) {
+        console.warn(`⚠️ MODIFY для несуществующего organization_rank: ${id}`);
+        failedOps.push({ op, reason: 'Не состоит в организации' });
+        return;
+      }
+      
+      const oldRank = rankItem.value;
+      const newRank = oldRank + (delta || 0);
+      
+      // Проверяем границы по иерархии
+      const orgHierarchy = getOrganizationHierarchy(orgId);
+      let finalRank = newRank;
+      if (orgHierarchy && orgHierarchy.description) {
+        const maxRank = Math.max(...orgHierarchy.description.map(r => r.lvl));
+        const minRank = Math.min(...orgHierarchy.description.map(r => r.lvl));
+        finalRank = Math.max(minRank, Math.min(maxRank, newRank));
+      }
+      
+      const oldRankName = rankItem.description;
+      const newRankName = getOrganizationRankName(orgId, finalRank);
+      
+      rankItem.value = finalRank;
+      rankItem.description = newRankName;
+      
+      console.log(`✅ Изменение ранга в ${orgId}: ${oldRankName} (${oldRank}) → ${newRankName} (${finalRank})`);
+      changeLog.push(`${orgId}: ${oldRank} → ${finalRank} (${delta > 0 ? '+' : ''}${delta})`);
+      
+      appliedOps.push(op);
+      stateObserver.notify(STATE_EVENTS.ORGANIZATION_RANK_CHANGED, {
+        organization: orgId,
+        oldRank: oldRank,
+        newRank: finalRank,
+        oldRankName: oldRankName,
+        newRankName: newRankName
+      });
+      break;
+      
+    case 'SET':
+      // Установка конкретного ранга
+      const setRankItem = findItem(id);
+      if (!setRankItem) {
+        console.warn(`⚠️ SET для несуществующего organization_rank: ${id}`);
+        failedOps.push({ op, reason: 'Не состоит в организации' });
+        return;
+      }
+      
+      if (value === undefined || value === null) {
+        console.warn(`⚠️ SET без значения для: ${id}`);
+        failedOps.push({ op, reason: 'Отсутствует value' });
+        return;
+      }
+      
+      const oldSetRank = setRankItem.value;
+      const oldSetRankName = setRankItem.description;
+      const newSetRankName = description || getOrganizationRankName(orgId, value);
+      
+      setRankItem.value = value;
+      setRankItem.description = newSetRankName;
+      
+      console.log(`✅ Установка ранга в ${orgId}: ${oldSetRankName} (${oldSetRank}) → ${newSetRankName} (${value})`);
+      changeLog.push(`${orgId}: установлен ранг ${value}`);
+      
+      appliedOps.push(op);
+      stateObserver.notify(STATE_EVENTS.ORGANIZATION_RANK_CHANGED, {
+        organization: orgId,
+        oldRank: oldSetRank,
+        newRank: value,
+        oldRankName: oldSetRankName,
+        newRankName: newSetRankName
+      });
+      break;
+      
+    case 'REMOVE':
+      // Выход из организации
+      const removeSuccess = removeOrganizationRank(id);
+      if (removeSuccess) {
+        console.log(`✅ Выход из организации: ${orgId}`);
+        changeLog.push(`Вышел из ${orgId}`);
+        appliedOps.push(op);
+        stateObserver.notify(STATE_EVENTS.ORGANIZATION_LEFT, { organization: orgId });
+      } else {
+        console.warn(`⚠️ Не удалось выйти из организации: ${orgId}`);
+        failedOps.push({ op, reason: 'Не состоит в организации' });
+      }
+      break;
+      
+    default:
+      console.warn(`⚠️ Неизвестная операция для organization_rank: ${operation}`);
+      failedOps.push({ op, reason: `Неизвестная операция: ${operation}` });
+  }
+}
+
+/**
+ * Удаляет organization_rank
+ */
+function removeOrganizationRank(itemId) {
+  const index = state.heroState.findIndex(item => item.id === itemId);
+  if (index !== -1) {
+    state.heroState.splice(index, 1);
+    return true;
+  }
+  return false;
 }
 
 function getGameItem(id) {
@@ -629,7 +961,8 @@ function exportFullState() {
       turnCount: state.turnCount,
       lastSaveTime: state.lastSaveTime,
       totalPlayTime: calculateTotalPlayTime(),
-      totalChoices: state.gameState.history.length
+      totalChoices: state.gameState.history.length,
+      organizations: getHeroOrganizations().length
     },
     lastTurnUpdates: state.lastTurnUpdates,
     lastTurnStatChanges: state.lastTurnStatChanges
@@ -680,7 +1013,7 @@ function importFullState(importData) {
   }
   
   if (state.gameType === 'standard') {
-    syncDegree();
+    syncOrganizationRank();
   }
   
   stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, { gameType: state.gameType });
@@ -710,7 +1043,8 @@ function exportAllAppData() {
         gameId: state.gameId,
         gameType: state.gameType,
         lastSaveTime: state.lastSaveTime,
-        totalPlayTime: calculateTotalPlayTime()
+        totalPlayTime: calculateTotalPlayTime(),
+        organizations: getHeroOrganizations().length
       }
     }
   };
@@ -849,6 +1183,9 @@ function setGameType(gameType, initialScene = null) {
     state.isRitualActive = false;
     state.ritualProgress = 0;
     state.ritualTarget = null;
+    
+    // Инициализируем иерархию О.Т.О.
+    initializeOrganizationHierarchies();
   }
   
   stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, { 
@@ -908,13 +1245,16 @@ export const State = {
             aiMemory: {},
             currentScene: { ...PROMPTS.standardGameOTO.initialGameState },
             selectedActions: [],
+            organizationsHierarchy: {}
           };
+          initializeOrganizationHierarchies();
         } else {
           // Для кастомной игры очищаем всё, кроме текущей сцены
           state.gameState.summary = "";
           state.gameState.history = [];
           state.gameState.aiMemory = {};
           state.gameState.selectedActions = [];
+          state.gameState.organizationsHierarchy = {};
           // currentScene НЕ трогаем - он уже содержит кастомную сцену
         }
         
@@ -935,7 +1275,7 @@ export const State = {
         state.lastSaveTime = new Date().toISOString();
         
         if (state.gameType === 'standard') {
-          syncDegree();
+          syncOrganizationRank();
         }
         
         stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
@@ -966,12 +1306,15 @@ export const State = {
           aiMemory: {},
           currentScene: { ...PROMPTS.standardGameOTO.initialGameState },
           selectedActions: [],
+          organizationsHierarchy: {}
         };
+        initializeOrganizationHierarchies();
       } else {
         state.gameState.summary = "";
         state.gameState.history = [];
         state.gameState.aiMemory = {};
         state.gameState.selectedActions = [];
+        state.gameState.organizationsHierarchy = {};
       }
       
       state.settings = currentSettings;
@@ -991,7 +1334,7 @@ export const State = {
       state.lastSaveTime = new Date().toISOString();
       
       if (state.gameType === 'standard') {
-        syncDegree();
+        syncOrganizationRank();
       }
       
       stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
@@ -1029,7 +1372,14 @@ export const State = {
   hasGameItem,
   getGameItemValue,
   
-  syncDegree,
+  // Функции для работы с организациями
+  getOrganizationHierarchy,
+  setOrganizationHierarchy,
+  getOrganizationRankName,
+  getHeroOrganizationHierarchies,
+  getHeroOrganizations,
+  
+  syncOrganizationRank,
   setGameType,
   
   resetFullGame,
@@ -1113,6 +1463,10 @@ export const State = {
   onTurnComplete: (callback) => stateObserver.subscribe(STATE_EVENTS.TURN_COMPLETED, callback),
   onSettingsChange: (callback) => stateObserver.subscribe(STATE_EVENTS.SETTINGS_CHANGED, callback),
   onGameTypeChange: (callback) => stateObserver.subscribe(STATE_EVENTS.GAME_TYPE_CHANGED, callback),
+  onOrganizationJoined: (callback) => stateObserver.subscribe(STATE_EVENTS.ORGANIZATION_JOINED, callback),
+  onOrganizationRankChanged: (callback) => stateObserver.subscribe(STATE_EVENTS.ORGANIZATION_RANK_CHANGED, callback),
+  onOrganizationLeft: (callback) => stateObserver.subscribe(STATE_EVENTS.ORGANIZATION_LEFT, callback),
+  onOrganizationHierarchyUpdated: (callback) => stateObserver.subscribe(STATE_EVENTS.ORGANIZATION_HIERARCHY_UPDATED, callback),
   
   EVENTS: STATE_EVENTS
 };

@@ -21,6 +21,10 @@ function constructFullSystemPrompt(state) {
     : PROMPTS.system.gameMaster;
 
   // Собираем полный системный промт из модульных компонентов
+  /*
+  ### РАСЧЁТ УСПЕХА/ПРОВАЛА ДЕЙСТВИЯ:
+${PROMPTS.calculationsExplanation}
+  */
   const fullSystemPrompt = `
 ${mainSystemPrompt}
 
@@ -31,6 +35,9 @@ ${PROMPTS.absoluteProhibitions}
 ${PROMPTS.fundamentalProtocols}
 
 ${PROMPTS.heroStateDescription}
+
+### ПРОТОКОЛ РАБОТЫ С ОРГАНИЗАЦИЯМИ И РАНГАМИ:
+${PROMPTS.organizationsProtocol}
 
 ### ТИПЫ GAME_ITEM И ИХ ФОРМАТЫ:
 ${PROMPTS.gameItemProtocol}
@@ -43,9 +50,6 @@ ${PROMPTS.choicesProtocol}
 
 ### СТРУКТУРА EVENT (СОБЫТИЯ):
 ${PROMPTS.eventsProtocol}
-
-### РАСЧЁТ УСПЕХА/ПРОВАЛА:
-${PROMPTS.calculationsExplanation}
 
 ### ПОШАГОВЫЙ АЛГОРИТМ ГЕНЕРАЦИИ ОТВЕТА:
 ${PROMPTS.workflowAlgorithm}
@@ -101,7 +105,7 @@ function getDynamicSystemInjections(state) {
   if (state.gameState.history.length > 0) {
     const lastHistory = state.gameState.history[state.gameState.history.length - 1];
     const lastSceneText = lastHistory.fullText || '';
-    const currentSceneText = state.gameState.currentScene.text || '';
+    const currentSceneText = state.gameState.currentScene.scene || '';
     const comparisonLength = 50;
     
     if (lastSceneText.length >= comparisonLength && currentSceneText.length >= comparisonLength) {
@@ -124,10 +128,17 @@ function getDynamicSystemInjections(state) {
     injections.push(PROMPTS.injections.otoRitual);
   }
   
-  // 5. БАЗОВЫЕ ИНСТРУКЦИИ (всегда добавляются)
+  // 5. ИНЪЕКЦИЯ КОНФЛИКТА ОРГАНИЗАЦИЙ (если игрок состоит в конфликтующих организациях)
+  const heroOrganizations = State.getHeroOrganizations();
+  if (heroOrganizations.length >= 2) {
+    console.log(`🏛️ [Client Director] Player in ${heroOrganizations.length} organizations.`);
+    injections.push(`>>> [TRIGGER: MULTIPLE ORGANIZATIONS] ${PROMPTS.injections.organizationConflict}`);
+  }
+  
+  // 6. БАЗОВЫЕ ИНСТРУКЦИИ (всегда добавляются)
   injections.push(PROMPTS.injections.coreMovement);
   
-  // 6. УКАЗАНИЕ ТИПА ИГРЫ (для лучшего понимания контекста ИИ)
+  // 7. УКАЗАНИЕ ТИПА ИГРЫ (для лучшего понимания контекста ИИ)
   if (state.gameType === 'standard') {
     injections.push(`>>> [КОНТЕКСТ ИГРЫ: Стандартная игра "Орден О.Т.О."]`);
   } else {
@@ -164,7 +175,17 @@ function buildContextBlock(state) {
     parts.push(`### ТВОЯ ДИНАМИЧЕСКАЯ ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(memoryForPrompt, null, 2)}`);
   }
   
-  // В. КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ходы)
+  // В. ИЕРАРХИИ ОРГАНИЗАЦИЙ, В КОТОРЫХ СОСТОИТ ГЕРОЙ (НОВОЕ)
+  const heroOrganizationHierarchies = State.getHeroOrganizationHierarchies();
+  if (Object.keys(heroOrganizationHierarchies).length > 0) {
+    const hierarchiesText = Object.entries(heroOrganizationHierarchies).map(([orgId, hierarchy]) => {
+      return `organization_rank_hierarchy:${orgId}: ${JSON.stringify(hierarchy, null, 2)}`;
+    }).join('\n\n');
+    
+    parts.push(`### ИЕРАРХИИ ОРГАНИЗАЦИЙ, В КОТОРЫХ СОСТОИТ ГЕРОЙ\n${hierarchiesText}`);
+  }
+  
+  // Г. КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ходы)
   const turnsToTake = state.gameState.summary ? CONFIG.activeContextTurns : CONFIG.historyContext;
   const historySlice = state.gameState.history.slice(-turnsToTake);
   
@@ -201,6 +222,125 @@ function formatSelectedActionsForPrompt(selectedActions) {
 }
 
 /**
+ * Форматирует состояние героя для промпта с учетом организаций
+ * @param {Array} heroState - Массив game_items героя
+ * @returns {string} Отформатированное состояние героя
+ */
+function formatHeroStateForPrompt(heroState) {
+  if (!Array.isArray(heroState) || heroState.length === 0) {
+    return "Состояние героя: Нет данных";
+  }
+  
+  const sections = {
+    stats: [],
+    organizations: [],
+    skills: [],
+    inventory: [],
+    relations: [],
+    buffs: [],
+    debuffs: [],
+    blessings: [],
+    curses: [],
+    other: []
+  };
+  
+  // Группируем game_items по типам
+  heroState.forEach(item => {
+    const [type] = item.id.split(':');
+    
+    let displayValue = item.value;
+    let extraInfo = '';
+    
+    if (item.description) {
+      extraInfo += ` (${item.description})`;
+    }
+    
+    if (item.duration !== undefined) {
+      extraInfo += ` [длительность: ${item.duration}]`;
+    }
+    
+    const line = `• ${item.id}: ${displayValue}${extraInfo}`;
+    
+    switch(type) {
+      case 'stat':
+        sections.stats.push(line);
+        break;
+      case 'organization_rank':
+        sections.organizations.push(line);
+        break;
+      case 'skill':
+        sections.skills.push(line);
+        break;
+      case 'inventory':
+        sections.inventory.push(line);
+        break;
+      case 'relations':
+        sections.relations.push(line);
+        break;
+      case 'buff':
+        sections.buffs.push(line);
+        break;
+      case 'debuff':
+        sections.debuffs.push(line);
+        break;
+      case 'bless':
+        sections.blessings.push(line);
+        break;
+      case 'curse':
+        sections.curses.push(line);
+        break;
+      default:
+        sections.other.push(line);
+    }
+  });
+  
+  // Собираем итоговый текст
+  let result = '';
+  
+  if (sections.stats.length > 0) {
+    result += `### ОСНОВНЫЕ ХАРАКТЕРИСТИКИ:\n${sections.stats.join('\n')}\n\n`;
+  }
+  
+  if (sections.organizations.length > 0) {
+    result += `### ОРГАНИЗАЦИИ И РАНГИ:\n${sections.organizations.join('\n')}\n\n`;
+  }
+  
+  if (sections.skills.length > 0) {
+    result += `### НАВЫКИ:\n${sections.skills.join('\n')}\n\n`;
+  }
+  
+  if (sections.inventory.length > 0) {
+    result += `### ИНВЕНТАРЬ:\n${sections.inventory.join('\n')}\n\n`;
+  }
+  
+  if (sections.relations.length > 0) {
+    result += `### ОТНОШЕНИЯ С ПЕРСОНАЖАМИ:\n${sections.relations.join('\n')}\n\n`;
+  }
+  
+  if (sections.buffs.length > 0) {
+    result += `### ВРЕМЕННЫЕ УСИЛЕНИЯ (БАФФЫ):\n${sections.buffs.join('\n')}\n\n`;
+  }
+  
+  if (sections.debuffs.length > 0) {
+    result += `### ВРЕМЕННЫЕ ОСЛАБЛЕНИЯ (ДЕБАФФЫ):\n${sections.debuffs.join('\n')}\n\n`;
+  }
+  
+  if (sections.blessings.length > 0) {
+    result += `### БЛАГОСЛОВЕНИЯ:\n${sections.blessings.join('\n')}\n\n`;
+  }
+  
+  if (sections.curses.length > 0) {
+    result += `### ПРОКЛЯТИЯ:\n${sections.curses.join('\n')}\n\n`;
+  }
+  
+  if (sections.other.length > 0) {
+    result += `### ДРУГОЕ:\n${sections.other.join('\n')}\n\n`;
+  }
+  
+  return result.trim();
+}
+
+/**
  * Подготавливает полное тело запроса для формата 4.1
  * @param {Object} state - Текущее состояние игры
  * @param {Array} selectedActions - Выбранные игроком действия
@@ -215,12 +355,7 @@ function prepareRequestPayload(state, selectedActions, d10) {
   const contextBlock = buildContextBlock(state);
   
   // Собираем геройское состояние в читаемом формате
-  const heroStateSummary = state.heroState.map(item => {
-    let line = `• ${item.id}: ${item.value}`;
-    if (item.description) line += ` (${item.description})`;
-    if (item.duration !== undefined) line += ` [длительность: ${item.duration}]`;
-    return line;
-  }).join('\n');
+  const heroStateSummary = formatHeroStateForPrompt(state.heroState);
   
   // Проверяем, нужно ли запросить новые "мысли героя"
   const needsHeroPhrases = State.needsHeroPhrases();
@@ -248,6 +383,7 @@ ${heroStateSummary}
 ${formatSelectedActionsForPrompt(selectedActions)}
 
 ${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сгенерируй 10+ мыслей героя (thoughts).' : ''}
+
 
 ### ТРЕБОВАНИЯ К ОТВЕТУ:
 Продолжи игру, сгенерировав валидный JSON, согласно инструкциям`;
@@ -377,6 +513,7 @@ export const API_Request = {
   getDynamicSystemInjections,
   buildContextBlock,
   formatSelectedActionsForPrompt,
+  formatHeroStateForPrompt,
   prepareRequestPayload,
   executeFetch,
   executeFetchRaw

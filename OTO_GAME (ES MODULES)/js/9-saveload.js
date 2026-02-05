@@ -18,7 +18,9 @@ function saveState() {
         lastSaveTime: state.lastSaveTime,
         turnCount: state.turnCount,
         heroState: [...state.heroState],
-        gameState: { ...state.gameState },
+        gameState: { ...state.gameState, 
+            organizationsHierarchy: state.gameState.organizationsHierarchy || {}
+        },
         ui: { ...state.ui },
         settings: { ...state.settings },
         auditLog: [...state.auditLog],
