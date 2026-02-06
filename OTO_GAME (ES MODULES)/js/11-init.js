@@ -34,9 +34,6 @@ function init() {
         
         Logger.success('DOM', "DOM полностью загружен");
         
-        // Реализовать корректно!!!!!!!
-        State.loadStateFromLocalStorage();
-        
         // 2. Проверяем, что состояние корректно инициализировано
         const state = State.getState();
         if (!state || !state.gameState || !state.gameState.currentScene) {
@@ -95,7 +92,7 @@ function init() {
             checkAllContainersVisible();
         }, 100);
         
-    
+        
         Logger.success('SYSTEM', `📊 Статистика: Ход ${state.turnCount}, Организации: ${State.getHeroOrganizations().length}`);
         
         // 5. Настраиваем игровые подписки ПОСЛЕ инициализации всех модулей
