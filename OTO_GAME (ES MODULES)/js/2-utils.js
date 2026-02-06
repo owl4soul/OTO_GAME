@@ -3,45 +3,59 @@
 
 import { CONFIG } from './1-config.js';
 
+// Категории обрабатываемых game_item:
+const GAME_ITEM_CATEGORIES = {
+    STAT: 'stat',
+    SKILL: 'skill', 
+    INVENTORY: 'inventory',
+    RELATIONS: 'relations',
+    ORGANIZATION: 'organization',
+    BLESSING: 'bless',
+    CURSE: 'curse',
+    BUFF: 'buff',
+    DEBUFF: 'debuff',
+    PERSONALITY: 'personality',
+    PROGRESS: 'progress'
+};
 
-/**
- * Пытается починить обрезанный JSON (Auto-Heal)
- * Восстанавливает закрывающие кавычки и скобки, включая обрезанные строки в массивах.
- * @param {string} text - Битая JSON строка
- * @returns {string} - Потенциально валидная JSON строка
- */
-function fixCommonAIJsonErrors(text) {
-    if (!text || typeof text !== 'string') return text;
+function categorizeGameItem(id) {
+    if (!id || typeof id !== 'string') return null;
     
-    let fixed = text;
+    const [category] = id.split(':');
     
-    // 1. Исправляем двойное экранирование: \\\" -> \"
-    fixed = fixed.replace(/\\\\\"/g, '"');
+    // Специальная обработка организаций
+    if (category === 'organization_rank') return GAME_ITEM_CATEGORIES.ORGANIZATION;
     
-    // 2. Исправляем незакрытые строки с переносами
-    fixed = fixed.replace(/"([^"\\]*(?:\\.[^"\\]*)*)\n/g, '"$1\\n');
-    fixed = fixed.replace(/\n([^"\\]*(?:\\.[^"\\]*)*")/g, '\\n$1');
+    // Для остальных - первая часть
+    const categoryMap = {
+        'stat': GAME_ITEM_CATEGORIES.STAT,
+        'skill': GAME_ITEM_CATEGORIES.SKILL,
+        'inventory': GAME_ITEM_CATEGORIES.INVENTORY,
+        'relations': GAME_ITEM_CATEGORIES.RELATIONS,
+        'bless': GAME_ITEM_CATEGORIES.BLESSING,
+        'curse': GAME_ITEM_CATEGORIES.CURSE,
+        'buff': GAME_ITEM_CATEGORIES.BUFF,
+        'debuff': GAME_ITEM_CATEGORIES.DEBUFF,
+        'personality': GAME_ITEM_CATEGORIES.PERSONALITY,
+        'progress': GAME_ITEM_CATEGORIES.PROGRESS
+    };
     
-    // 3. Удаляем лишние кавычки в конце строковых значений
-    fixed = fixed.replace(/\"(\s*:\s*\"[^\"]*)\"\"(\s*[,\}])/g, '"$1"$2');
-    
-    // 4. Исправляем одиночные обратные слэши перед кавычками
-    fixed = fixed.replace(/([^\\])\\\"/g, '$1\"');
-    
-    // 5. Убираем висячие кавычки после значений
-    fixed = fixed.replace(/\"\"([,\}\]])/g, '"$1');
-    
-    // 6. Заменяем неэкранированные переносы строк внутри строк
-    fixed = fixed.replace(/"([^"\\]*(?:\\.[^"\\]*)*?)(?<!\\)\n(?!\\)([^"\\]*(?:\\.[^"\\]*)*)"/g, '"$1\\n$2"');
-    
-    return fixed;
+    return categoryMap[category] || null;
 }
 
-/**
- * Надежный парсинг JSON из ответа ИИ (ФОРМАТ 4.1)
- */
-// УЛУЧШЕННЫЕ ФУНКЦИИ ПАРСИНГА для модуля 2-utils.js
-// Вставьте эти функции вместо существующих repairTruncatedJSON и robustJsonParse
+function getOperationDetails(operation) {
+    const category = categorizeGameItem(operation.id);
+    const [type, name] = operation.id.split(':');
+    
+    return {
+        category,
+        type,
+        name,
+        operation: operation.operation,
+        value: operation.value,
+        delta: operation.delta
+    };
+}
 
 /**
  * УЛУЧШЕННАЯ ВЕРСИЯ: Пытается починить обрезанный JSON (Auto-Heal)
@@ -528,7 +542,6 @@ function robustJsonParse(rawContent) {
     return result;
 }
 
-// Используйте эти функции вместо существующих в модуле 2-utils.js
 function createDefaultChoice() {
     return {
         text: "Продолжить...",
@@ -538,6 +551,7 @@ function createDefaultChoice() {
         fail_penalties: []
     };
 }
+
 /**
  * Безопасный парсинг ответа ИИ
  * Обертка над robustJsonParse с дополнительным извлечением фраз
@@ -861,11 +875,6 @@ function parseHeroPhrases(text) {
  * @param {string} text - Текст с escape-последовательностями
  * @returns {string} Декодированный текст
  */
-/**
- * Декодирует Unicode escape-последовательности в читаемые символы
- * @param {string} text - Текст с escape-последовательностями
- * @returns {string} Декодированный текст
- */
 function decodeUnicodeEscapes(text) {
     if (!text || typeof text !== 'string') return text;
     
@@ -959,6 +968,211 @@ function formatJsonWithUnicode(jsonString) {
     }
 }
 
+/**
+ * Показывает всплывающее уведомление (toast)
+ * @param {string} message - Сообщение для показа
+ * @param {string} type - Тип уведомления: 'success', 'error', 'warning', 'info'
+ * @param {number} duration - Время показа в миллисекундах
+ */
+function showToast(message, type = 'info', duration = 3000) {
+    try {
+        // Удаляем существующие toast, чтобы не накапливались
+        const existingToasts = document.querySelectorAll('.utils-toast');
+        existingToasts.forEach(toast => {
+            if (toast.parentNode) {
+                document.body.removeChild(toast);
+            }
+        });
+        
+        // Создаем новый toast элемент
+        const toast = document.createElement('div');
+        toast.className = `utils-toast utils-toast-${type}`;
+        toast.textContent = message;
+        
+        // Устанавливаем стили
+        const toastStyles = `
+            .utils-toast {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 5px;
+                z-index: 999999;
+                font-size: 0.9em;
+                font-weight: 500;
+                color: #fff;
+                background: #333;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                max-width: 400px;
+                word-wrap: break-word;
+                opacity: 0;
+                transform: translateY(-20px);
+                transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+                backdrop-filter: blur(5px);
+                border: 1px solid rgba(255,255,255,0.1);
+            }
+            
+            .utils-toast-success {
+                background: linear-gradient(135deg, #4cd137 0%, #2d8b57 100%);
+                border-color: #4cd137;
+            }
+            
+            .utils-toast-error {
+                background: linear-gradient(135deg, #e84118 0%, #c23616 100%);
+                border-color: #e84118;
+            }
+            
+            .utils-toast-warning {
+                background: linear-gradient(135deg, #fbc531 0%, #e1b12c 100%);
+                border-color: #fbc531;
+                color: #333;
+            }
+            
+            .utils-toast-info {
+                background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+                border-color: #3498db;
+            }
+            
+            .utils-toast::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 5px;
+                height: 100%;
+                border-radius: 5px 0 0 5px;
+            }
+            
+            .utils-toast-success::before {
+                background: #fff;
+            }
+            
+            .utils-toast-error::before {
+                background: #fff;
+            }
+            
+            .utils-toast-warning::before {
+                background: #333;
+            }
+            
+            .utils-toast-info::before {
+                background: #fff;
+            }
+            
+            @keyframes utils-toast-show {
+                0% {
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }
+                100% {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes utils-toast-hide {
+                0% {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+                100% {
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }
+            }
+        `;
+        
+        // Добавляем стили, если их еще нет
+        if (!document.getElementById('utils-toast-styles')) {
+            const styleEl = document.createElement('style');
+            styleEl.id = 'utils-toast-styles';
+            styleEl.textContent = toastStyles;
+            document.head.appendChild(styleEl);
+        }
+        
+        // Добавляем иконку в зависимости от типа
+        let icon = 'ℹ️';
+        switch(type) {
+            case 'success': icon = '✅'; break;
+            case 'error': icon = '❌'; break;
+            case 'warning': icon = '⚠️'; break;
+            case 'info': icon = 'ℹ️'; break;
+        }
+        
+        toast.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.1em;">${icon}</span>
+                <span>${message}</span>
+            </div>
+        `;
+        
+        // Добавляем в DOM
+        document.body.appendChild(toast);
+        
+        // Анимация появления
+        setTimeout(() => {
+            toast.style.animation = 'utils-toast-show 0.3s forwards';
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        }, 10);
+        
+        // Автоматическое скрытие через указанное время
+        const hideToast = () => {
+            toast.style.animation = 'utils-toast-hide 0.3s forwards';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    document.body.removeChild(toast);
+                }
+            }, 300);
+        };
+        
+        // Устанавливаем таймер скрытия
+        const timer = setTimeout(hideToast, duration);
+        
+        // Закрытие по клику
+        toast.onclick = () => {
+            clearTimeout(timer);
+            hideToast();
+        };
+        
+        // Возвращаем объект для ручного управления
+        return {
+            element: toast,
+            hide: hideToast,
+            updateMessage: (newMessage) => {
+                const textSpan = toast.querySelector('span:last-child');
+                if (textSpan) {
+                    textSpan.textContent = newMessage;
+                }
+            },
+            updateType: (newType) => {
+                const classList = toast.classList;
+                classList.remove('utils-toast-success', 'utils-toast-error', 'utils-toast-warning', 'utils-toast-info');
+                classList.add(`utils-toast-${newType}`);
+                
+                // Обновляем иконку
+                let newIcon = 'ℹ️';
+                switch(newType) {
+                    case 'success': newIcon = '✅'; break;
+                    case 'error': newIcon = '❌'; break;
+                    case 'warning': newIcon = '⚠️'; break;
+                    case 'info': newIcon = 'ℹ️'; break;
+                }
+                
+                const iconSpan = toast.querySelector('span:first-child');
+                if (iconSpan) {
+                    iconSpan.textContent = newIcon;
+                }
+            }
+        };
+        
+    } catch (error) {
+        console.error('❌ Ошибка при показе toast-уведомления:', error);
+        // Резервный вариант - простой alert
+        alert(`${type.toUpperCase()}: ${message}`);
+    }
+}
+
 // Публичный интерфейс модуля
 export const Utils = {
     repairTruncatedJSON,
@@ -977,5 +1191,7 @@ export const Utils = {
     parseHeroPhrases,
     safeParseAIResponse,
     decodeUnicodeEscapes,
-    formatJsonWithUnicode
+    formatJsonWithUnicode,
+    getOperationDetails,
+    showToast // <-- ВОТ ТУТ ДОБАВЛЯЕМ НОВУЮ ФУНКЦИЮ
 };

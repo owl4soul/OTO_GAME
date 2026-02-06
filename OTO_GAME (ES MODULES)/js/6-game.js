@@ -79,7 +79,7 @@ function getRussianStatName(key) {
 }
 
 /**
- * Создает HTML для отображения информации об организациях героя
+ * Создает HTML для отображения информации об организациях героя (для сцены)
  */
 function createOrganizationsHTML() {
     const organizations = State.getHeroOrganizations();
@@ -222,6 +222,11 @@ function createOperationHTML(operation, source) {
             color = '#ff9ff3';
             displayName = displayValue || name;
             break;
+        case 'organization_rank':
+            icon = 'fas fa-users';
+            color = '#d4af37';
+            displayName = displayValue || name || 'Организация';
+            break;
     }
     
     // Форматируем значение в зависимости от типа операции
@@ -271,7 +276,7 @@ function createOperationHTML(operation, source) {
     
     // ОТОБРАЖЕНИЕ ВСЕХ НЕПУСТЫХ ПОЛЕЙ
     let extraFields = '';
-    const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta']; // Эти поля уже обработаны выше
+    const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta'];
     
     Object.keys(operation).forEach(key => {
         if (!ignoredKeys.includes(key)) {
@@ -300,7 +305,6 @@ function createOperationHTML(operation, source) {
 }
 
 // ИСПРАВЛЕНО: Функция для создания HTML изменений за ход
-// ПЕРЕРАБОТАННАЯ ФУНКЦИЯ: Компактный блок изменений за ход
 function createTurnUpdatesHTML(actionResults, events) {
     console.log('🔍 createTurnUpdatesHTML called with:', { actionResults, events });
     
@@ -509,6 +513,11 @@ function createCompactOperationHTML(operation, source) {
             icon = 'fas fa-graduation-cap';
             color = '#ff9ff3';
             displayName = displayValue || name;
+            break;
+        case 'organization_rank':
+            icon = 'fas fa-users';
+            color = '#d4af37';
+            displayName = displayValue || name || 'Организация';
             break;
     }
     
@@ -975,8 +984,6 @@ function processTurn(data, actionResults, d10) {
     };
     
     // Шаг 2: Уменьшаем длительность ВСЕХ временных эффектов ПЕРЕД применением новых
-    // Это обеспечивает правильный отсчет: эффект, примененный в этом ходу, будет иметь полную длительность
-    // И это ЕДИНСТВЕННОЕ место, где время идет вперед.
     decreaseBuffDurations();
     
     // Шаг 3: Применяем операции от действий
@@ -1039,7 +1046,8 @@ function processTurn(data, actionResults, d10) {
         design_notes: data.design_notes || "",
         aiMemory: updatedAiMemory,
         thoughts: data.thoughts || [],
-        summary: data.summary || ""
+        summary: data.summary || "",
+        personality: data.personality || ""
     };
     
     // Добавляем запись в историю
@@ -1150,15 +1158,7 @@ function processTurn(data, actionResults, d10) {
     const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
     console.log('📄 Созданный HTML изменений:', updatesHTML);
     
-    if (updatesHTML && updatesHTML.trim() !== '') {
-        dom.updates.style.display = 'block';
-        dom.updates.innerHTML = updatesHTML;
-    } else {
-        dom.updates.style.display = 'none';
-        dom.updates.innerHTML = '';
-    }
-    
-    // Шаг 9: Сохраняем все изменения в состоянии (ТЕПЕРЬ updatesHTML уже создан!)
+    // Шаг 9: Сохраняем все изменения в состоянии
     State.setState({
         gameState: {
             ...state.gameState,
@@ -1166,11 +1166,13 @@ function processTurn(data, actionResults, d10) {
             history: updatedHistory,
             summary: data.summary || state.gameState.summary,
             selectedActions: [],
-            aiMemory: updatedAiMemory
+            aiMemory: updatedAiMemory,
+            organizationsHierarchy: state.gameState.organizationsHierarchy || {}
         },
         thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
         lastTurnStatChanges: statChanges,
-        lastTurnUpdates: updatesHTML
+        lastTurnUpdates: updatesHTML,
+        turnCount: state.turnCount + 1
     });
     
     // Увеличиваем счетчик ходов
@@ -1180,21 +1182,27 @@ function processTurn(data, actionResults, d10) {
     UI.setFreeModeUI(false);
     
     // Отправляем события
-    // В начале игры previousScene не существует
     const safePreviousScene = previousScene || {
         scene: "В начале игры предыдущая сцена отсутствует.",
         choices: []
     };
     
-    // Отправляем событие изменения сцены
+    // Эмитим события в правильном порядке
+    State.emit(State.EVENTS.HERO_CHANGED, {
+        turn: state.turnCount + 1,
+        statChanges: statChanges,
+        actionResults: actionResults,
+        events: data.events || []
+    });
+    
     State.emit(State.EVENTS.SCENE_CHANGED, {
         scene: updatedScene,
         previousScene: safePreviousScene
     });
     
-    // Отправляем событие завершения хода
+    // ВАЖНО: TURN_COMPLETED должен быть последним
     State.emit(State.EVENTS.TURN_COMPLETED, {
-        turnCount: state.turnCount,
+        turnCount: state.turnCount + 1,
         actions: actionResults,
         statChanges: statChanges
     });
@@ -1432,13 +1440,8 @@ function handleFreeModeToggle(e) {
     State.emit(State.EVENTS.MODE_CHANGED, { mode: isFreeMode ? 'free' : 'choices' });
 }
 
-
 /**
- * Упрощенный блок для Истории ходов: без детализации операций, только статусы действий и итоги
- */
-
-/**
- * Упрощенный блок для Истории ходов: без детализации операций, только статусы действий и итоги
+ * Упрощенный блок для Истории ходов
  */
 function createSimplifiedTurnUpdatesHTML(actionResults, events) {
     console.log('🔍 createSimplifiedTurnUpdatesHTML called');

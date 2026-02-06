@@ -1,4 +1,4 @@
-// Модуль 11: INIT - Инициализация приложения (js/11-init.js)
+// Модуль 11: INIT - Инициализация приложения
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -11,13 +11,15 @@ import { Audit } from './8-audit.js';
 import { Saveload } from './9-saveload.js';
 import { Utils } from './2-utils.js';
 import { UI, Logger } from './ui.js';
+import { GameItemUI } from './gameitem-ui.js';
+import { StatsUI } from './stats-ui.js';
+import { TurnUpdatesUI } from './turn-updates-ui.js';
+import { HistoryUI } from './history-ui.js';
 
 const dom = DOM.getDOM();
 
-
-
 /**
- * ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ ПРИЛОЖЕНИЯ
+ * ОСНОВНАЯ ФУНКЦИЯ ИНИЦИАЛИЗАЦИИ ПРИЛОЖЕНИЯ (ОБНОВЛЕННАЯ - ОПТИМИЗИРОВАН ПОРЯДОК)
  */
 function init() {
     try {
@@ -25,59 +27,166 @@ function init() {
         
         // 1. Проверяем, что DOM полностью готов
         if (!document.body || document.readyState !== 'complete') {
-            Logger.info('DOM', "Не готов DOM ...ожидаем");
+            Logger.info('DOM', "DOM не готов, ожидаем...");
             setTimeout(init, 50);
             return;
         }
         
+        Logger.success('DOM', "DOM полностью загружен");
+        
         // 2. Проверяем, что состояние корректно инициализировано
         const state = State.getState();
         if (!state || !state.gameState || !state.gameState.currentScene) {
+            Logger.error('STATE', "Состояние игры не инициализировано корректно");
             throw new Error('Состояние игры не инициализировано корректно');
         }
         
-        Logger.success('STATE', "Состояние инициализировано");
+        Logger.success('STATE', `Состояние инициализировано (игра: ${state.gameId}, ход: ${state.turnCount})`);
         
         // 3. Загружаем настройки интерфейса
         Saveload.loadState();
-        Logger.success('STATE', "Настройки загружены");
+        Logger.success('STATE', "Настройки загружены из localStorage");
         
-        // 4. Инициализируем UI (масштаб, лейаут)
+        // 4. Инициализируем UI модули в ПРАВИЛЬНОМ ПОРЯДКЕ:
+        //    GameItemUI ДОЛЖЕН быть первым для гарантированного отображения всех контейнеров
+        
+        // 4.1 Инициализируем GameItemUI (ПЕРВЫЙ И ВАЖНЕЙШИЙ)
+        if (GameItemUI && typeof GameItemUI.initialize === 'function') {
+            Logger.info('GAMEITEM', "Инициализация GameItemUI...");
+            GameItemUI.initialize();
+            Logger.success('GAMEITEM', "GameItemUI инициализирован - ВСЕ контейнеры будут отображены");
+        } else {
+            Logger.error('GAMEITEM', "GameItemUI не найден или не имеет метода initialize");
+            throw new Error('GameItemUI не инициализирован');
+        }
+        
+        // 4.2 Инициализируем остальные UI модули
+        Logger.info('UI', "Инициализация остальных UI модулей...");
+        
+        if (StatsUI && typeof StatsUI.initialize === 'function') {
+            StatsUI.initialize();
+            Logger.success('UI', "StatsUI инициализирован");
+        }
+        
+        if (TurnUpdatesUI && typeof TurnUpdatesUI.initialize === 'function') {
+            TurnUpdatesUI.initialize();
+            Logger.success('UI', "TurnUpdatesUI инициализирован");
+        }
+        
+        if (HistoryUI && typeof HistoryUI.initialize === 'function') {
+            HistoryUI.initialize();
+            Logger.success('UI', "HistoryUI инициализирован");
+        }
+        
+        // 4.3 Инициализируем основной UI
         UI.init();
-        Logger.success('UI', "Интерфейс инициализирован");
+        Logger.success('UI', "Основной UI инициализирован");
         
-        // 5. Рендерим все (с гарантией, что State готов)
-        Render.renderAll();
-        Logger.success('RENDER', "DOM отрисован");
+        // 5. Рендерим только сцену и выборы (GameItemUI УЖЕ самоотрендерился)
+        Logger.info('RENDER', "Рендеринг сцены и выборов...");
+        Render.renderScene();
+        Render.renderChoices();
+        Logger.success('RENDER', "Сцена и выборы отрендерены");
         
-        // 6. Настраиваем события
+        // 6. НЕ вызываем forceUpdate() здесь - GameItemUI уже отрендерился при инициализации
+        // Избегаем двойного рендеринга
+        
+        // 7. Настраиваем события
+        Logger.info('EVENTS', "Настройка обработчиков событий...");
         setupEventListeners();
         setupFullscreenListeners();
-        Logger.success('INIT', "Слушатели событий настроены");
+        Logger.success('EVENTS', "Обработчики событий настроены");
         
-        // 7. Обновляем кнопки
+        // 8. Обновляем кнопки действий
         UI.updateActionButtons();
         
-        Logger.success('SYSTEM', "✅ Система готова");
+        // 9. Финальная проверка: убеждаемся, что все контейнеры отображены
+        setTimeout(() => {
+            checkAllContainersVisible();
+        }, 100);
         
-    } catch (e) {
-        Logger.error('FATAL', "Критическая ошибка инициализации", e);
+        Logger.success('SYSTEM', "✅ Система полностью инициализирована и готова");
+        Logger.success('SYSTEM', `📊 Статистика: Ход ${state.turnCount}, Организации: ${State.getHeroOrganizations().length}`);
         
-        // Детализированная ошибка
+    } catch (error) {
+        Logger.error('FATAL', "Критическая ошибка инициализации", error);
+        
+        // Показываем подробную ошибку пользователю
         const errorDetails = `
-Ошибка запуска игры:
+🚨 КРИТИЧЕСКАЯ ОШИБКА ЗАПУСКА ИГРЫ:
 
-${e.message}
+${error.message}
 
-Stack trace:
-${e.stack || 'Нет стека'}
+Стек вызовов:
+${error.stack || 'Нет информации о стеке'}
 
 Рекомендуемые действия:
 1. Нажмите "Сбросить всю игру" в настройках
 2. Очистите localStorage в DevTools (Application → Storage → Local Storage)
 3. Перезагрузите страницу (Ctrl+F5)
-`;
+4. Если проблема persists, обратитесь к разработчику
+
+Время ошибки: ${new Date().toLocaleString()}
+        `;
+        
         console.error(errorDetails);
+        
+        // Показываем ошибку в интерфейсе
+        if (dom.sceneArea) {
+            dom.sceneArea.innerHTML = `
+                <div style="color: #ff3838; padding: 30px; text-align: center; background: rgba(255,0,0,0.1); border: 2px solid #ff3838; border-radius: 5px;">
+                    <h2><i class="fas fa-skull-crossbones"></i> ОШИБКА ЗАПУСКА</h2>
+                    <p style="margin: 15px 0;">Игра не может быть запущена из-за критической ошибки.</p>
+                    <p style="color: #aaa; font-size: 0.9em;">${error.message}</p>
+                    <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; background: #ff3838; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                        <i class="fas fa-redo"></i> Перезагрузить страницу
+                    </button>
+                </div>
+            `;
+        }
+    }
+}
+
+/**
+ * Проверяет, что все основные контейнеры отображены (ДЕБАГ ФУНКЦИЯ)
+ */
+function checkAllContainersVisible() {
+    try {
+        console.log('🔍 Проверка видимости всех контейнеров...');
+        
+        const requiredContainers = [
+            'personalityBlockContainer',
+            'typologyContainer', 
+            'organizationsContainer'
+        ];
+        
+        let allVisible = true;
+        
+        requiredContainers.forEach(containerId => {
+            const container = document.getElementById(containerId);
+            if (container) {
+                const isVisible = container.style.display !== 'none' && container.offsetParent !== null;
+                console.log(`   ${containerId}: ${isVisible ? '✅ Виден' : '❌ Скрыт'}`);
+                if (!isVisible) allVisible = false;
+            } else {
+                console.log(`   ${containerId}: ❌ Не найден в DOM`);
+                allVisible = false;
+            }
+        });
+        
+        if (allVisible) {
+            console.log('✅ ВСЕ обязательные контейнеры отображены');
+        } else {
+            console.warn('⚠️ Некоторые контейнеры не отображены!');
+            // Попытка восстановить отображение
+            /*
+            if (GameItemUI && typeof GameItemUI.forceUpdate === 'function') {
+                console.log('🔄 Попытка восстановить отображение через forceUpdate...');
+                GameItemUI.forceUpdate();
+            }*/
+        }
+    } catch (error) {
+        console.error('❌ Ошибка при проверке видимости контейнеров:', error);
     }
 }
 
@@ -339,8 +448,13 @@ function setupSettingsModalEvents() {
                 // Сохраняем
                 Saveload.saveState();
                 
-                // Рендерим
-                Render.renderAll();
+                // Рендерим через специализированные модули
+                Render.renderScene();
+                Render.renderChoices();
+                GameItemUI.forceUpdate();
+                StatsUI.render();
+                HistoryUI.render();
+                
                 UI.closeSettingsModal();
                 Render.showSuccessAlert("Сюжет принят", "Сюжет загружен. Начало новой игры.");
                 
@@ -361,9 +475,13 @@ function setupSaveLoadEvents() {
             const result = await Saveload.loadGameFromFile();
             if (result.success) {
                 Render.showSuccessAlert("Игра загружена", `Файл: ${result.fileName}`);
-                // После загрузки нужно переинициализировать UI (лейаут мог измениться)
+                // После загрузки переинициализируем UI модули
                 UI.init();
-                Render.renderAll();
+                Render.renderScene();
+                Render.renderChoices();
+                GameItemUI.forceUpdate();
+                StatsUI.render();
+                HistoryUI.render();
             } else {
                 Render.showErrorAlert("Ошибка загрузки", result.error);
             }
@@ -402,6 +520,9 @@ function setupSaveLoadEvents() {
                 Render.updateModelDetails();
                 Render.renderAuditList();
                 UI.init();
+                GameItemUI.forceUpdate();
+                StatsUI.render();
+                HistoryUI.render();
             } else {
                 Render.showErrorAlert("Ошибка импорта", result.error);
             }
@@ -412,14 +533,14 @@ function setupSaveLoadEvents() {
     if (exportHistoryBtn) {
         exportHistoryBtn.onclick = () => {
             const state = State.getState();
-            if (state.history.length === 0) {
+            if (state.gameState.history.length === 0) {
                 Render.showErrorAlert("Ошибка", "История пуста.");
                 return;
             }
             const exportData = {
                 gameId: state.gameId,
                 exportTime: new Date().toISOString(),
-                history: state.history,
+                history: state.gameState.history,
                 totalTurns: state.turnCount
             };
             const fileName = `oto-history-${state.gameId}.json`;
@@ -541,10 +662,17 @@ function showMainInterface() {
     if (mainContainer) {
         mainContainer.style.display = 'flex';
         
-        Render.renderAll();
+        // Рендерим через специализированные модули
+        Render.renderScene();
+        Render.renderChoices();
+        GameItemUI.forceUpdate();
+        StatsUI.render();
+        HistoryUI.render();
+        
         Saveload.saveState();
     }
 }
+
 
 // Публичный интерфейс модуля
 export const Init = {
@@ -553,3 +681,9 @@ export const Init = {
     openSettingsModal: openSettingsModal,
     closeSettingsModal: closeSettingsModal
 };
+
+// Автоматический запуск инициализации при загрузке
+document.addEventListener('DOMContentLoaded', init);
+window.addEventListener('load', () => {
+    console.log('📄 Страница полностью загружена, запуск финальной инициализации...');
+});
