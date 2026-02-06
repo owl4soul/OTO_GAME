@@ -6,7 +6,7 @@ import { CONFIG } from './1-config.js';
 // Категории обрабатываемых game_item:
 const GAME_ITEM_CATEGORIES = {
     STAT: 'stat',
-    SKILL: 'skill', 
+    SKILL: 'skill',
     INVENTORY: 'inventory',
     RELATIONS: 'relations',
     ORGANIZATION: 'organization',
@@ -1092,11 +1092,19 @@ function showToast(message, type = 'info', duration = 3000) {
         
         // Добавляем иконку в зависимости от типа
         let icon = 'ℹ️';
-        switch(type) {
-            case 'success': icon = '✅'; break;
-            case 'error': icon = '❌'; break;
-            case 'warning': icon = '⚠️'; break;
-            case 'info': icon = 'ℹ️'; break;
+        switch (type) {
+            case 'success':
+                icon = '✅';
+                break;
+            case 'error':
+                icon = '❌';
+                break;
+            case 'warning':
+                icon = '⚠️';
+                break;
+            case 'info':
+                icon = 'ℹ️';
+                break;
         }
         
         toast.innerHTML = `
@@ -1152,11 +1160,19 @@ function showToast(message, type = 'info', duration = 3000) {
                 
                 // Обновляем иконку
                 let newIcon = 'ℹ️';
-                switch(newType) {
-                    case 'success': newIcon = '✅'; break;
-                    case 'error': newIcon = '❌'; break;
-                    case 'warning': newIcon = '⚠️'; break;
-                    case 'info': newIcon = 'ℹ️'; break;
+                switch (newType) {
+                    case 'success':
+                        newIcon = '✅';
+                        break;
+                    case 'error':
+                        newIcon = '❌';
+                        break;
+                    case 'warning':
+                        newIcon = '⚠️';
+                        break;
+                    case 'info':
+                        newIcon = 'ℹ️';
+                        break;
                 }
                 
                 const iconSpan = toast.querySelector('span:first-child');

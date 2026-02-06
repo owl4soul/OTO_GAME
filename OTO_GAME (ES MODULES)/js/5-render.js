@@ -194,7 +194,7 @@ function renderScene() {
         `;
         sceneContainer.appendChild(summaryDiv);
     }
-
+    
     // 4. Контейнер для изменений за ход
     // КРИТИЧЕСКИ ВАЖНО: Восстанавливаем turnUpdatesContainer ПЕРЕД sceneText
     if (savedTurnUpdatesHTML) {

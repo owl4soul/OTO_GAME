@@ -86,15 +86,15 @@ function forceResetToInitial() {
             location.reload();
         }, 500);
         
-        return { 
-            success: true, 
-            message: 'Игра сброшена к начальному состоянию. Страница перезагружается...' 
+        return {
+            success: true,
+            message: 'Игра сброшена к начальному состоянию. Страница перезагружается...'
         };
     } catch (error) {
         console.error('❌ Ошибка при принудительном сбросе:', error);
-        return { 
-            success: false, 
-            error: error.message 
+        return {
+            success: false,
+            error: error.message
         };
     }
 }
@@ -134,23 +134,23 @@ async function saveGameToFile() {
             });
             
             console.log(`✅ Игра сохранена в файл: ${result.fileName}`);
-            return { 
-                success: true, 
+            return {
+                success: true,
                 fileName: result.fileName,
-                gameId: fullState.gameId 
+                gameId: fullState.gameId
             };
         }
         
         console.error('❌ Не удалось сохранить файл');
-        return { 
-            success: false, 
-            error: 'Не удалось сохранить файл' 
+        return {
+            success: false,
+            error: 'Не удалось сохранить файл'
         };
     } catch (error) {
         console.error('❌ Ошибка при сохранении игры:', error);
-        return { 
-            success: false, 
-            error: error.message 
+        return {
+            success: false,
+            error: error.message
         };
     }
 }
@@ -166,9 +166,9 @@ async function loadGameFromFile() {
         const file = await Utils.selectFile('.json');
         if (!file) {
             console.log('📂 Файл не выбран');
-            return { 
-                success: false, 
-                error: 'Файл не выбран' 
+            return {
+                success: false,
+                error: 'Файл не выбран'
             };
         }
         
@@ -187,9 +187,9 @@ async function loadGameFromFile() {
                     if (importData.version !== '4.1.0') {
                         const errorMsg = `Неподдерживаемая версия файла: ${importData.version}. Требуется версия 4.1.0`;
                         console.error('❌', errorMsg);
-                        resolve({ 
-                            success: false, 
-                            error: errorMsg 
+                        resolve({
+                            success: false,
+                            error: errorMsg
                         });
                         return;
                     }
@@ -221,25 +221,25 @@ async function loadGameFromFile() {
                     });
                     
                     console.log(`✅ Игра загружена из файла: ${file.name}`);
-                    resolve({ 
-                        success: true, 
+                    resolve({
+                        success: true,
                         fileName: file.name,
-                        gameId: importData.gameId 
+                        gameId: importData.gameId
                     });
                 } catch (error) {
                     console.error('❌ Ошибка при загрузке игры:', error);
-                    resolve({ 
-                        success: false, 
-                        error: 'Ошибка чтения файла: ' + error.message 
+                    resolve({
+                        success: false,
+                        error: 'Ошибка чтения файла: ' + error.message
                     });
                 }
             };
             
             reader.onerror = () => {
                 console.error('❌ Ошибка чтения файла');
-                resolve({ 
-                    success: false, 
-                    error: 'Ошибка чтения файла' 
+                resolve({
+                    success: false,
+                    error: 'Ошибка чтения файла'
                 });
             };
             
@@ -247,9 +247,9 @@ async function loadGameFromFile() {
         });
     } catch (error) {
         console.error('❌ Ошибка при выборе файла:', error);
-        return { 
-            success: false, 
-            error: error.message 
+        return {
+            success: false,
+            error: error.message
         };
     }
 }
@@ -282,23 +282,23 @@ async function exportAllDataToFile() {
             State.addAuditLogEntry(auditEntry);
             
             console.log(`✅ Все данные экспортированы в файл: ${result.fileName}`);
-            return { 
-                success: true, 
+            return {
+                success: true,
                 fileName: result.fileName,
                 exportTime: new Date().toISOString()
             };
         }
         
         console.error('❌ Не удалось экспортировать данные');
-        return { 
-            success: false, 
-            error: 'Не удалось экспортировать данные' 
+        return {
+            success: false,
+            error: 'Не удалось экспортировать данные'
         };
     } catch (error) {
         console.error('❌ Ошибка при экспорте данных:', error);
-        return { 
-            success: false, 
-            error: error.message 
+        return {
+            success: false,
+            error: error.message
         };
     }
 }
@@ -314,9 +314,9 @@ async function importAllDataFromFile() {
         const file = await Utils.selectFile('.json');
         if (!file) {
             console.log('📂 Файл не выбран');
-            return { 
-                success: false, 
-                error: 'Файл не выбран' 
+            return {
+                success: false,
+                error: 'Файл не выбран'
             };
         }
         
@@ -335,9 +335,9 @@ async function importAllDataFromFile() {
                     if (importData.version !== '4.1.0') {
                         const errorMsg = `Неподдерживаемая версия файла: ${importData.version}. Требуется версия 4.1.0`;
                         console.error('❌', errorMsg);
-                        resolve({ 
-                            success: false, 
-                            error: errorMsg 
+                        resolve({
+                            success: false,
+                            error: errorMsg
                         });
                         return;
                     }
@@ -366,25 +366,25 @@ async function importAllDataFromFile() {
                     State.emit(State.EVENTS.MODEL_CHANGED);
                     
                     console.log(`✅ Все данные импортированы из файла: ${file.name}`);
-                    resolve({ 
-                        success: true, 
+                    resolve({
+                        success: true,
                         fileName: file.name,
                         importTime: new Date().toISOString()
                     });
                 } catch (error) {
                     console.error('❌ Ошибка при импорте данных:', error);
-                    resolve({ 
-                        success: false, 
-                        error: 'Ошибка чтения файла: ' + error.message 
+                    resolve({
+                        success: false,
+                        error: 'Ошибка чтения файла: ' + error.message
                     });
                 }
             };
             
             reader.onerror = () => {
                 console.error('❌ Ошибка чтения файла');
-                resolve({ 
-                    success: false, 
-                    error: 'Ошибка чтения файла' 
+                resolve({
+                    success: false,
+                    error: 'Ошибка чтения файла'
                 });
             };
             
@@ -392,9 +392,9 @@ async function importAllDataFromFile() {
         });
     } catch (error) {
         console.error('❌ Ошибка при выборе файла:', error);
-        return { 
-            success: false, 
-            error: error.message 
+        return {
+            success: false,
+            error: error.message
         };
     }
 }
@@ -409,9 +409,9 @@ async function downloadAuditLogToFile() {
         const state = State.getState();
         if (state.auditLog.length === 0) {
             console.warn('⚠️ Аудит-лог пуст');
-            return { 
-                success: false, 
-                error: 'Аудит-лог пуст' 
+            return {
+                success: false,
+                error: 'Аудит-лог пуст'
             };
         }
         
@@ -450,23 +450,23 @@ async function downloadAuditLogToFile() {
             State.addAuditLogEntry(auditEntry);
             
             console.log(`✅ Аудит-лог скачан в файл: ${result.fileName}`);
-            return { 
-                success: true, 
+            return {
+                success: true,
                 fileName: result.fileName,
-                entries: state.auditLog.length 
+                entries: state.auditLog.length
             };
         }
         
         console.error('❌ Не удалось скачать аудит-лог');
-        return { 
-            success: false, 
-            error: 'Не удалось скачать аудит-лог' 
+        return {
+            success: false,
+            error: 'Не удалось скачать аудит-лог'
         };
     } catch (error) {
         console.error('❌ Ошибка при скачивании аудит-лога:', error);
-        return { 
-            success: false, 
-            error: error.message 
+        return {
+            success: false,
+            error: error.message
         };
     }
 }
@@ -498,16 +498,16 @@ function quickSave() {
     const success = saveState();
     if (success) {
         console.log('✅ Быстрое сохранение выполнено');
-        return { 
-            success: true, 
+        return {
+            success: true,
             message: 'Игра сохранена',
             timestamp: new Date().toISOString()
         };
     } else {
         console.error('❌ Ошибка быстрого сохранения');
-        return { 
-            success: false, 
-            error: 'Не удалось сохранить игру' 
+        return {
+            success: false,
+            error: 'Не удалось сохранить игру'
         };
     }
 }
@@ -522,9 +522,9 @@ function exportHistory() {
         const state = State.getState();
         
         if (!state.gameState.history || state.gameState.history.length === 0) {
-            return { 
-                success: false, 
-                error: 'История пуста' 
+            return {
+                success: false,
+                error: 'История пуста'
             };
         }
         
@@ -540,16 +540,16 @@ function exportHistory() {
         Utils.exportToFile(JSON.stringify(exportData, null, 2), fileName);
         
         console.log(`✅ История экспортирована в файл: ${fileName}`);
-        return { 
-            success: true, 
+        return {
+            success: true,
             fileName: fileName,
-            entries: state.gameState.history.length 
+            entries: state.gameState.history.length
         };
     } catch (error) {
         console.error('❌ Ошибка экспорта истории:', error);
-        return { 
-            success: false, 
-            error: error.message 
+        return {
+            success: false,
+            error: error.message
         };
     }
 }

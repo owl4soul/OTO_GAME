@@ -197,8 +197,11 @@ function init() {
     restoreLayout();
     initResizers();
     
+    // Исправленный обработчик для клика на заголовок нижней панели
     if (dom.botHeader) {
-        dom.botHeader.addEventListener('click', () => toggleBottomCollapse(null, false));
+        // Удаляем предыдущие обработчики, чтобы избежать дублирования
+        dom.botHeader.onclick = null;
+        dom.botHeader.addEventListener('click', handleBotHeaderClick);
     }
     
     if (window.visualViewport) {
@@ -206,6 +209,15 @@ function init() {
     } else {
         window.addEventListener('resize', handleViewportResize);
     }
+}
+
+function handleBotHeaderClick(e) {
+    // Предотвращаем всплытие события, чтобы не мешать другим обработчикам
+    e.stopPropagation();
+    e.preventDefault();
+    
+    Logger.info('UI', 'Клик по заголовку нижней панели');
+    toggleBottomCollapse(null, false);
 }
 
 function restoreLayout() {
@@ -228,6 +240,8 @@ function toggleBottomCollapse(forceState = null, isAuto = false) {
     const state = State.getState();
     const currentState = state.ui.isCollapsed;
     const newState = (forceState !== null) ? forceState : !currentState;
+    
+    Logger.info('UI', `toggleBottomCollapse: current=${currentState}, new=${newState}, isAuto=${isAuto}`);
     
     if (isAuto) {
         if (newState === true) {
@@ -252,8 +266,11 @@ function toggleBottomCollapse(forceState = null, isAuto = false) {
         state.ui.isAutoCollapsed = false;
         state.ui.isCollapsed = newState;
         
-        if (newState) redistributeHeights('collapse');
-        else redistributeHeights('expand');
+        if (newState) {
+            redistributeHeights('collapse');
+        } else {
+            redistributeHeights('expand');
+        }
     }
     
     const dom = DOM.getDOM();
@@ -264,6 +281,9 @@ function toggleBottomCollapse(forceState = null, isAuto = false) {
         dom.secBot.classList.remove('collapsed');
         if (dom.collapseIcon) dom.collapseIcon.innerHTML = '<i class="fas fa-chevron-down"></i>';
     }
+    
+    // Сохраняем состояние
+    State.saveUiState();
 }
 
 function handleViewportResize() {
@@ -302,6 +322,7 @@ function setupDrag(el, mode) {
     
     el.onpointerdown = (e) => {
         e.preventDefault();
+        e.stopPropagation(); // Предотвращаем всплытие
         const state = State.getState();
         if (mode === 'mid' && state.ui.isCollapsed) return;
         
@@ -351,6 +372,7 @@ function setupDrag(el, mode) {
     
     el.onpointerup = (e) => {
         e.preventDefault();
+        e.stopPropagation();
         el.releasePointerCapture(e.pointerId);
         el.classList.remove('active');
         if (Utils.vibrate) Utils.vibrate(30);
@@ -377,6 +399,7 @@ function setupVerticalDrag(el) {
     
     el.onpointerdown = (e) => {
         e.preventDefault();
+        e.stopPropagation();
         el.setPointerCapture(e.pointerId);
         if (Utils.vibrate) Utils.vibrate(50);
         
@@ -412,6 +435,7 @@ function setupVerticalDrag(el) {
     
     el.onpointerup = (e) => {
         e.preventDefault();
+        e.stopPropagation();
         el.releasePointerCapture(e.pointerId);
         if (Utils.vibrate) Utils.vibrate(30);
         el.classList.remove('active');

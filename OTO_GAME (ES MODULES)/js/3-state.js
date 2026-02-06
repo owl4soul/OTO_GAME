@@ -222,9 +222,7 @@ function initializeState() {
         // Проверяем currentScene
         if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
           console.warn('⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
-          state.gameState.currentScene = state.gameType === 'standard' ?
-            { ...PROMPTS.standardGameOTO.initialGameState } :
-            { scene: "Сцена не загружена", choices: [], aiMemory: {}, gameType: 'custom' };
+          state.gameState.currentScene = state.gameType === 'standard' ? { ...PROMPTS.standardGameOTO.initialGameState } : { scene: "Сцена не загружена", choices: [], aiMemory: {}, gameType: 'custom' };
         }
         
         // После загрузки состояния

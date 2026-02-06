@@ -307,7 +307,7 @@ class GameItemUIManager {
         
         // Для каждого измененного типа выполняем рендеринг
         changedTypes.forEach(type => {
-            const config = Object.values(this.typeConfigs).find(c => 
+            const config = Object.values(this.typeConfigs).find(c =>
                 this.getTypeFromConfig(c) === type
             );
             if (config) {
@@ -355,7 +355,7 @@ class GameItemUIManager {
             // Определяем тип по префиксу id
             const [prefix] = op.id.split(':');
             
-            switch(prefix) {
+            switch (prefix) {
                 case 'personality':
                     types.add('personality');
                     break;
@@ -389,10 +389,11 @@ class GameItemUIManager {
                     break;
                 default:
                     // Для неизвестных префиксов добавляем в детали
-                    const knownPrefixes = ['stat', 'skill', 'inventory', 'relations', 
-                                         'bless', 'curse', 'buff', 'debuff', 
-                                         'personality', 'initiation_degree', 'progress',
-                                         'organization_rank'];
+                    const knownPrefixes = ['stat', 'skill', 'inventory', 'relations',
+                        'bless', 'curse', 'buff', 'debuff',
+                        'personality', 'initiation_degree', 'progress',
+                        'organization_rank'
+                    ];
                     if (!knownPrefixes.includes(prefix)) {
                         types.add('details');
                     }
@@ -1180,42 +1181,42 @@ class GameItemUIManager {
         }
     }
     
-/**
- * Показывает компактное модальное окно с иерархией организации
- * @param {String} orgId ID организации
- */
-showOrganizationHierarchy(orgId) {
-    try {
-        console.log(`🏛️ Компактная иерархия: ${orgId}`);
-        
-        // Закрываем предыдущую модалку
-        if (this.currentHierarchyModal) {
-            this.currentHierarchyModal.remove();
-            this.currentHierarchyModal = null;
-        }
-        
-        // Получаем данные
-        const organizations = State.getHeroOrganizations();
-        const org = organizations.find(o => o.id === orgId);
-        
-        if (!org) {
-            Utils.showToast(`Организация ${orgId.toUpperCase()} не найдена`, 'error');
-            return;
-        }
-        
-        const hierarchy = State.getOrganizationHierarchy(orgId);
-        if (!hierarchy?.description || !Array.isArray(hierarchy.description)) {
-            Utils.showToast(`Иерархия ${orgId.toUpperCase()} не найдена`, 'warning');
-            return;
-        }
-        
-        const sortedRanks = [...hierarchy.description].sort((a, b) => a.lvl - b.lvl);
-        const totalRanks = sortedRanks.length;
-        
-        // Создаем модалку
-        const modal = document.createElement('div');
-        modal.id = `orgHierarchyCompact_${orgId}_${Date.now()}`;
-        modal.style.cssText = `
+    /**
+     * Показывает компактное модальное окно с иерархией организации
+     * @param {String} orgId ID организации
+     */
+    showOrganizationHierarchy(orgId) {
+        try {
+            console.log(`🏛️ Компактная иерархия: ${orgId}`);
+            
+            // Закрываем предыдущую модалку
+            if (this.currentHierarchyModal) {
+                this.currentHierarchyModal.remove();
+                this.currentHierarchyModal = null;
+            }
+            
+            // Получаем данные
+            const organizations = State.getHeroOrganizations();
+            const org = organizations.find(o => o.id === orgId);
+            
+            if (!org) {
+                Utils.showToast(`Организация ${orgId.toUpperCase()} не найдена`, 'error');
+                return;
+            }
+            
+            const hierarchy = State.getOrganizationHierarchy(orgId);
+            if (!hierarchy?.description || !Array.isArray(hierarchy.description)) {
+                Utils.showToast(`Иерархия ${orgId.toUpperCase()} не найдена`, 'warning');
+                return;
+            }
+            
+            const sortedRanks = [...hierarchy.description].sort((a, b) => a.lvl - b.lvl);
+            const totalRanks = sortedRanks.length;
+            
+            // Создаем модалку
+            const modal = document.createElement('div');
+            modal.id = `orgHierarchyCompact_${orgId}_${Date.now()}`;
+            modal.style.cssText = `
             position: fixed;
             top: 0;
             left: 0;
@@ -1230,10 +1231,10 @@ showOrganizationHierarchy(orgId) {
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
         `;
-        
-        // Компактный контент
-        const content = document.createElement('div');
-        content.style.cssText = `
+            
+            // Компактный контент
+            const content = document.createElement('div');
+            content.style.cssText = `
             background: #111;
             border: 1px solid #d4af37;
             border-radius: 8px;
@@ -1245,10 +1246,10 @@ showOrganizationHierarchy(orgId) {
             box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
             font-size: 12px;
         `;
-        
-        // Шапка
-        const header = document.createElement('div');
-        header.style.cssText = `
+            
+            // Шапка
+            const header = document.createElement('div');
+            header.style.cssText = `
             background: #1a1a1a;
             padding: 8px 12px;
             border-bottom: 1px solid #d4af37;
@@ -1256,16 +1257,16 @@ showOrganizationHierarchy(orgId) {
             justify-content: space-between;
             align-items: center;
         `;
-        
-        const title = document.createElement('div');
-        title.innerHTML = `
+            
+            const title = document.createElement('div');
+            title.innerHTML = `
             <div style="color: #d4af37; font-weight: bold; font-size: 14px;">${orgId.toUpperCase()}</div>
             <div style="color: #888; font-size: 10px; margin-top: 2px;">ИЕРАРХИЯ</div>
         `;
-        
-        const closeBtn = document.createElement('button');
-        closeBtn.innerHTML = '✕';
-        closeBtn.style.cssText = `
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.innerHTML = '✕';
+            closeBtn.style.cssText = `
             background: transparent;
             border: none;
             color: #d4af37;
@@ -1274,25 +1275,25 @@ showOrganizationHierarchy(orgId) {
             padding: 4px 8px;
             line-height: 1;
         `;
-        closeBtn.onclick = () => {
-            modal.remove();
-            this.currentHierarchyModal = null;
-        };
-        
-        header.appendChild(title);
-        header.appendChild(closeBtn);
-        content.appendChild(header);
-        
-        // Текущая позиция
-        const currentPos = document.createElement('div');
-        currentPos.style.cssText = `
+            closeBtn.onclick = () => {
+                modal.remove();
+                this.currentHierarchyModal = null;
+            };
+            
+            header.appendChild(title);
+            header.appendChild(closeBtn);
+            content.appendChild(header);
+            
+            // Текущая позиция
+            const currentPos = document.createElement('div');
+            currentPos.style.cssText = `
             padding: 8px 12px;
             background: rgba(255,0,0,0.1);
             border-bottom: 1px solid #333;
             margin: 0;
         `;
-        
-        currentPos.innerHTML = `
+            
+            currentPos.innerHTML = `
             <div style="color: #ff5555; font-size: 11px; font-weight: bold; margin-bottom: 4px;">
                 <span style="background: #ff5555; color: #000; padding: 2px 6px; border-radius: 3px; margin-right: 6px;">●</span>
                 ТЕКУЩАЯ ПОЗИЦИЯ
@@ -1305,28 +1306,28 @@ showOrganizationHierarchy(orgId) {
                 <div style="color: #d4af37; font-size: 18px; font-weight: bold;">${org.rank}°</div>
             </div>
         `;
-        content.appendChild(currentPos);
-        
-        // Иерархия
-        const hierarchyContainer = document.createElement('div');
-        hierarchyContainer.style.cssText = `
+            content.appendChild(currentPos);
+            
+            // Иерархия
+            const hierarchyContainer = document.createElement('div');
+            hierarchyContainer.style.cssText = `
             padding: 8px 0;
             max-height: 300px;
             overflow-y: auto;
         `;
-        
-        sortedRanks.forEach(rankInfo => {
-            const isCurrentRank = rankInfo.lvl === org.rank;
-            const rankItem = document.createElement('div');
-            rankItem.style.cssText = `
+            
+            sortedRanks.forEach(rankInfo => {
+                const isCurrentRank = rankInfo.lvl === org.rank;
+                const rankItem = document.createElement('div');
+                rankItem.style.cssText = `
                 padding: 6px 12px;
                 border-bottom: 1px solid #222;
                 background: ${isCurrentRank ? 'rgba(255,0,0,0.15)' : 'transparent'};
                 border-left: ${isCurrentRank ? '3px solid #ff5555' : '3px solid transparent'};
                 margin: 0;
             `;
-            
-            rankItem.innerHTML = `
+                
+                rankItem.innerHTML = `
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                     <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
                         <span style="color: #d4af37; font-weight: bold; min-width: 20px;">${rankInfo.lvl}°</span>
@@ -1348,15 +1349,15 @@ showOrganizationHierarchy(orgId) {
                     </div>` : ''
                 }
             `;
+                
+                hierarchyContainer.appendChild(rankItem);
+            });
             
-            hierarchyContainer.appendChild(rankItem);
-        });
-        
-        content.appendChild(hierarchyContainer);
-        
-        // Компактная легенда
-        const legend = document.createElement('div');
-        legend.style.cssText = `
+            content.appendChild(hierarchyContainer);
+            
+            // Компактная легенда
+            const legend = document.createElement('div');
+            legend.style.cssText = `
             padding: 8px 12px;
             background: #1a1a1a;
             border-top: 1px solid #333;
@@ -1365,8 +1366,8 @@ showOrganizationHierarchy(orgId) {
             gap: 8px;
             font-size: 10px;
         `;
-        
-        legend.innerHTML = `
+            
+            legend.innerHTML = `
             <div style="display: flex; align-items: center; gap: 4px;">
                 <div style="width: 8px; height: 8px; background: #ff5555; border-radius: 2px;"></div>
                 <span style="color: #aaa;">Ваша позиция</span>
@@ -1380,12 +1381,12 @@ showOrganizationHierarchy(orgId) {
                 <span style="color: #aaa;">Требование</span>
             </div>
         `;
-        
-        content.appendChild(legend);
-        
-        // Инфо
-        const info = document.createElement('div');
-        info.style.cssText = `
+            
+            content.appendChild(legend);
+            
+            // Инфо
+            const info = document.createElement('div');
+            info.style.cssText = `
             padding: 6px 12px;
             background: #0a0a0a;
             border-top: 1px solid #222;
@@ -1393,50 +1394,50 @@ showOrganizationHierarchy(orgId) {
             color: #666;
             text-align: center;
         `;
-        info.textContent = `Всего уровней: ${totalRanks} • Закройте кликом вне окна`;
-        content.appendChild(info);
-        
-        modal.appendChild(content);
-        
-        // Закрытие по клику вне окна
-        modal.onclick = (e) => {
-            if (e.target === modal) {
-                modal.remove();
-                this.currentHierarchyModal = null;
-            }
-        };
-        
-        // Закрытие по Escape
-        const handleEscape = (e) => {
-            if (e.key === 'Escape') {
-                modal.remove();
-                this.currentHierarchyModal = null;
-                document.removeEventListener('keydown', handleEscape);
-            }
-        };
-        document.addEventListener('keydown', handleEscape);
-        
-        this.currentHierarchyModal = modal;
-        document.body.appendChild(modal);
-        
-        console.log(`✅ Компактная иерархия ${orgId} отображена`);
-        
-    } catch (error) {
-        console.error('❌ Ошибка при отображении иерархии:', error);
-        Utils.showToast('Ошибка при отображении иерархии', 'error');
+            info.textContent = `Всего уровней: ${totalRanks} • Закройте кликом вне окна`;
+            content.appendChild(info);
+            
+            modal.appendChild(content);
+            
+            // Закрытие по клику вне окна
+            modal.onclick = (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                    this.currentHierarchyModal = null;
+                }
+            };
+            
+            // Закрытие по Escape
+            const handleEscape = (e) => {
+                if (e.key === 'Escape') {
+                    modal.remove();
+                    this.currentHierarchyModal = null;
+                    document.removeEventListener('keydown', handleEscape);
+                }
+            };
+            document.addEventListener('keydown', handleEscape);
+            
+            this.currentHierarchyModal = modal;
+            document.body.appendChild(modal);
+            
+            console.log(`✅ Компактная иерархия ${orgId} отображена`);
+            
+        } catch (error) {
+            console.error('❌ Ошибка при отображении иерархии:', error);
+            Utils.showToast('Ошибка при отображении иерархии', 'error');
+        }
     }
-}
-
-/**
- * Добавляет CSS стили для анимаций модального окна в новом стиле
- */
-addNeoHierarchyStyles() {
-    // Проверяем, не добавлены ли стили уже
-    if (document.getElementById('neoHierarchyModalStyles')) return;
     
-    const style = document.createElement('style');
-    style.id = 'neoHierarchyModalStyles';
-    style.textContent = `
+    /**
+     * Добавляет CSS стили для анимаций модального окна в новом стиле
+     */
+    addNeoHierarchyStyles() {
+        // Проверяем, не добавлены ли стили уже
+        if (document.getElementById('neoHierarchyModalStyles')) return;
+        
+        const style = document.createElement('style');
+        style.id = 'neoHierarchyModalStyles';
+        style.textContent = `
         @keyframes neoFadeIn {
             from { 
                 opacity: 0; 
@@ -1500,8 +1501,8 @@ addNeoHierarchyStyles() {
             box-shadow: 0 5px 20px rgba(212, 175, 55, 0.2) !important;
         }
     `;
-    document.head.appendChild(style);
-}
+        document.head.appendChild(style);
+    }
     
     /**
      * Получает цвет для стата
