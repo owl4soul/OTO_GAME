@@ -4,7 +4,7 @@
 import { Intro } from './10-intro.js';
 import { Init } from './11-init.js';
 import { Render } from './5-render.js';
-import { Saveload } from './9-saveload.js';
+import { State } from './3-state.js';
 import { Game } from './6-game.js';
 import { UI } from './ui.js';
 
@@ -110,8 +110,15 @@ function setupErrorHandling() {
  */
 function setupBeforeUnload() {
     window.addEventListener('beforeunload', () => {
-        if (Saveload && Saveload.saveState) {
-            Saveload.saveState();
+        if (State && State.saveStateToLocalStorage) {
+            State.saveStateToLocalStorage();
+        }
+    });
+    
+    // Для мобильных устройств и некоторых браузеров
+    window.addEventListener('pagehide', () => {
+        if (State && State.saveStateToLocalStorage) {
+            State.saveStateToLocalStorage();
         }
     });
 }

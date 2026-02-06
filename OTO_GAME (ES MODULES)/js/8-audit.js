@@ -97,7 +97,7 @@ function clearAudit() {
         updateEntrySuccess(entry, 'Лог аудита был очищен пользователем');
         
         Render.renderAuditList();
-        Saveload.saveState();
+        State.saveStateToLocalStorage();
     }
 }
 

@@ -853,7 +853,7 @@ function importFullState(importData) {
   stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'import', heroState: state.heroState });
   stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
   
-  Saveload.saveState();
+  saveStateToLocalStorage();
   
   return true;
 }
@@ -1031,7 +1031,7 @@ function setGameType(gameType, initialScene = null) {
   });
   
   console.log(`🎮 Тип игры изменен: ${oldGameType} → ${gameType}`);
-  Saveload.saveState();
+  saveStateToLocalStorage();
 }
 
 // ========================
@@ -1040,6 +1040,74 @@ function setGameType(gameType, initialScene = null) {
 
 // ... остальная часть файла остается БЕЗ ИЗМЕНЕНИЙ ...
 // (applyOperations, syncOrganizationRank, exportFullState, importFullState и т.д.)
+
+// В начале файла УДАЛИТЬ импорт Saveload:
+// import { Saveload } from './9-saveload.js'; // УДАЛИТЬ эту строку
+
+// Добавить внутреннюю функцию для сохранения состояния
+
+function saveStateToLocalStorage() {
+    console.log('💾 Сохранение состояния игры...');
+    
+    try {
+        // Используем текущее состояние
+        const currentState = State.getState(); // Используем метод getState() вместо несуществующей getCurrentState()
+        
+        // Обновляем время сохранения
+        currentState.lastSaveTime = new Date().toISOString();
+        
+        // Подготавливаем данные для сохранения
+        const saveData = {
+            version: '4.1.0',
+            gameId: currentState.gameId,
+            lastSaveTime: currentState.lastSaveTime,
+            turnCount: currentState.turnCount,
+            gameType: currentState.gameType,
+            heroState: [...currentState.heroState],
+            gameState: {
+                ...currentState.gameState,
+                organizationsHierarchy: currentState.gameState.organizationsHierarchy || {}
+            },
+            ui: { ...currentState.ui },
+            settings: { ...currentState.settings },
+            auditLog: [...currentState.auditLog],
+            models: [...currentState.models],
+            isRitualActive: currentState.isRitualActive,
+            ritualProgress: currentState.ritualProgress,
+            ritualTarget: currentState.ritualTarget,
+            freeMode: currentState.freeMode,
+            freeModeText: currentState.freeModeText,
+            lastTurnUpdates: currentState.lastTurnUpdates || "",
+            lastTurnStatChanges: currentState.lastTurnStatChanges || null,
+            thoughtsOfHero: [...currentState.thoughtsOfHero]
+        };
+        
+        // Основное сохранение в формате 4.1
+        localStorage.setItem('oto_v4_state', JSON.stringify(saveData));
+        
+        // Эмитим событие сохранения
+        stateObserver.notify(STATE_EVENTS.SAVED, {
+            gameId: currentState.gameId,
+            turnCount: currentState.turnCount,
+            timestamp: currentState.lastSaveTime
+        });
+        
+        console.log('✅ Игра сохранена в localStorage (формат 4.1)');
+        return true;
+    } catch (error) {
+        console.error('❌ Ошибка сохранения состояния:', error);
+        return false;
+    }
+}
+
+/**
+ * Загрузка состояния игры из localStorage (ФОРМАТ 4.1)
+ */
+function loadStateFromLocalStorage() {
+    console.log('📥 Загрузка состояния...');
+const savedState = localStorage.getItem('oto_v4_state');
+return savedState;
+}
 
 // ========================
 // ПУБЛИЧНЫЙ ИНТЕРФЕЙС
@@ -1062,7 +1130,7 @@ export const State = {
       initializeState();
     }
     state = { ...state, ...newState };
-    Saveload.saveState();
+    saveStateToLocalStorage();
   },
   
   resetGameProgress: (silent = false) => {
@@ -1120,7 +1188,7 @@ export const State = {
         stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
         stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
         
-        Saveload.saveState();
+        saveStateToLocalStorage();
         
         setTimeout(() => {
           location.reload();
@@ -1179,7 +1247,7 @@ export const State = {
       stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
       stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
       
-      Saveload.saveState();
+      saveStateToLocalStorage();
     }
   },
   
@@ -1204,6 +1272,9 @@ export const State = {
   saveUiState: () => {
     localStorage.setItem('oto_ui_pref', JSON.stringify(state.ui));
   },
+  
+  saveStateToLocalStorage,
+  loadStateFromLocalStorage,
   
   applyOperations,
   getGameItem,

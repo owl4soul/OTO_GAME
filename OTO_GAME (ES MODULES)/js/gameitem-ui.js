@@ -4,6 +4,7 @@
 import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
 import { CONFIG } from './1-config.js';
+import { Render } from './5-render.js';
 
 class GameItemUIManager {
     constructor() {
@@ -40,7 +41,7 @@ class GameItemUIManager {
                 icon: 'fas fa-user-circle',
                 color: '#fbc531',
                 borderColor: '#4a3a0a',
-                renderFunction: () => this.renderPersonality(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderPersonality(),
                 priority: 100,
                 alwaysVisible: true
             },
@@ -52,7 +53,7 @@ class GameItemUIManager {
                 icon: 'fas fa-fingerprint',
                 color: '#4cd137',
                 borderColor: '#2d8b57',
-                renderFunction: () => this.renderTypology(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderTypology(),
                 priority: 95,
                 alwaysVisible: true
             },
@@ -64,7 +65,7 @@ class GameItemUIManager {
                 icon: 'fas fa-users',
                 color: '#d4af37',
                 borderColor: '#8b4513',
-                renderFunction: () => this.renderOrganizations(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderOrganizations(),
                 priority: 85,
                 alwaysVisible: true
             },
@@ -76,7 +77,7 @@ class GameItemUIManager {
                 icon: 'fas fa-users',
                 color: '#ff9ff3',
                 borderColor: '#6a2a5a',
-                renderFunction: () => this.renderRelations(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderRelations(),
                 priority: 90,
                 alwaysVisible: false
             },
@@ -88,7 +89,7 @@ class GameItemUIManager {
                 icon: 'fas fa-scroll',
                 color: '#6c5ce7',
                 borderColor: '#3a2a6a',
-                renderFunction: () => this.renderSkills(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderSkills(),
                 priority: 85,
                 alwaysVisible: false
             },
@@ -100,7 +101,7 @@ class GameItemUIManager {
                 icon: 'fas fa-tachometer-alt',
                 color: '#3498db',
                 borderColor: '#1a4a7a',
-                renderFunction: () => this.renderStatBuffs(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderStatBuffs(),
                 priority: 80,
                 alwaysVisible: false
             },
@@ -112,7 +113,7 @@ class GameItemUIManager {
                 icon: 'fas fa-star',
                 color: '#bdc3c7',
                 borderColor: '#6a6a6a',
-                renderFunction: () => this.renderBlessings(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderBlessings(),
                 priority: 75,
                 alwaysVisible: false
             },
@@ -124,7 +125,7 @@ class GameItemUIManager {
                 icon: 'fas fa-skull-crossbones',
                 color: '#ff3838',
                 borderColor: '#8a0a0a',
-                renderFunction: () => this.renderCurses(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderCurses(),
                 priority: 70,
                 alwaysVisible: false
             },
@@ -136,7 +137,7 @@ class GameItemUIManager {
                 icon: 'fas fa-chart-line',
                 color: '#00cec9',
                 borderColor: '#0a4a4a',
-                renderFunction: () => this.renderBuffsDebuffs(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderBuffsDebuffs(),
                 priority: 65,
                 alwaysVisible: false
             },
@@ -148,7 +149,7 @@ class GameItemUIManager {
                 icon: 'fas fa-info-circle',
                 color: '#00cec9',
                 borderColor: '#0a4a4a',
-                renderFunction: () => this.renderDetails(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderDetails(),
                 priority: 60,
                 alwaysVisible: false
             },
@@ -160,7 +161,7 @@ class GameItemUIManager {
                 icon: 'fas fa-box',
                 color: '#8b4513',
                 borderColor: '#4a2a0a',
-                renderFunction: () => this.renderInventory(), // БЕЗОПАСНЫЙ ВЫЗОВ
+                renderFunction: () => this.renderInventory(),
                 priority: 55,
                 alwaysVisible: false
             }
@@ -183,6 +184,9 @@ class GameItemUIManager {
         // Находим и кэшируем DOM контейнеры
         this.cacheContainers();
         
+        // Добавляем стили для анимаций тултипов
+        this.addTooltipStyles();
+        
         // Регистрируем глобальные функции ТОЛЬКО если они еще не существуют
         if (!window.showOrganizationHierarchy) {
             window.showOrganizationHierarchy = (orgId) => this.showOrganizationHierarchy(orgId);
@@ -202,6 +206,47 @@ class GameItemUIManager {
         
         this.initialized = true;
         console.log('✅ GameItemUIManager инициализирован');
+    }
+    
+    /**
+     * Добавляет CSS стили для анимаций тултипов
+     */
+    addTooltipStyles() {
+        // Проверяем, не добавлены ли стили уже
+        if (document.getElementById('tooltip-animation-styles')) return;
+        
+        const style = document.createElement('style');
+        style.id = 'tooltip-animation-styles';
+        style.textContent = `
+            @keyframes tooltipFadeIn {
+                from { opacity: 0; transform: translateY(-5px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            
+            @keyframes tooltipFadeOut {
+                from { opacity: 1; transform: translateY(0); }
+                to { opacity: 0; transform: translateY(-5px); }
+            }
+            
+            @keyframes statPulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.1); }
+                100% { transform: scale(1); }
+            }
+            
+            @keyframes flyUp {
+                0% { 
+                    opacity: 1;
+                    transform: translateY(0) translateX(0);
+                }
+                100% { 
+                    opacity: 0;
+                    transform: translateY(-30px) translateX(10px);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        console.log('🎨 Стили для анимаций тултипов добавлены');
     }
     
     /**
@@ -330,7 +375,7 @@ class GameItemUIManager {
     }
     
     /**
-     * Обработчик завершения хода
+     * Обработчик завершения ходa
      */
     handleTurnCompleted(turnCount) {
         console.log(`🔄 GameItemUI: получен TURN_COMPLETED, ход ${turnCount}`);
@@ -674,15 +719,20 @@ class GameItemUIManager {
                     const value = rel.value !== undefined ? rel.value : 0;
                     const color = getRelationColor(value);
                     const emoji = getRelationEmoji(value);
+                    // Экранируем данные для безопасной передачи в onclick
+                    const relData = JSON.stringify(rel).replace(/"/g, '&quot;');
                     
                     relationsHTML += `
                         <div class="game-item-badge" 
+                             data-game-item='${relData}'
+                             onclick="window.showGameItemTooltip(this, ${relData.replace(/'/g, "\\'")})"
                              style="background: linear-gradient(135deg, #2a0a2a 0%, #1a051a 100%); 
                                     border: 1px solid #ff9ff340; 
                                     padding: 2px 6px; 
                                     display: inline-block;
                                     margin: 2px;
-                                    border-radius: 3px;">
+                                    border-radius: 3px;
+                                    cursor: help;">
                             <span style="font-size: 0.85em;">${emoji}</span>
                             <span style="color: #ff9ff3; font-size: 0.75em; margin: 0 3px;">${name}</span>
                             <span style="color: ${color}; font-size: 0.75em; font-weight: bold;">${value}</span>
@@ -727,15 +777,20 @@ class GameItemUIManager {
                 
                 skillsItems.forEach(skill => {
                     const name = skill.value || skill.id.split(':')[1];
+                    // Экранируем данные для безопасной передачи в onclick
+                    const skillData = JSON.stringify(skill).replace(/"/g, '&quot;');
                     
                     skillsHTML += `
                         <div class="game-item-badge" 
+                             data-game-item='${skillData}'
+                             onclick="window.showGameItemTooltip(this, ${skillData.replace(/'/g, "\\'")})"
                              style="background: linear-gradient(135deg, #0a0a2a 0%, #05051a 100%); 
                                     border: 1px solid #6c5ce740; 
                                     padding: 2px 6px; 
                                     display: inline-block;
                                     margin: 2px;
-                                    border-radius: 3px;">
+                                    border-radius: 3px;
+                                    cursor: help;">
                             <span style="color: #6c5ce7; font-size: 0.75em;">📜</span>
                             <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
                         </div>
@@ -807,15 +862,20 @@ class GameItemUIManager {
                     const duration = item.duration !== undefined ? `[${item.duration}]` : '';
                     const color = isBuff ? '#4cd137' : '#e84118';
                     const icon = isBuff ? '⬆️' : '⬇️';
+                    // Экранируем данные для безопасной передачи в onclick
+                    const itemData = JSON.stringify(item).replace(/"/g, '&quot;');
                     
                     itemsHTML += `
                         <div class="game-item-badge" 
+                             data-game-item='${itemData}'
+                             onclick="window.showGameItemTooltip(this, ${itemData.replace(/'/g, "\\'")})"
                              style="background: linear-gradient(135deg, ${isBuff ? '#0a1a2a' : '#2a0a1a'} 0%, ${isBuff ? '#051025' : '#1a050d'} 100%); 
                                     border: 1px solid ${color}40; 
                                     padding: 2px 6px; 
                                     display: inline-block;
                                     margin: 2px;
-                                    border-radius: 3px;">
+                                    border-radius: 3px;
+                                    cursor: help;">
                             <span style="color: ${color}; font-size: 0.75em;">${icon}</span>
                             <span style="color: #ccc; font-size: 0.75em; margin: 0 2px;">${russianName}${sign}${value}</span>
                             ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
@@ -861,15 +921,20 @@ class GameItemUIManager {
                 blessItems.forEach(bless => {
                     const name = bless.value || bless.id.split(':')[1];
                     const duration = bless.duration !== undefined ? `[${bless.duration}]` : '';
+                    // Экранируем данные для безопасной передачи в onclick
+                    const blessData = JSON.stringify(bless).replace(/"/g, '&quot;');
                     
                     blessHTML += `
                         <div class="game-item-badge" 
+                             data-game-item='${blessData}'
+                             onclick="window.showGameItemTooltip(this, ${blessData.replace(/'/g, "\\'")})"
                              style="background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%); 
                                     border: 1px solid #bdc3c740; 
                                     padding: 2px 6px; 
                                     display: inline-block;
                                     margin: 2px;
-                                    border-radius: 3px;">
+                                    border-radius: 3px;
+                                    cursor: help;">
                             <span style="color: #bdc3c7; font-size: 0.75em;">✨</span>
                             <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
                             ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
@@ -915,15 +980,20 @@ class GameItemUIManager {
                 curseItems.forEach(curse => {
                     const name = curse.value || curse.id.split(':')[1];
                     const duration = curse.duration !== undefined ? `[${curse.duration}]` : '';
+                    // Экранируем данные для безопасной передачи в onclick
+                    const curseData = JSON.stringify(curse).replace(/"/g, '&quot;');
                     
                     curseHTML += `
                         <div class="game-item-badge" 
+                             data-game-item='${curseData}'
+                             onclick="window.showGameItemTooltip(this, ${curseData.replace(/'/g, "\\'")})"
                              style="background: linear-gradient(135deg, #2a0000 0%, #1a0000 100%); 
                                     border: 1px solid #ff383840; 
                                     padding: 2px 6px; 
                                     display: inline-block;
                                     margin: 2px;
-                                    border-radius: 3px;">
+                                    border-radius: 3px;
+                                    cursor: help;">
                             <span style="color: #ff3838; font-size: 0.75em;">💀</span>
                             <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
                             ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
@@ -988,15 +1058,20 @@ class GameItemUIManager {
                     const duration = item.duration !== undefined ? `[${item.duration}]` : '';
                     const color = isBuff ? '#4cd137' : '#e84118';
                     const icon = isBuff ? '⬆️' : '⬇️';
+                    // Экранируем данные для безопасной передачи в onclick
+                    const itemData = JSON.stringify(item).replace(/"/g, '&quot;');
                     
                     itemsHTML += `
                         <div class="game-item-badge" 
+                             data-game-item='${itemData}'
+                             onclick="window.showGameItemTooltip(this, ${itemData.replace(/'/g, "\\'")})"
                              style="background: linear-gradient(135deg, ${isBuff ? '#0a1a2a' : '#2a0a1a'} 0%, ${isBuff ? '#051025' : '#1a050d'} 100%); 
                                     border: 1px solid ${color}40; 
                                     padding: 2px 6px; 
                                     display: inline-block;
                                     margin: 2px;
-                                    border-radius: 3px;">
+                                    border-radius: 3px;
+                                    cursor: help;">
                             <span style="color: ${color}; font-size: 0.75em;">${icon}</span>
                             <span style="color: #ccc; font-size: 0.75em; margin: 0 2px;">${statName}${sign}${value}</span>
                             ${duration ? `<span style="color: #888; font-size: 0.7em;">${duration}</span>` : ''}
@@ -1048,55 +1123,27 @@ class GameItemUIManager {
             });
             
             if (unknownItems.length > 0) {
-                // Функция для получения иконки game item
-                const getGameItemIcon = (itemId) => {
-                    if (!itemId) return '📌';
-                    
-                    const type = itemId.split(':')[0];
-                    const icons = {
-                        'stat': '📊',
-                        'skill': '📜',
-                        'inventory': '🎒',
-                        'relations': '👤',
-                        'bless': '✨',
-                        'curse': '💀',
-                        'buff': '⬆️',
-                        'debuff': '⬇️',
-                        'initiation_degree': '🎓',
-                        'progress': '📈',
-                        'personality': '🧠',
-                        'effect': '⚡',
-                        'status': '🔘',
-                        'ability': '💫',
-                        'trait': '🎭',
-                        'item': '🎁',
-                        'ritual': '🕯️',
-                        'knowledge': '📚',
-                        'secret': '🔐',
-                        'location': '📍',
-                        'event': '📅',
-                        'quest': '🎯'
-                    };
-                    
-                    return icons[type] || '📌';
-                };
-                
                 let detailsHTML = '';
                 
                 unknownItems.forEach(item => {
                     const [type, name] = item.id.split(':');
                     const displayName = item.value || name || item.id;
                     const duration = item.duration !== undefined ? `[${item.duration}]` : '';
-                    const icon = getGameItemIcon(item.id);
+                    const icon = Render.getGameItemIcon(item.id); // Используем функцию из Render
+                    // Экранируем данные для безопасной передачи в onclick
+                    const itemData = JSON.stringify(item).replace(/"/g, '&quot;');
                     
                     detailsHTML += `
                         <div class="game-item-badge" 
+                             data-game-item='${itemData}'
+                             onclick="window.showGameItemTooltip(this, ${itemData.replace(/'/g, "\\'")})"
                              style="background: linear-gradient(135deg, #1a2a2a 0%, #0d1a1a 100%); 
                                     border: 1px solid #00cec940; 
                                     padding: 2px 6px; 
                                     display: inline-block;
                                     margin: 2px;
-                                    border-radius: 3px;">
+                                    border-radius: 3px;
+                                    cursor: help;">
                             <span style="color: #00cec9; font-size: 0.75em;">${icon}</span>
                             <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${displayName}</span>
                             ${duration ? `<span style="color: #888; font-size: 0.7em; margin-left: 2px;">${duration}</span>` : ''}
@@ -1141,15 +1188,20 @@ class GameItemUIManager {
                 
                 inventoryItems.forEach(item => {
                     const name = item.value || item.id.split(':')[1];
+                    // Экранируем данные для безопасной передачи в onclick
+                    const itemData = JSON.stringify(item).replace(/"/g, '&quot;');
                     
                     inventoryHTML += `
                         <div class="game-item-badge" 
+                             data-game-item='${itemData}'
+                             onclick="window.showGameItemTooltip(this, ${itemData.replace(/'/g, "\\'")})"
                              style="background: linear-gradient(135deg, #2a1a0a 0%, #1a0d05 100%); 
                                     border: 1px solid #8b451340; 
                                     padding: 2px 6px; 
                                     display: inline-block;
                                     margin: 2px;
-                                    border-radius: 3px;">
+                                    border-radius: 3px;
+                                    cursor: help;">
                             <span style="color: #8b4513; font-size: 0.75em;">🎒</span>
                             <span style="color: #ddd; font-size: 0.75em; margin-left: 2px;">${name}</span>
                         </div>
@@ -1217,64 +1269,64 @@ class GameItemUIManager {
             const modal = document.createElement('div');
             modal.id = `orgHierarchyCompact_${orgId}_${Date.now()}`;
             modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.95);
-            z-index: 10000;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
-            padding-top: 10px;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        `;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.95);
+                z-index: 10000;
+                display: flex;
+                justify-content: center;
+                align-items: flex-start;
+                padding-top: 10px;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            `;
             
             // Компактный контент
             const content = document.createElement('div');
             content.style.cssText = `
-            background: #111;
-            border: 1px solid #d4af37;
-            border-radius: 8px;
-            width: 95%;
-            max-width: 400px;
-            max-height: 95vh;
-            overflow-y: auto;
-            color: #ccc;
-            box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
-            font-size: 12px;
-        `;
+                background: #111;
+                border: 1px solid #d4af37;
+                border-radius: 8px;
+                width: 95%;
+                max-width: 400px;
+                max-height: 95vh;
+                overflow-y: auto;
+                color: #ccc;
+                box-shadow: 0 0 20px rgba(212, 175, 55, 0.3);
+                font-size: 12px;
+            `;
             
             // Шапка
             const header = document.createElement('div');
             header.style.cssText = `
-            background: #1a1a1a;
-            padding: 8px 12px;
-            border-bottom: 1px solid #d4af37;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        `;
+                background: #1a1a1a;
+                padding: 8px 12px;
+                border-bottom: 1px solid #d4af37;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            `;
             
             const title = document.createElement('div');
             title.innerHTML = `
-            <div style="color: #d4af37; font-weight: bold; font-size: 14px;">${orgId.toUpperCase()}</div>
-            <div style="color: #888; font-size: 10px; margin-top: 2px;">ИЕРАРХИЯ</div>
-        `;
+                <div style="color: #d4af37; font-weight: bold; font-size: 14px;">${orgId.toUpperCase()}</div>
+                <div style="color: #888; font-size: 10px; margin-top: 2px;">ИЕРАРХИЯ</div>
+            `;
             
             const closeBtn = document.createElement('button');
             closeBtn.innerHTML = '✕';
             closeBtn.style.cssText = `
-            background: transparent;
-            border: none;
-            color: #d4af37;
-            font-size: 16px;
-            cursor: pointer;
-            padding: 4px 8px;
-            line-height: 1;
-        `;
+                background: transparent;
+                border: none;
+                color: #d4af37;
+                font-size: 16px;
+                cursor: pointer;
+                padding: 4px 8px;
+                line-height: 1;
+            `;
             closeBtn.onclick = () => {
                 modal.remove();
                 this.currentHierarchyModal = null;
@@ -1287,68 +1339,68 @@ class GameItemUIManager {
             // Текущая позиция
             const currentPos = document.createElement('div');
             currentPos.style.cssText = `
-            padding: 8px 12px;
-            background: rgba(255,0,0,0.1);
-            border-bottom: 1px solid #333;
-            margin: 0;
-        `;
+                padding: 8px 12px;
+                background: rgba(255,0,0,0.1);
+                border-bottom: 1px solid #333;
+                margin: 0;
+            `;
             
             currentPos.innerHTML = `
-            <div style="color: #ff5555; font-size: 11px; font-weight: bold; margin-bottom: 4px;">
-                <span style="background: #ff5555; color: #000; padding: 2px 6px; border-radius: 3px; margin-right: 6px;">●</span>
-                ТЕКУЩАЯ ПОЗИЦИЯ
-            </div>
-            <div style="display: flex; align-items: center; justify-content: space-between;">
-                <div>
-                    <div style="color: #fff; font-size: 13px; font-weight: bold;">${org.rankName}</div>
-                    <div style="color: #888; font-size: 10px;">Уровень ${org.rank}/${totalRanks}</div>
+                <div style="color: #ff5555; font-size: 11px; font-weight: bold; margin-bottom: 4px;">
+                    <span style="background: #ff5555; color: #000; padding: 2px 6px; border-radius: 3px; margin-right: 6px;">●</span>
+                    ТЕКУЩАЯ ПОЗИЦИЯ
                 </div>
-                <div style="color: #d4af37; font-size: 18px; font-weight: bold;">${org.rank}°</div>
-            </div>
-        `;
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                    <div>
+                        <div style="color: #fff; font-size: 13px; font-weight: bold;">${org.rankName}</div>
+                        <div style="color: #888; font-size: 10px;">Уровень ${org.rank}/${totalRanks}</div>
+                    </div>
+                    <div style="color: #d4af37; font-size: 18px; font-weight: bold;">${org.rank}°</div>
+                </div>
+            `;
             content.appendChild(currentPos);
             
             // Иерархия
             const hierarchyContainer = document.createElement('div');
             hierarchyContainer.style.cssText = `
-            padding: 8px 0;
-            max-height: 300px;
-            overflow-y: auto;
-        `;
+                padding: 8px 0;
+                max-height: 300px;
+                overflow-y: auto;
+            `;
             
             sortedRanks.forEach(rankInfo => {
                 const isCurrentRank = rankInfo.lvl === org.rank;
                 const rankItem = document.createElement('div');
                 rankItem.style.cssText = `
-                padding: 6px 12px;
-                border-bottom: 1px solid #222;
-                background: ${isCurrentRank ? 'rgba(255,0,0,0.15)' : 'transparent'};
-                border-left: ${isCurrentRank ? '3px solid #ff5555' : '3px solid transparent'};
-                margin: 0;
-            `;
+                    padding: 6px 12px;
+                    border-bottom: 1px solid #222;
+                    background: ${isCurrentRank ? 'rgba(255,0,0,0.15)' : 'transparent'};
+                    border-left: ${isCurrentRank ? '3px solid #ff5555' : '3px solid transparent'};
+                    margin: 0;
+                `;
                 
                 rankItem.innerHTML = `
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
-                        <span style="color: #d4af37; font-weight: bold; min-width: 20px;">${rankInfo.lvl}°</span>
-                        <span style="color: ${isCurrentRank ? '#fff' : '#ccc'}; font-weight: ${isCurrentRank ? 'bold' : 'normal'};">
-                            ${rankInfo.rank}
-                        </span>
-                        ${isCurrentRank ? '<span style="color: #ff5555; font-size: 10px; background: rgba(255,0,0,0.2); padding: 1px 4px; border-radius: 3px; margin-left: 4px;">ВЫ</span>' : ''}
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                            <span style="color: #d4af37; font-weight: bold; min-width: 20px;">${rankInfo.lvl}°</span>
+                            <span style="color: ${isCurrentRank ? '#fff' : '#ccc'}; font-weight: ${isCurrentRank ? 'bold' : 'normal'};">
+                                ${rankInfo.rank}
+                            </span>
+                            ${isCurrentRank ? '<span style="color: #ff5555; font-size: 10px; background: rgba(255,0,0,0.2); padding: 1px 4px; border-radius: 3px; margin-left: 4px;">ВЫ</span>' : ''}
+                        </div>
+                        ${rankInfo.threshold !== undefined ? 
+                            `<span style="color: #fbc531; font-size: 11px; background: rgba(251,197,49,0.1); padding: 2px 6px; border-radius: 3px; white-space: nowrap;">
+                                ${rankInfo.threshold}
+                            </span>` : 
+                            '<span style="color: #666; font-size: 10px; padding: 2px 6px;">—</span>'
+                        }
                     </div>
-                    ${rankInfo.threshold !== undefined ? 
-                        `<span style="color: #fbc531; font-size: 11px; background: rgba(251,197,49,0.1); padding: 2px 6px; border-radius: 3px; white-space: nowrap;">
-                            ${rankInfo.threshold}
-                        </span>` : 
-                        '<span style="color: #666; font-size: 10px; padding: 2px 6px;">—</span>'
+                    ${rankInfo.description ? 
+                        `<div style="color: #888; font-size: 10px; margin-top: 4px; padding-left: 28px; line-height: 1.3;">
+                            ${rankInfo.description}
+                        </div>` : ''
                     }
-                </div>
-                ${rankInfo.description ? 
-                    `<div style="color: #888; font-size: 10px; margin-top: 4px; padding-left: 28px; line-height: 1.3;">
-                        ${rankInfo.description}
-                    </div>` : ''
-                }
-            `;
+                `;
                 
                 hierarchyContainer.appendChild(rankItem);
             });
@@ -1358,42 +1410,42 @@ class GameItemUIManager {
             // Компактная легенда
             const legend = document.createElement('div');
             legend.style.cssText = `
-            padding: 8px 12px;
-            background: #1a1a1a;
-            border-top: 1px solid #333;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            font-size: 10px;
-        `;
+                padding: 8px 12px;
+                background: #1a1a1a;
+                border-top: 1px solid #333;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                font-size: 10px;
+            `;
             
             legend.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 4px;">
-                <div style="width: 8px; height: 8px; background: #ff5555; border-radius: 2px;"></div>
-                <span style="color: #aaa;">Ваша позиция</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 4px;">
-                <div style="width: 8px; height: 8px; background: #d4af37; border-radius: 2px;"></div>
-                <span style="color: #aaa;">Уровень</span>
-            </div>
-            <div style="display: flex; align-items: center; gap: 4px;">
-                <div style="width: 8px; height: 8px; background: #fbc531; border-radius: 2px;"></div>
-                <span style="color: #aaa;">Требование</span>
-            </div>
-        `;
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <div style="width: 8px; height: 8px; background: #ff5555; border-radius: 2px;"></div>
+                    <span style="color: #aaa;">Ваша позиция</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <div style="width: 8px; height: 8px; background: #d4af37; border-radius: 2px;"></div>
+                    <span style="color: #aaa;">Уровень</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <div style="width: 8px; height: 8px; background: #fbc531; border-radius: 2px;"></div>
+                    <span style="color: #aaa;">Требование</span>
+                </div>
+            `;
             
             content.appendChild(legend);
             
             // Инфо
             const info = document.createElement('div');
             info.style.cssText = `
-            padding: 6px 12px;
-            background: #0a0a0a;
-            border-top: 1px solid #222;
-            font-size: 10px;
-            color: #666;
-            text-align: center;
-        `;
+                padding: 6px 12px;
+                background: #0a0a0a;
+                border-top: 1px solid #222;
+                font-size: 10px;
+                color: #666;
+                text-align: center;
+            `;
             info.textContent = `Всего уровней: ${totalRanks} • Закройте кликом вне окна`;
             content.appendChild(info);
             
@@ -1429,82 +1481,6 @@ class GameItemUIManager {
     }
     
     /**
-     * Добавляет CSS стили для анимаций модального окна в новом стиле
-     */
-    addNeoHierarchyStyles() {
-        // Проверяем, не добавлены ли стили уже
-        if (document.getElementById('neoHierarchyModalStyles')) return;
-        
-        const style = document.createElement('style');
-        style.id = 'neoHierarchyModalStyles';
-        style.textContent = `
-        @keyframes neoFadeIn {
-            from { 
-                opacity: 0; 
-                backdrop-filter: blur(0px);
-            }
-            to { 
-                opacity: 1; 
-                backdrop-filter: blur(8px);
-            }
-        }
-        
-        @keyframes neoSlideUp {
-            from { 
-                opacity: 0;
-                transform: translateY(60px) scale(0.95);
-            }
-            to { 
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
-        
-        @keyframes neoPulse {
-            0%, 100% { 
-                opacity: 0.3;
-                transform: scale(1);
-            }
-            50% { 
-                opacity: 0.6;
-                transform: scale(1.05);
-            }
-        }
-        
-        /* Стиль для скроллбара */
-        div::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        div::-webkit-scrollbar-track {
-            background: rgba(20, 15, 5, 0.5);
-            border-radius: 4px;
-        }
-        
-        div::-webkit-scrollbar-thumb {
-            background: linear-gradient(to bottom, #d4af37, #b8941f);
-            border-radius: 4px;
-        }
-        
-        div::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(to bottom, #fbc531, #d4af37);
-        }
-        
-        /* Анимация при наведении на элементы иерархии */
-        .hierarchy-item-hover {
-            transition: all 0.3s ease;
-        }
-        
-        .hierarchy-item-hover:hover {
-            transform: translateX(-3px);
-            border-color: rgba(212, 175, 55, 0.4) !important;
-            box-shadow: 0 5px 20px rgba(212, 175, 55, 0.2) !important;
-        }
-    `;
-        document.head.appendChild(style);
-    }
-    
-    /**
      * Получает цвет для стата
      * @param {Number} value Значение стата (0-100)
      * @returns {String} Цвет в формате HEX
@@ -1525,12 +1501,134 @@ class GameItemUIManager {
     }
     
     /**
-     * Вспомогательная функция для отображения тултипа game item
+     * Показ тултипа для game_item
      */
     showGameItemTooltip(element, gameItem) {
-        // Упрощенная реализация тултипов
-        console.log('ℹ️ Показать тултип для:', gameItem.id);
-        // Здесь можно реализовать детальный тултип
+        const existingTooltip = document.querySelector('.game-item-tooltip');
+        if (existingTooltip) {
+            existingTooltip.remove();
+        }
+        
+        if (!gameItem || !gameItem.id) {
+            console.warn('showGameItemTooltip: Нет данных об объекте');
+            return;
+        }
+        
+        const tooltip = document.createElement('div');
+        tooltip.className = 'game-item-tooltip';
+        
+        let content = '';
+        
+        // Используем функцию getGameItemIcon из модуля Render
+        const icon = Render.getGameItemIcon(gameItem.id);
+        const [type, name] = gameItem.id.split(':');
+        
+        content += `
+            <div style="font-weight: bold; color: #fbc531; margin-bottom: 6px; font-size: 0.95em; border-bottom: 1px solid #fbc53140; padding-bottom: 4px;">
+                ${icon} ${name || type}
+            </div>
+        `;
+        
+        if (gameItem.value !== undefined && gameItem.value !== name) {
+            content += `
+                <div style="margin-bottom: 4px; color: #ddd; font-size: 0.85em;">
+                    <span style="color: #888;">Значение:</span> ${gameItem.value}
+                </div>
+            `;
+        }
+        
+        if (gameItem.description) {
+            content += `
+                <div style="margin-bottom: 4px; color: #ccc; font-size: 0.8em; font-style: italic; line-height: 1.3;">
+                    ${gameItem.description}
+                </div>
+            `;
+        }
+        
+        if (gameItem.duration !== undefined) {
+            content += `
+                <div style="margin-bottom: 2px; color: #fbc531; font-size: 0.75em;">
+                    <i class="fas fa-clock"></i> Длительность: ${gameItem.duration} ход.
+                </div>
+            `;
+        }
+        
+        const extraFields = Object.keys(gameItem).filter(k => !['id', 'value', 'description', 'duration'].includes(k));
+        if (extraFields.length > 0) {
+            content += '<div style="margin-top: 6px; padding-top: 4px; border-top: 1px solid #333;">';
+            extraFields.forEach(field => {
+                const val = gameItem[field];
+                if (val !== null && val !== undefined) {
+                    content += `
+                        <div style="font-size: 0.75em; color: #999; margin-bottom: 2px;">
+                            <span style="color: #666;">${field}:</span> ${JSON.stringify(val)}
+                        </div>
+                    `;
+                }
+            });
+            content += '</div>';
+        }
+        
+        tooltip.innerHTML = content;
+        
+        tooltip.style.cssText = `
+            position: fixed;
+            background: linear-gradient(135deg, #1a0a0a 0%, #0d0505 100%);
+            border: 1px solid #fbc53160;
+            border-radius: 4px;
+            padding: 10px 12px;
+            max-width: 300px;
+            z-index: 10000;
+            pointer-events: none;
+            box-shadow: 0 0 20px #fbc53120, 0 4px 8px rgba(0,0,0,0.7);
+            animation: tooltipFadeIn 0.2s ease-out;
+            font-family: 'Courier New', monospace;
+        `;
+        
+        document.body.appendChild(tooltip);
+        
+        const rect = element.getBoundingClientRect();
+        const tooltipRect = tooltip.getBoundingClientRect();
+        
+        let left = rect.left + window.scrollX;
+        let top = rect.bottom + window.scrollY + 5;
+        
+        if (left + tooltipRect.width > window.innerWidth) {
+            left = window.innerWidth - tooltipRect.width - 10;
+        }
+        
+        if (left < 10) {
+            left = 10;
+        }
+        
+        if (top + tooltipRect.height > window.innerHeight + window.scrollY) {
+            top = rect.top + window.scrollY - tooltipRect.height - 5;
+        }
+        
+        if (top < window.scrollY) {
+            top = window.scrollY + 10;
+        }
+        
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+        
+        const removeTooltip = () => {
+            if (tooltip && tooltip.parentNode) {
+                tooltip.style.animation = 'tooltipFadeOut 0.2s ease-out';
+                setTimeout(() => {
+                    if (tooltip && tooltip.parentNode) {
+                        tooltip.parentNode.removeChild(tooltip);
+                    }
+                }, 200);
+            }
+            document.removeEventListener('click', removeTooltip);
+        };
+        
+        setTimeout(() => {
+            document.addEventListener('click', removeTooltip);
+        }, 100);
+        
+        setTimeout(removeTooltip, 7000);
     }
     
     /**

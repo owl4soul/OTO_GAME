@@ -588,7 +588,6 @@ function setupStateObservers() {
     console.log('✅ RENDER: подписки для сцены настроены');
 }
 
-setupStateObservers();
 
 // ====================================================================
 // ОСТАЛЬНЫЕ ФУНКЦИИ (без изменений, но упрощенные)
@@ -1065,7 +1064,7 @@ export const Render = {
     // Форматирование
     formatCompactRequirements,
     formatCompactOperations,
-    getGameItemIcon,
+    getGameItemIcon, // <-- ВАЖНО: добавлена эта функция для экспорта
     getRussianStatName,
     
     // Thoughts of Hero
@@ -1073,7 +1072,9 @@ export const Render = {
     stopThoughtsOfHeroDisplay,
     showThoughtsOfHeroLayout,
     hideThoughtsOfHeroLayout,
-    updateThoughtsOfHeroText
+    updateThoughtsOfHeroText,
+    
+    setupStateObservers
 };
 
 console.log('✅ 5-render.js (координирующий слой) загружен успешно');

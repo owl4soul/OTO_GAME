@@ -69,7 +69,7 @@ class HistoryUI {
             
             if (typeof val === 'string') {
                 if (val.length > 100) {
-                    return `<span style="color: #aaa;">"${val.substring(0, 100)}..."</span>`;
+                    return `<span style="color: #aaa;">"${val}..."</span>`;
                 }
                 return `<span style="color: #ccc;">"${val}"</span>`;
             }

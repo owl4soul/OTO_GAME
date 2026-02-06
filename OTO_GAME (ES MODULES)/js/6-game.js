@@ -975,7 +975,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             dom.freeInputText.style.opacity = '1';
             dom.freeInputText.focus();
         }
-        Saveload.saveState();
+        State.saveStateToLocalStorage();
     }
 }
 
@@ -1230,7 +1230,7 @@ function processTurn(data, actionResults, d10) {
     UI.updateActionButtons();
     
     // Сохраняем состояние
-    Saveload.saveState();
+    State.saveStateToLocalStorage();
     
     console.log('✅ processTurn завершен');
 }
@@ -1450,7 +1450,7 @@ function handleFreeModeToggle(e) {
     
     UI.setFreeModeUI(isFreeMode);
     UI.updateActionButtons();
-    Saveload.saveState();
+    State.saveStateToLocalStorage();
     
     State.emit(State.EVENTS.MODE_CHANGED, { mode: isFreeMode ? 'free' : 'choices' });
 }
@@ -1525,8 +1525,6 @@ function createSimplifiedTurnUpdatesHTML(actionResults, events, turnNumber) {
     return html;
 }
 
-setupGameObservers();
-
 export const Game = {
     toggleChoice,
     submitTurn,
@@ -1539,5 +1537,6 @@ export const Game = {
     decreaseBuffDurations,
     createTurnUpdatesHTML,
     createSimplifiedTurnUpdatesHTML,
-    createOrganizationsHTML
+    createOrganizationsHTML,
+    setupGameObservers
 };

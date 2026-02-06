@@ -34,6 +34,9 @@ function init() {
         
         Logger.success('DOM', "DOM полностью загружен");
         
+        // Реализовать корректно!!!!!!!
+        State.loadStateFromLocalStorage();
+        
         // 2. Проверяем, что состояние корректно инициализировано
         const state = State.getState();
         if (!state || !state.gameState || !state.gameState.currentScene) {
@@ -43,11 +46,7 @@ function init() {
         
         Logger.success('STATE', `Состояние инициализировано (игра: ${state.gameId}, ход: ${state.turnCount})`);
         
-        // 3. Загружаем настройки интерфейса
-        Saveload.loadState();
-        Logger.success('STATE', "Настройки загружены из localStorage");
-        
-        // 4. Инициализируем UI модули в ПРАВИЛЬНОМ ПОРЯДКЕ:
+        // 3. Инициализируем UI модули в ПРАВИЛЬНОМ ПОРЯДКЕ:
         
         // 4.1 Сначала рендерим сцену, чтобы создать все необходимые контейнеры
         Logger.info('RENDER', "Рендеринг сцены для создания контейнеров...");
@@ -66,14 +65,6 @@ function init() {
         if (TurnUpdatesUI && typeof TurnUpdatesUI.initialize === 'function') {
             TurnUpdatesUI.initialize();
             Logger.success('UI', "TurnUpdatesUI инициализирован");
-            
-            // КРИТИЧЕСКИ ВАЖНО: Убедимся что контейнер отображается
-            setTimeout(() => {
-                if (TurnUpdatesUI.forceUpdate) {
-                    TurnUpdatesUI.forceUpdate();
-                    Logger.info('UI', "TurnUpdatesUI: принудительное обновление выполнено");
-                }
-            }, 200);
         }
         
         if (StatsUI && typeof StatsUI.initialize === 'function') {
@@ -90,9 +81,6 @@ function init() {
         UI.init();
         Logger.success('UI', "Основной UI инициализирован");
         
-        // НЕ вызываем forceUpdate() здесь - GameItemUI уже отрендерился при инициализации
-        // Избегаем двойного рендеринга
-        
         // Настраиваем события
         Logger.info('EVENTS', "Настройка обработчиков событий...");
         setupEventListeners();
@@ -107,9 +95,19 @@ function init() {
             checkAllContainersVisible();
         }, 100);
         
-        Logger.success('SYSTEM', "✅ Система полностью инициализирована и готова");
+    
         Logger.success('SYSTEM', `📊 Статистика: Ход ${state.turnCount}, Организации: ${State.getHeroOrganizations().length}`);
         
+        // 5. Настраиваем игровые подписки ПОСЛЕ инициализации всех модулей
+        Logger.info('GAME', "Настройка игровых подписок...");
+        if (Game.setupGameObservers) {
+            Game.setupGameObservers();
+        }
+        if (Render.setupStateObservers) {
+            Render.setupStateObservers();
+        }
+        
+        Logger.success('SYSTEM', "✅ Система полностью инициализирована и готова");
     } catch (error) {
         Logger.error('FATAL', "Критическая ошибка инициализации", error);
         
@@ -222,7 +220,7 @@ function setupEventListeners() {
             dom.choicesCounter.textContent = hasText ? '✓/∞' : '0/∞';
             State.setState({ freeModeText: state.freeModeText });
             UI.updateActionButtons();
-            Saveload.saveState();
+            State.saveStateToLocalStorage();
         };
         
         // Отправка по Ctrl+Enter
@@ -292,7 +290,7 @@ function setupSettingsModalEvents() {
             Render.updateApiKeyFields();
             Render.renderModelSelectorByProvider();
             Render.updateModelDetails();
-            Saveload.saveState();
+            State.saveStateToLocalStorage();
         };
         // Устанавливаем текущее значение
         providerInput.value = State.getState().settings.apiProvider;
@@ -306,7 +304,7 @@ function setupSettingsModalEvents() {
             state.settings.apiKeyOpenrouter = apiKeyOpenrouterInput.value;
             State.setState({ settings: state.settings });
             localStorage.setItem('oto_key_openrouter', state.settings.apiKeyOpenrouter);
-            Saveload.saveState();
+            State.saveStateToLocalStorage();
         };
         apiKeyOpenrouterInput.value = State.getState().settings.apiKeyOpenrouter;
     }
@@ -318,7 +316,7 @@ function setupSettingsModalEvents() {
             state.settings.apiKeyVsegpt = apiKeyVsegptInput.value;
             State.setState({ settings: state.settings });
             localStorage.setItem('oto_key_vsegpt', state.settings.apiKeyVsegpt);
-            Saveload.saveState();
+            State.saveStateToLocalStorage();
         };
         apiKeyVsegptInput.value = State.getState().settings.apiKeyVsegpt;
     }
@@ -332,7 +330,7 @@ function setupSettingsModalEvents() {
             State.setState({ settings: state.settings });
             localStorage.setItem('oto_model', state.settings.model);
             Render.updateModelDetails();
-            Saveload.saveState();
+            State.saveStateToLocalStorage();
         };
     }
     
@@ -449,7 +447,7 @@ function setupSettingsModalEvents() {
                 });
                 
                 // Сохраняем
-                Saveload.saveState();
+                State.saveStateToLocalStorage();
                 
                 // Рендерим через специализированные модули
                 Render.renderScene();
@@ -555,7 +553,7 @@ function setupSaveLoadEvents() {
     const quickSaveBtn = document.getElementById('quickSaveBtn');
     if (quickSaveBtn) {
         quickSaveBtn.onclick = () => {
-            Saveload.saveState();
+            State.saveStateToLocalStorage();
             Render.showSuccessAlert("Быстрое сохранение", "Игра сохранена в браузере.");
         };
     }
@@ -672,7 +670,7 @@ function showMainInterface() {
         StatsUI.render();
         HistoryUI.render();
         
-        Saveload.saveState();
+        State.saveStateToLocalStorage();
     }
 }
 

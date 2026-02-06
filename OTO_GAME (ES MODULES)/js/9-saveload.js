@@ -5,69 +5,6 @@ import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
 
 /**
- * Сохранение состояния игры в localStorage (ФОРМАТ 4.1)
- */
-function saveState() {
-    console.log('💾 Сохранение состояния игры...');
-    
-    try {
-        const state = State.getState();
-        state.lastSaveTime = new Date().toISOString();
-        
-        // Подготавливаем данные для сохранения
-        const saveData = {
-            version: '4.1.0',
-            gameId: state.gameId,
-            lastSaveTime: state.lastSaveTime,
-            turnCount: state.turnCount,
-            gameType: state.gameType,
-            heroState: [...state.heroState],
-            gameState: {
-                ...state.gameState,
-                organizationsHierarchy: state.gameState.organizationsHierarchy || {}
-            },
-            ui: { ...state.ui },
-            settings: { ...state.settings },
-            auditLog: [...state.auditLog],
-            models: [...state.models],
-            isRitualActive: state.isRitualActive,
-            ritualProgress: state.ritualProgress,
-            ritualTarget: state.ritualTarget,
-            freeMode: state.freeMode,
-            freeModeText: state.freeModeText,
-            lastTurnUpdates: state.lastTurnUpdates || "",
-            lastTurnStatChanges: state.lastTurnStatChanges || null,
-            thoughtsOfHero: [...state.thoughtsOfHero]
-        };
-        
-        // Основное сохранение в формате 4.1
-        localStorage.setItem('oto_v4_state', JSON.stringify(saveData));
-        
-        // Эмитим событие сохранения
-        State.emit(State.EVENTS.SAVED, {
-            gameId: state.gameId,
-            turnCount: state.turnCount,
-            timestamp: state.lastSaveTime
-        });
-        
-        console.log('✅ Игра сохранена в localStorage (формат 4.1)');
-        return true;
-    } catch (error) {
-        console.error('❌ Ошибка сохранения состояния:', error);
-        return false;
-    }
-}
-
-/**
- * Загрузка состояния игры из localStorage (ФОРМАТ 4.1)
- * Возвращает текущее состояние (уже загруженное в State)
- */
-function loadState() {
-    console.log('📥 Загрузка состояния...');
-    return State.getState();
-}
-
-/**
  * Принудительный сброс к начальному состоянию
  */
 function forceResetToInitial() {
@@ -556,8 +493,6 @@ function exportHistory() {
 
 // Публичный интерфейс модуля
 export const Saveload = {
-    saveState,
-    loadState,
     quickSave,
     saveGameToFile,
     loadGameFromFile,

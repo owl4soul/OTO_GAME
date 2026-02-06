@@ -24,6 +24,12 @@ class StatsUIManager {
         const baseStats = this.getBaseStats();
         this.previousBaseStats = { ...baseStats };
         
+        // Регистрируем глобальные функции для тултипов
+        if (!window.showStatTooltip) {
+            window.showStatTooltip = (element, statName, value) => this.showStatTooltip(element, statName, value);
+            console.log('🌐 Глобальная функция showStatTooltip зарегистрирована');
+        }
+        
         // Подписываемся на события
         this.setupEventListeners();
         
@@ -357,7 +363,7 @@ class StatsUIManager {
                             <span class="stat-value-clickable" 
                                   data-stat="${statName}" 
                                   data-value="${currentValue}"
-                                  onclick="StatsUI.instance.showStatTooltip(this, '${statName}', ${currentValue})"
+                                  onclick="window.showStatTooltip(this, '${statName}', ${currentValue})"
                                   style="color: ${currentColor}; 
                                          font-weight: bold; 
                                          font-size: 1.1em; 
@@ -379,7 +385,7 @@ class StatsUIManager {
                         <span class="stat-value-clickable" 
                               data-stat="${statName}" 
                               data-value="${currentValue}"
-                              onclick="StatsUI.instance.showStatTooltip(this, '${statName}', ${currentValue})"
+                              onclick="window.showStatTooltip(this, '${statName}', ${currentValue})"
                               style="color: ${currentColor}; 
                                      font-weight: bold; 
                                      font-size: 1.1em; 
@@ -434,7 +440,5 @@ class StatsUIManager {
 const statsUI = new StatsUIManager();
 StatsUIManager.instance = statsUI;
 
-// Делаем функции доступными глобально
-window.showStatTooltip = (element, statName, value) => statsUI.showStatTooltip(element, statName, value);
-
+// Экспортируем StatsUI
 export const StatsUI = statsUI;
