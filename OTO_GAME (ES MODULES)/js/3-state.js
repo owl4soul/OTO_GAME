@@ -3,7 +3,6 @@
 
 import { CONFIG, aiModels } from './1-config.js';
 import { Utils } from './2-utils.js';
-import { Saveload } from './9-saveload.js';
 import { PROMPTS } from './prompts.js';
 import { GameItemUI } from './gameitem-ui.js';
 
@@ -1038,14 +1037,7 @@ function setGameType(gameType, initialScene = null) {
 // ПУБЛИЧНЫЙ ИНТЕРФЕЙС
 // ========================
 
-// ... остальная часть файла остается БЕЗ ИЗМЕНЕНИЙ ...
-// (applyOperations, syncOrganizationRank, exportFullState, importFullState и т.д.)
-
-// В начале файла УДАЛИТЬ импорт Saveload:
-// import { Saveload } from './9-saveload.js'; // УДАЛИТЬ эту строку
-
-// Добавить внутреннюю функцию для сохранения состояния
-
+// Сохранения текущего состояния state
 function saveStateToLocalStorage() {
   console.log('💾 Сохранение состояния игры...');
   
