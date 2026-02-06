@@ -137,7 +137,7 @@ async function loadGameFromFile() {
                     State.importFullState(importData);
                     
                     // Сохраняем в localStorage
-                    saveState();
+                    State.saveStateToLocalStorage();
                     
                     // Добавляем запись в аудит-лог
                     const auditEntry = {
@@ -285,7 +285,7 @@ async function importAllDataFromFile() {
                     State.importAllAppData(importData);
                     
                     // Сохраняем в localStorage
-                    saveState();
+                    State.saveStateToLocalStorage();
                     
                     // Добавляем запись в аудит-лог
                     const auditEntry = {
@@ -432,7 +432,8 @@ function calculateTotalPlayTime() {
 function quickSave() {
     console.log('⚡ Быстрое сохранение...');
     
-    const success = saveState();
+    const success = State.saveStateToLocalStorage();
+    
     if (success) {
         console.log('✅ Быстрое сохранение выполнено');
         return {
