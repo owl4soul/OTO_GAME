@@ -305,20 +305,30 @@ function createOperationHTML(operation, source) {
 }
 
 // ИСПРАВЛЕНО: Функция для создания HTML изменений за ход
-function createTurnUpdatesHTML(actionResults, events) {
-    console.log('🔍 createTurnUpdatesHTML called with:', { actionResults, events });
+function createTurnUpdatesHTML(actionResults, events, turnNumber) {
+    console.log(`🔍 createTurnUpdatesHTML called for turn ${turnNumber}:`, { actionResults, events });
     
-    if ((!actionResults || actionResults.length === 0) &&
-        (!events || events.length === 0)) {
-        return '';
-    }
-    
+    // ВСЕГДА возвращаем блок, даже если нет изменений
     let html = `
         <div class="turn-updates-container" style="margin: 8px 0; padding: 10px; background: rgba(10, 0, 0, 0.7); border: 1px solid #4a0a0a; border-radius: 4px; font-size: 0.85em;">
             <div style="color: #d4af37; font-weight: bold; font-size: 0.9em; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #4a0a0a; letter-spacing: 0.5px;">
-                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД
+                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД ${turnNumber}
             </div>
     `;
+    
+    // Проверяем, есть ли данные
+    const hasActions = actionResults && actionResults.length > 0;
+    const hasEvents = events && events.length > 0;
+    
+    if (!hasActions && !hasEvents) {
+        html += `
+            <div style="color: #888; font-style: italic; font-size: 0.85em; text-align: center; padding: 12px;">
+                Нет изменений за этот ход
+            </div>
+        `;
+        html += `</div>`;
+        return html;
+    }
     
     let hasActionOperations = false;
     if (actionResults && actionResults.length > 0) {
@@ -773,6 +783,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     
     const state = State.getState();
     
+    console.log(`🎯 Отправка ХОДА ${state.turnCount} к ИИ...`);
+    
     if (activeAbortController) {
         activeAbortController.abort();
         activeAbortController = null;
@@ -973,6 +985,11 @@ function processTurn(data, actionResults, d10) {
     Render.stopThoughtsOfHeroDisplay();
     
     const state = State.getState();
+    
+    const completedTurn = state.turnCount; // Сохраняем номер ЗАВЕРШЕННОГО хода
+    
+    console.log(`🎯 Обработка ответа на ХОД ${completedTurn}...`);
+    
     const previousScene = state.gameState.currentScene;
     
     // Шаг 1: Сохраняем старые значения статов
@@ -1155,10 +1172,14 @@ function processTurn(data, actionResults, d10) {
     }
     
     // Шаг 8: Создаем и отображаем блок изменений за ход
-    const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || []);
-    console.log('📄 Созданный HTML изменений:', updatesHTML);
+    const updatesHTML = createTurnUpdatesHTML(actionResults, data.events || [], completedTurn);
+    console.log(`📄 Созданный HTML изменений за ХОД ${completedTurn}:`, updatesHTML);
     
-    // Шаг 9: Сохраняем все изменения в состоянии
+    // Шаг 9: СНАЧАЛА увеличиваем счетчик ходов (переходим к следующему ходу)
+    const nextTurn = State.incrementTurnCount();
+    console.log(`➡️ Переход к ХОДУ ${nextTurn}`);
+    
+    // Шаг 10: Сохраняем все изменения в состоянии
     State.setState({
         gameState: {
             ...state.gameState,
@@ -1172,11 +1193,7 @@ function processTurn(data, actionResults, d10) {
         thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
         lastTurnStatChanges: statChanges,
         lastTurnUpdates: updatesHTML,
-        turnCount: state.turnCount + 1
     });
-    
-    // Увеличиваем счетчик ходов
-    State.incrementTurnCount();
     
     // Обновляем UI
     UI.setFreeModeUI(false);
@@ -1189,7 +1206,6 @@ function processTurn(data, actionResults, d10) {
     
     // Эмитим события в правильном порядке
     State.emit(State.EVENTS.HERO_CHANGED, {
-        turn: state.turnCount + 1,
         statChanges: statChanges,
         actionResults: actionResults,
         events: data.events || []
@@ -1202,7 +1218,6 @@ function processTurn(data, actionResults, d10) {
     
     // ВАЖНО: TURN_COMPLETED должен быть последним
     State.emit(State.EVENTS.TURN_COMPLETED, {
-        turnCount: state.turnCount + 1,
         actions: actionResults,
         statChanges: statChanges
     });
@@ -1443,18 +1458,27 @@ function handleFreeModeToggle(e) {
 /**
  * Упрощенный блок для Истории ходов
  */
-function createSimplifiedTurnUpdatesHTML(actionResults, events) {
-    console.log('🔍 createSimplifiedTurnUpdatesHTML called');
+function createSimplifiedTurnUpdatesHTML(actionResults, events, turnNumber) {
+    console.log(`🔍 createSimplifiedTurnUpdatesHTML called for turn ${turnNumber}`);
     
     if ((!actionResults || actionResults.length === 0) &&
         (!events || events.length === 0)) {
-        return '';
+        return `
+        <div style="margin: 10px 0; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 4px; border: 1px solid #444;">
+            <div style="color: #d4af37; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #d4af37; padding-bottom: 3px;">
+                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД ${turnNumber}
+            </div>
+            <div style="color: #888; font-style: italic; text-align: center; padding: 8px;">
+                Нет изменений
+            </div>
+        </div>
+        `;
     }
     
     let html = `
         <div style="margin: 10px 0; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 4px; border: 1px solid #444;">
             <div style="color: #d4af37; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #d4af37; padding-bottom: 3px;">
-                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ
+                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД ${turnNumber}
             </div>
     `;
     

@@ -110,6 +110,17 @@ function renderScene() {
     // Создаем контейнер для всей верхней секции
     const sceneContainer = dom.sceneArea;
     
+    // КРИТИЧЕСКИ ВАЖНО: Сохраняем turnUpdatesContainer перед очисткой!
+    const existingTurnUpdates = document.getElementById('turnUpdatesContainer');
+    let savedTurnUpdatesHTML = '';
+    let savedTurnUpdatesDisplay = 'block';
+    
+    if (existingTurnUpdates) {
+        savedTurnUpdatesHTML = existingTurnUpdates.innerHTML;
+        savedTurnUpdatesDisplay = existingTurnUpdates.style.display || 'block';
+        console.log('💾 Сохранен turnUpdatesContainer перед очисткой sceneArea');
+    }
+    
     // Очищаем старый контент
     sceneContainer.innerHTML = '';
     
@@ -183,12 +194,24 @@ function renderScene() {
         `;
         sceneContainer.appendChild(summaryDiv);
     }
-    
-    // 4. Контейнер для изменений за ход (заполняется TurnUpdatesUI)
-    const turnUpdatesContainer = document.createElement('div');
-    turnUpdatesContainer.id = 'turnUpdatesContainer';
-    turnUpdatesContainer.style.cssText = 'margin-bottom: 10px;';
-    sceneContainer.appendChild(turnUpdatesContainer);
+
+    // 4. Контейнер для изменений за ход
+    // КРИТИЧЕСКИ ВАЖНО: Восстанавливаем turnUpdatesContainer ПЕРЕД sceneText
+    if (savedTurnUpdatesHTML) {
+        const restoredTurnUpdates = document.createElement('div');
+        restoredTurnUpdates.id = 'turnUpdatesContainer';
+        restoredTurnUpdates.style.cssText = `margin-bottom: 10px; display: ${savedTurnUpdatesDisplay};`;
+        restoredTurnUpdates.innerHTML = savedTurnUpdatesHTML;
+        sceneContainer.appendChild(restoredTurnUpdates);
+        console.log('✅ Восстановлен turnUpdatesContainer после очистки sceneArea');
+    } else {
+        // Если контейнер не существовал - создаем пустой (TurnUpdatesUI заполнит его)
+        const newTurnUpdates = document.createElement('div');
+        newTurnUpdates.id = 'turnUpdatesContainer';
+        newTurnUpdates.style.cssText = 'margin-bottom: 10px;';
+        sceneContainer.appendChild(newTurnUpdates);
+        console.log('📝 Создан новый пустой turnUpdatesContainer (TurnUpdatesUI заполнит)');
+    }
     
     // 5. Основной текст сцены
     const sceneDiv = document.createElement('div');

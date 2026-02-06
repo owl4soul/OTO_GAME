@@ -48,29 +48,37 @@ function init() {
         Logger.success('STATE', "Настройки загружены из localStorage");
         
         // 4. Инициализируем UI модули в ПРАВИЛЬНОМ ПОРЯДКЕ:
-        //    GameItemUI ДОЛЖЕН быть первым для гарантированного отображения всех контейнеров
         
-        // 4.1 Инициализируем GameItemUI (ПЕРВЫЙ И ВАЖНЕЙШИЙ)
+        // 4.1 Сначала рендерим сцену, чтобы создать все необходимые контейнеры
+        Logger.info('RENDER', "Рендеринг сцены для создания контейнеров...");
+        Render.renderScene();
+        Render.renderChoices();
+        
+        // 4.2 Теперь инициализируем UI модули, которые зависят от контейнеров в DOM
+        Logger.info('UI', "Инициализация UI модулей...");
+        
         if (GameItemUI && typeof GameItemUI.initialize === 'function') {
             Logger.info('GAMEITEM', "Инициализация GameItemUI...");
             GameItemUI.initialize();
-            Logger.success('GAMEITEM', "GameItemUI инициализирован - ВСЕ контейнеры будут отображены");
-        } else {
-            Logger.error('GAMEITEM', "GameItemUI не найден или не имеет метода initialize");
-            throw new Error('GameItemUI не инициализирован');
-        }
-        
-        // 4.2 Инициализируем остальные UI модули
-        Logger.info('UI', "Инициализация остальных UI модулей...");
-        
-        if (StatsUI && typeof StatsUI.initialize === 'function') {
-            StatsUI.initialize();
-            Logger.success('UI', "StatsUI инициализирован");
+            Logger.success('GAMEITEM', "GameItemUI инициализирован");
         }
         
         if (TurnUpdatesUI && typeof TurnUpdatesUI.initialize === 'function') {
             TurnUpdatesUI.initialize();
             Logger.success('UI', "TurnUpdatesUI инициализирован");
+            
+            // КРИТИЧЕСКИ ВАЖНО: Убедимся что контейнер отображается
+            setTimeout(() => {
+                if (TurnUpdatesUI.forceUpdate) {
+                    TurnUpdatesUI.forceUpdate();
+                    Logger.info('UI', "TurnUpdatesUI: принудительное обновление выполнено");
+                }
+            }, 200);
+        }
+        
+        if (StatsUI && typeof StatsUI.initialize === 'function') {
+            StatsUI.initialize();
+            Logger.success('UI', "StatsUI инициализирован");
         }
         
         if (HistoryUI && typeof HistoryUI.initialize === 'function') {
@@ -82,25 +90,19 @@ function init() {
         UI.init();
         Logger.success('UI', "Основной UI инициализирован");
         
-        // 5. Рендерим только сцену и выборы (GameItemUI УЖЕ самоотрендерился)
-        Logger.info('RENDER', "Рендеринг сцены и выборов...");
-        Render.renderScene();
-        Render.renderChoices();
-        Logger.success('RENDER', "Сцена и выборы отрендерены");
-        
-        // 6. НЕ вызываем forceUpdate() здесь - GameItemUI уже отрендерился при инициализации
+        // НЕ вызываем forceUpdate() здесь - GameItemUI уже отрендерился при инициализации
         // Избегаем двойного рендеринга
         
-        // 7. Настраиваем события
+        // Настраиваем события
         Logger.info('EVENTS', "Настройка обработчиков событий...");
         setupEventListeners();
         setupFullscreenListeners();
         Logger.success('EVENTS', "Обработчики событий настроены");
         
-        // 8. Обновляем кнопки действий
+        // Обновляем кнопки действий
         UI.updateActionButtons();
         
-        // 9. Финальная проверка: убеждаемся, что все контейнеры отображены
+        // Финальная проверка: убеждаемся, что все контейнеры отображены
         setTimeout(() => {
             checkAllContainersVisible();
         }, 100);
@@ -156,8 +158,9 @@ function checkAllContainersVisible() {
         
         const requiredContainers = [
             'personalityBlockContainer',
-            'typologyContainer', 
-            'organizationsContainer'
+            'typologyContainer',
+            'organizationsContainer',
+            'turnUpdatesContainer'
         ];
         
         let allVisible = true;

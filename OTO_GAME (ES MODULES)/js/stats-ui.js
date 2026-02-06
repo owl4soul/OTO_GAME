@@ -271,6 +271,13 @@ class StatsUIManager {
         const state = State.getState();
         const baseStats = this.getBaseStats();
         
+        // Обновляем счетчик ходов в интерфейсе
+        const turnCounter = dom.turnCounter;
+        if (turnCounter) {
+            turnCounter.textContent = `Ход: ${state.turnCount}`;
+            console.log(`📊 Счетчик ходов обновлен: ${state.turnCount}`);
+        }
+        
         const buffs = State.getGameItemsByType('buff:');
         const debuffs = State.getGameItemsByType('debuff:');
         
