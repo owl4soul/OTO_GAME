@@ -840,7 +840,7 @@ function parseHeroPhrases(text) {
                 const parsed = JSON.parse(jsonMatch[0]);
                 if (parsed.thoughtsOfHero && Array.isArray(parsed.thoughtsOfHero)) {
                     return parsed.thoughtsOfHero;
-                }
+            }
             } catch (jsonError) {
                 // Ignore
             }
@@ -943,6 +943,34 @@ function preprocessJson(jsonText) {
     }
     
     return result;
+}
+
+/**
+ * Безопасное форматирование JSON с отказоустойчивостью
+ * @param {string} jsonString - JSON строка
+ * @returns {string} Безопасно отформатированная строка
+ */
+function safeFormatJsonWithUnicode(jsonString) {
+    if (!jsonString) return '';
+    
+    try {
+        // Сначала декодируем Unicode escapes
+        const decoded = decodeUnicodeEscapes(jsonString);
+        
+        // Пытаемся распарсить JSON
+        try {
+            const obj = JSON.parse(decoded);
+            return JSON.stringify(obj, null, 2);
+        } catch (parseError) {
+            // Если не JSON, возвращаем декодированный текст
+            console.warn('⚠️ Не удалось распарсить JSON, возвращаем декодированный текст');
+            return decoded;
+        }
+    } catch (e) {
+        // В случае полного провала возвращаем исходную строку
+        console.error('❌ Ошибка безопасного форматирования JSON:', e);
+        return String(jsonString);
+    }
 }
 
 /**
@@ -1207,7 +1235,8 @@ export const Utils = {
     parseHeroPhrases,
     safeParseAIResponse,
     decodeUnicodeEscapes,
+    safeFormatJsonWithUnicode,
     formatJsonWithUnicode,
     getOperationDetails,
-    showToast // <-- ВОТ ТУТ ДОБАВЛЯЕМ НОВУЮ ФУНКЦИЮ
+    showToast
 };

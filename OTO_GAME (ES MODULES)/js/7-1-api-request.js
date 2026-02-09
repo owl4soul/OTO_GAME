@@ -405,54 +405,14 @@ ${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сг
 // ============================================================================
 
 /**
- * Выполняет сетевой запрос с повторными попытками при ошибках
+ * Выполняет сетевой запрос и возвращает сырой текст ответа (без парсинга JSON)
  * @param {string} url - URL для запроса
  * @param {Object} headers - HTTP-заголовки
  * @param {Object} payload - Тело запроса
  * @param {AbortController} abortController - Контроллер для отмены запроса
- * @returns {Promise<Object>} Распарсенный JSON-ответ
+ * @returns {Promise<string>} Сырой текст ответа (для аудита и отладки)
  * @throws {Error} При превышении попыток или критической ошибке
  */
-async function executeFetch(url, headers, payload, abortController) {
-  const maxAttempts = CONFIG.maxRetries || 3;
-  let lastError;
-  
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const options = {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(payload)
-      };
-      
-      if (abortController) {
-        options.signal = abortController.signal;
-      }
-      
-      const response = await fetch(url, options);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP Error ${response.status}: ${errorText}`);
-      }
-      
-      return await response.json();
-    } catch (error) {
-      lastError = error;
-      
-      if (error.name === 'AbortError') throw error;
-      
-      console.warn(`[API_Request] Попытка ${attempt}/${maxAttempts} не удалась: ${error.message}`);
-      
-      if (attempt < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, CONFIG.retryDelayMs));
-      }
-    }
-  }
-  
-  throw lastError;
-}
-
 /**
  * Выполняет сетевой запрос и возвращает сырой текст ответа (без парсинга JSON)
  * @param {string} url - URL для запроса
@@ -463,45 +423,51 @@ async function executeFetch(url, headers, payload, abortController) {
  * @throws {Error} При превышении попыток или критической ошибке
  */
 async function executeFetchRaw(url, headers, payload, abortController) {
-  const maxAttempts = CONFIG.maxRetries || 3;
-  let lastError;
+  console.log(`🚀 [API Request] ${url}`);
   
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const options = {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(payload)
-      };
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(payload),
+      signal: abortController ? abortController.signal : null
+    });
+    
+    if (!response.ok) {
+      // Читаем тело ошибки
+      const errorText = await response.text();
+      console.error(`❌ HTTP Error ${response.status}:`, errorText.substring(0, 200));
       
-      if (abortController) {
-        options.signal = abortController.signal;
-      }
-      
-      const response = await fetch(url, options);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP Error ${response.status}: ${errorText}`);
-      }
-      
-      // Возвращаем сырой текст (важно для аудита)
-      return await response.text();
-      
-    } catch (error) {
-      lastError = error;
-      
-      if (error.name === 'AbortError') throw error;
-      
-      console.warn(`[API_Request] Попытка ${attempt}/${maxAttempts} не удалась: ${error.message}`);
-      
-      if (attempt < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, CONFIG.retryDelayMs));
+      const error = new Error(`HTTP Error ${response.status}: ${errorText}`);
+      // ВАЖНО: Сохраняем тело ошибки
+      error.rawResponse = errorText;
+      error.status = response.status;
+      throw error;
+    }
+    
+    const rawText = await response.text();
+    console.log(`✅ [API Response] Получено ${rawText.length} символов`);
+    return rawText;
+    
+  } catch (error) {
+    console.error('🔥 Ошибка при выполнении запроса:', error.message);
+    
+    // Если у ошибки еще нет rawResponse, устанавливаем пустую строку
+    // НЕ перезаписываем существующий rawResponse!
+    if (!error.rawResponse) {
+      error.rawResponse = '';
+    }
+    
+    // Добавляем информацию о статусе, если её нет
+    if (!error.status && error.message.includes('HTTP Error')) {
+      const match = error.message.match(/HTTP Error (\d+):/);
+      if (match) {
+        error.status = parseInt(match[1]);
       }
     }
+    
+    throw error;
   }
-  
-  throw lastError;
 }
 
 // ============================================================================
@@ -515,6 +481,5 @@ export const API_Request = {
   formatSelectedActionsForPrompt,
   formatHeroStateForPrompt,
   prepareRequestPayload,
-  executeFetch,
   executeFetchRaw
 };

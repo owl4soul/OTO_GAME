@@ -1422,7 +1422,7 @@ function renderAuditList() {
     }
     
     // Берем последние 20 записей (самые свежие)
-    const displayLog = state.auditLog.slice(-20).reverse();
+    const displayLog = state.auditLog.slice(-50);
     
     if (displayLog.length === 0) {
         list.innerHTML = `
@@ -1575,9 +1575,12 @@ ${(formattedError)}
             textToCopy += `\n=== RESPONSE ===\n`;
             if (entry.fullResponse) {
                 textToCopy += Utils.formatJsonWithUnicode(entry.fullResponse) + '\n';
+            } else if (entry.rawResponse){
+                textToCopy += Utils.formatJsonWithUnicode(entry.rawResponse) + '\n';
             } else {
                 textToCopy += 'Нет данных\n';
             }
+            
             
             if (entry.rawError) {
                 textToCopy += `\n=== ERROR ===\n${Utils.formatJsonWithUnicode(entry.rawError)}\n`;

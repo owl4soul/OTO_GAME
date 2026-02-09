@@ -7,6 +7,111 @@ import { Utils } from './2-utils.js';
 import { Saveload } from './9-saveload.js';
 
 /**
+ * Улучшенное безопасное форматирование ответа сервера
+ */
+function formatServerResponse(response) {
+    if (!response) return '';
+    
+    try {
+        // Если response уже строка
+        if (typeof response === 'string') {
+            // Сначала декодируем Unicode escapes
+            let decoded = Utils.decodeUnicodeEscapes(response);
+            
+            // Пытаемся распарсить как JSON
+            try {
+                const parsed = JSON.parse(decoded);
+                // Форматируем с красивыми отступами
+                return JSON.stringify(parsed, null, 2);
+            } catch (parseError) {
+                // Если не JSON, возвращаем декодированную строку
+                return decoded;
+            }
+        }
+        // Если response объект
+        return JSON.stringify(response, null, 2);
+    } catch (error) {
+        console.warn('⚠️ Ошибка при форматировании ответа:', error.message);
+        return String(response);
+    }
+}
+
+/**
+ * Безопасное сохранение полного ответа сервера
+ */
+function saveFullServerResponse(entry, rawResponse) {
+    if (!rawResponse || rawResponse === 'No response') return entry;
+    
+    try {
+        // Сохраняем сырой ответ (оригинал)
+        entry.rawResponse = typeof rawResponse === 'string' 
+            ? rawResponse 
+            : JSON.stringify(rawResponse);
+        
+        // Безопасно форматируем для отображения
+        entry.fullResponse = formatServerResponse(rawResponse);
+        
+        // Дополнительно: сохраняем размер ответа
+        entry.responseSize = entry.rawResponse.length;
+        entry.responseSizeKB = (entry.rawResponse.length / 1024).toFixed(2) + ' KB';
+        
+        // Логируем для отладки
+        console.log(`📥 Сохранен ответ сервера: ${entry.responseSize} символов, ${entry.responseSizeKB}`);
+        
+    } catch (error) {
+        console.error('❌ Ошибка сохранения ответа сервера:', error);
+        // Сохраняем хотя бы строковое представление
+        entry.rawResponse = String(rawResponse);
+        entry.fullResponse = String(rawResponse);
+    }
+    
+    return entry;
+}
+
+/**
+ * Выводит ответ в консоль с безопасным форматированием
+ * @param {string} prefix - Префикс для лога
+ * @param {string|Object} response - Ответ для вывода
+ */
+function logToConsole(prefix, response) {
+    if (!response) {
+        console.log(`${prefix}: (пустой ответ)`);
+        return;
+    }
+    
+    try {
+        console.group(prefix);
+        
+        // Пытаемся красиво отформатировать
+        let formatted;
+        try {
+            formatted = formatServerResponse(response);
+            console.log(formatted);
+        } catch (formatError) {
+            console.warn('⚠️ Не удалось отформатировать ответ, вывод в сыром виде');
+            console.log(typeof response === 'string' 
+                ? Utils.decodeUnicodeEscapes(response) 
+                : response);
+        }
+        
+        // Дополнительная информация для отладки
+        if (typeof response === 'string') {
+            console.log(`📏 Длина ответа: ${response.length} символов`);
+            console.log(`🔤 Тип ответа: строка`);
+        } else {
+            console.log(`📦 Тип ответа: ${typeof response}`);
+        }
+        
+        console.groupEnd();
+    } catch (error) {
+        console.error(`${prefix}: Критическая ошибка при логировании:`, error);
+        // Аварийный вывод
+        console.log('🚨 АВАРИЙНЫЙ ВЫВОД ОТВЕТА:');
+        console.log(response);
+    }
+}
+
+/**
  * Создает новую запись лога, сохраняет в State и выводит в консоль.
  * @param {string} requestType - Заголовок (напр. "Игровой ход")
  * @param {Object} requestPayload - Тело запроса (JSON)
@@ -27,11 +132,14 @@ function createEntry(requestType, requestPayload, model, provider) {
         model: model,
         provider: provider,
         d10: null, // Будет заполнено позже, если это игровой ход
+        rawResponse: null,
         fullResponse: null,
         rawError: null,
         requestDebug: {
             body: JSON.stringify(requestPayload, null, 2)
-        }
+        },
+        responseSize: 0,
+        responseSizeKB: '0 KB'
     };
     
     // 3. Сохраняем в глобальный State и обновляем UI списка
@@ -45,19 +153,21 @@ function createEntry(requestType, requestPayload, model, provider) {
  * Обновляет запись при успешном ответе от сервера.
  * @param {Object} entry - Объект записи (возвращенный из createEntry)
  * @param {string} rawResponseText - Сырой текст ответа от сервера (до парсинга)
+ * @param {Object|null} parsedResponse - Распаршенный ответ (опционально)
  */
-function updateEntrySuccess(entry, rawResponseText) {
+function updateEntrySuccess(entry, rawResponseText, parsedResponse = null) {
     if (!entry) return;
     
-    // 1. Дублируем в консоль для отладки
-    console.log(`✅ [API RESPONSE] ${entry.request}:`, rawResponseText);
+    // Сохраняем полный ответ сервера
+    saveFullServerResponse(entry, rawResponseText);
     
-    // 2. Обновляем объект (он уже находится в State по ссылке)
+    // Логируем в консоль
+    logToConsole(`✅ [API RESPONSE] ${entry.request}`, 
+        parsedResponse || rawResponseText || 'Пустой ответ');
+    
+    // Обновляем статус
     entry.status = 'success';
-    entry.fullResponse = rawResponseText; // Сохраняем сырой текст
-    entry.rawResponse = rawResponseText; // Дублируем в отдельное поле для ясности
     
-    // 3. Обновляем UI (показываем галочку и ответ)
     Render.renderAuditList();
 }
 
@@ -65,20 +175,33 @@ function updateEntrySuccess(entry, rawResponseText) {
  * Обновляет запись при ошибке запроса.
  * @param {Object} entry - Объект записи
  * @param {Error|string} error - Ошибка
+ * @param {string|null} rawResponse - Сырой ответ сервера (если есть)
  */
-function updateEntryError(entry, error) {
+function updateEntryError(entry, error, rawResponse = null) {
     if (!entry) return;
     
     const errorDetails = Utils.formatErrorDetails(error);
+    const hasServerResponse = rawResponse && rawResponse.trim();
     
-    // 1. Дублируем в консоль
-    console.error(`🔥 [API ERROR] ${entry.request}:`, error);
+    // Сохраняем ответ сервера (даже если он есть при ошибке)
+    if (hasServerResponse) {
+        saveFullServerResponse(entry, rawResponse);
+    }
     
-    // 2. Обновляем объект
-    entry.status = 'error';
+    // Формируем детали ошибки
     entry.rawError = errorDetails;
     
-    // 3. Обновляем UI (показываем красный крестик и детали)
+    // Логируем в консоль
+    console.error(`🔥 [API ERROR] ${entry.request}:`, error);
+    
+    if (hasServerResponse) {
+        console.error('📄 Полный ответ сервера при ошибке:');
+        logToConsole(`🔥 [SERVER RESPONSE ON ERROR] ${entry.request}`, rawResponse);
+    }
+    
+    // Обновляем статус
+    entry.status = 'error';
+    
     Render.renderAuditList();
 }
 
@@ -138,8 +261,12 @@ function exportAuditLog() {
         }
         
         txtLog += `\n=== RESPONSE ===\n`;
+        if (entry.rawResponse) {
+            txtLog += `Сырой ответ:\n${entry.rawResponse}\n\n`;
+        }
+        
         if (entry.fullResponse) {
-            txtLog += `Ответ (RAW):\n${entry.fullResponse}\n`;
+            txtLog += `Форматированный ответ:\n${entry.fullResponse}\n`;
         }
         
         if (entry.rawError) {
@@ -217,8 +344,12 @@ function exportSingleAuditEntry(entryId) {
     }
     
     txtLog += `\n=== RESPONSE ===\n`;
+    if (entry.rawResponse) {
+        txtLog += `Сырой ответ:\n${entry.rawResponse}\n\n`;
+    }
+    
     if (entry.fullResponse) {
-        txtLog += `Ответ (RAW):\n${entry.fullResponse}\n`;
+        txtLog += `Форматированный ответ:\n${entry.fullResponse}\n`;
     }
     
     if (entry.rawError) {
@@ -271,5 +402,8 @@ export const Audit = {
     updateEntryError,
     clearAudit,
     exportAuditLog,
-    exportSingleAuditEntry // Новая функция
+    exportSingleAuditEntry,
+    formatServerResponse,
+    saveFullServerResponse,
+    logToConsole
 };
