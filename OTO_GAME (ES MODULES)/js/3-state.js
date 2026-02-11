@@ -1,10 +1,11 @@
-// Модуль 3: STATE - Управление состоянием игры (ФОРМАТ 4.1 - УНИФИЦИРОВАННАЯ СИСТЕМА // Модуль 3: STATE - Управление состоянием игры (ФОРМАТ 4.1 - УНИФИЦИРОВАННАЯ СИСТЕМА GAME_ITEM)
+// Модуль 3: STATE - Управление состоянием игры (ФОРМАТ 4.1 - УНИФИЦИРОВАННАЯ СИСТЕМА GAME_ITEM)
 'use strict';
 
 import { CONFIG, aiModels } from './1-config.js';
 import { Utils } from './2-utils.js';
 import { PROMPTS } from './prompts.js';
 import { GameItemUI } from './gameitem-ui.js';
+import { OperationsServiceInstance, GAME_ITEM_TYPES, OPERATIONS } from './operations-service.js';
 
 // ========================
 // ПАТТЕРН OBSERVER (НАБЛЮДАТЕЛЬ)
@@ -145,7 +146,6 @@ const DEFAULT_STATE = {
     hBot: 20,
     wBotLeft: 50,
     isCollapsed: false,
-    hBotBeforeCollapse: 20,
     isAutoCollapsed: false
   },
   settings: {
@@ -571,9 +571,16 @@ function syncOrganizationRank() {
     const oldRankName = orgRankItem.description;
     const newRankName = getOrganizationRankName('oto', newRank);
     
-    // Обновляем ранг
-    orgRankItem.value = newRank;
-    orgRankItem.description = newRankName;
+    // Используем OperationsService для обновления ранга
+    OperationsServiceInstance.applyOperation(
+      { 
+        operation: OPERATIONS.SET, 
+        id: 'organization_rank:oto', 
+        value: newRank,
+        description: newRankName 
+      },
+      state.heroState
+    );
     
     // Добавляем временный бафф ко всем статам
     state.heroState = state.heroState.map(item => {
@@ -623,122 +630,123 @@ function checkHeroDeath() {
 }
 
 // ========================
-// ОПЕРАЦИИ НАД GAME_ITEM (обновленные для организаций)
+// НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С КОПИЯМИ СОСТОЯНИЯ (ОБНОВЛЕННЫЕ)
+// ========================
+
+/**
+ * Применяет операцию к произвольному состоянию (без эмита событий)
+ * @param {Object} operation - Операция
+ * @param {Array} targetState - Целевое состояние (массив game items)
+ * @returns {Object} Результат операции
+ */
+function applyOperationToState(operation, targetState) {
+  return OperationsServiceInstance.applyOperation(operation, targetState);
+}
+
+/**
+ * Применяет массив операций к произвольному состоянию
+ * @param {Array} operations - Массив операций
+ * @param {Array} targetState - Целевое состояние
+ * @returns {Object} Сводный результат
+ */
+function applyOperationsToState(operations, targetState) {
+  return OperationsServiceInstance.applyOperations(operations, targetState);
+}
+
+/**
+ * Уменьшает длительность эффектов в произвольном состоянии
+ * @param {Array} targetState - Целевое состояние
+ * @returns {Object} Результат обработки
+ */
+function decreaseBuffDurationsInState(targetState) {
+  return OperationsServiceInstance.decreaseBuffDurations(targetState);
+}
+
+/**
+ * Получает значение стата из произвольного состояния
+ * @param {Array} targetState - Целевое состояние
+ * @param {string} statId - ID стата (например, 'stat:will')
+ * @returns {number} Значение стата
+ */
+function getGameItemValueFromState(targetState, statId) {
+  const item = targetState.find(item => item.id === statId);
+  return item ? item.value : 50; // 50 по умолчанию
+}
+
+/**
+ * Рассчитывает изменения статов между двумя состояниями
+ * @param {Array} oldState - Старое состояние
+ * @param {Array} newState - Новое состояние
+ * @returns {Object} Изменения статов
+ */
+function calculateStatChanges(oldState, newState) {
+  return OperationsServiceInstance.calculateChanges(oldState, newState);
+}
+
+/**
+ * Создает расчетное состояние с уже примененными изменениями от действий
+ * @param {Array} originalState - Исходное состояние
+ * @param {Array} actionResults - Результаты действий
+ * @returns {Array} Расчетное состояние для ИИ
+ */
+function calculateStateForAI(originalState, actionResults) {
+  // Глубокая копия исходного состояния
+  const calculatedState = JSON.parse(JSON.stringify(originalState));
+  
+  // Уменьшаем длительность эффектов
+  OperationsServiceInstance.decreaseBuffDurations(calculatedState);
+  
+  // Применяем операции от действий
+  actionResults.forEach(result => {
+    if (result.operations && Array.isArray(result.operations)) {
+      OperationsServiceInstance.applyOperations(result.operations, calculatedState);
+    }
+  });
+  
+  return calculatedState;
+}
+
+// ========================
+// ОПЕРАЦИИ НАД GAME_ITEM (обновленные для работы с OperationsService)
 // ========================
 
 /**
  * УЛУЧШЕННАЯ ФУНКЦИЯ: Применение операций к heroState
- * СТРОГОЕ ПРАВИЛО: Пустые значения НИКОГДА не перезаписывают имеющиеся значения
+ * Использует OperationsService для обработки операций
  */
 function applyOperations(operations) {
   console.log('🔍 applyOperations called with:', operations);
   
-  const state = this.getState();
-  const newHeroState = [...state.heroState];
-  const operationGroups = {};
-  
-  operations.forEach(operation => {
-    try {
-      const details = Utils.getOperationDetails(operation);
-      const category = details.category;
-      
-      if (!operationGroups[category]) {
-        operationGroups[category] = [];
-      }
-      operationGroups[category].push({ operation, details });
-      
-      // УНИФИЦИРОВАННАЯ ОБРАБОТКА ВСЕХ GAME_ITEM
-      const existingIndex = newHeroState.findIndex(item => item.id === operation.id);
-      
-      switch (operation.operation) {
-        case 'ADD':
-          if (existingIndex === -1) {
-            newHeroState.push({
-              id: operation.id,
-              value: operation.value !== undefined ? operation.value : true,
-              description: operation.description || '',
-              duration: operation.duration,
-              ...operation
-            });
-          }
-          break;
-          
-        case 'REMOVE':
-          if (existingIndex !== -1) {
-            newHeroState.splice(existingIndex, 1);
-          }
-          break;
-          
-        case 'MODIFY':
-          if (existingIndex !== -1 && operation.delta !== undefined) {
-            const current = newHeroState[existingIndex];
-            const newValue = (typeof current.value === 'number' ? current.value : 0) + operation.delta;
-            newHeroState[existingIndex] = {
-              ...current,
-              value: newValue
-            };
-          }
-          break;
-          
-        case 'SET':
-          if (existingIndex !== -1) {
-            newHeroState[existingIndex] = {
-              ...newHeroState[existingIndex],
-              value: operation.value,
-              ...operation
-            };
-          } else {
-            newHeroState.push({
-              id: operation.id,
-              value: operation.value,
-              description: operation.description || '',
-              ...operation
-            });
-          }
-          break;
-      }
-      
-    } catch (error) {
-      console.error(`❌ Ошибка обработки операции:`, error.stack);
-    }
-  });
-  
-  // Сохраняем состояние
-  this.setState({ heroState: newHeroState });
-  
-  // Эмитим КАТЕГОРИЗИРОВАННЫЕ события
-  for (const [category, ops] of Object.entries(operationGroups)) {
-    if (ops.length > 0) {
-      // Общее событие для категории
-      this.emit(`${category}:changed`, {
-        category,
-        operations: ops.map(op => op.operation),
-        details: ops.map(op => op.details),
-        timestamp: new Date().toISOString()
-      });
-      
-      // Специфичные события для операций с организациями
-      if (category === 'organization') {
-        ops.forEach(({ operation: op, details }) => {
-          this.emit(`organization:${op.operation.toLowerCase()}`, {
-            orgId: details.name,
-            operation: op,
-            rank: op.value !== undefined ? op.value : null,
-            timestamp: new Date().toISOString()
-          });
-        });
-      }
-    }
+  if (!Array.isArray(operations) || operations.length === 0) {
+    console.warn('⚠️ Пустой массив операций');
+    return false;
   }
   
+  const stateSnapshot = State.getState();
+  const newHeroState = [...stateSnapshot.heroState];
+  
+  // Применяем все операции через OperationsService
+  const result = OperationsServiceInstance.applyOperations(operations, newHeroState);
+  
+  if (!result.success) {
+    console.error('❌ Ошибка применения операций:', result);
+    return false;
+  }
+  
+  // Обновляем состояние с новым heroState
+  State.setState({ heroState: newHeroState });
+  
   // Эмитим общее событие о изменении героя
-  this.emit(this.EVENTS.HERO_CHANGED, {
+  stateObserver.notify(STATE_EVENTS.HERO_CHANGED, {
     timestamp: new Date().toISOString(),
     operations: operations,
-    categories: Object.keys(operationGroups)
+    results: result.results
   });
   
-  console.log('✅ applyOperations завершен');
+  // Проверяем смерть героя после изменений
+  checkHeroDeath();
+  
+  console.log('✅ applyOperations завершен, применено операций:', result.applied);
   return true;
 }
 
@@ -1043,7 +1051,7 @@ function saveStateToLocalStorage() {
   
   try {
     // Используем текущее состояние
-    const currentState = State.getState(); // Используем метод getState() вместо несуществующей getCurrentState()
+    const currentState = State.getState();
     
     // Обновляем время сохранения
     currentState.lastSaveTime = new Date().toISOString();
@@ -1283,6 +1291,14 @@ export const State = {
   
   syncOrganizationRank,
   setGameType,
+  
+  // Новые функции для работы с копиями состояния (используют OperationsService)
+  applyOperationToState,
+  applyOperationsToState,
+  decreaseBuffDurationsInState,
+  getGameItemValueFromState,
+  calculateStatChanges,
+  calculateStateForAI,
   
   resetFullGame,
   
