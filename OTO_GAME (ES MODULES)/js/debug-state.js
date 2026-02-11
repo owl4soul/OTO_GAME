@@ -285,6 +285,98 @@ export const DebugState = {
       console.log('❌ Доступные части:', Object.keys(parts).join(', '));
     }
   },
+
+  /**
+   * ПОЛНОЕ ДЕРЕВО СОСТОЯНИЯ — детальный вывод всего state
+   * Использовать в консоли: DebugState.stFull()
+   */
+  stFull: function() {
+    const s = State.getState();
+
+    console.log('🌳 ПОЛНОЕ ДЕРЕВО STATE — ВСЕ УРОВНИ');
+    console.log('='.repeat(60));
+    console.log(`🆔 Game ID: ${s.gameId}`);
+    console.log(`🔄 Ход: ${s.turnCount}`);
+    console.log(`📦 Всего записей в герое: ${s.heroState?.length || 0}`);
+    console.log(`🧠 Всего мыслей: ${s.thoughtsOfHero?.length || 0}`);
+    console.log('='.repeat(60));
+
+    // Рекурсивная функция для вывода дерева
+    const printTree = (obj, label, indent = '') => {
+      if (obj === null || obj === undefined) {
+        console.log(`${indent}⚠️ null/undefined`);
+        return;
+      }
+
+      const type = typeof obj;
+      if (type !== 'object' || obj === null) {
+        console.log(`${indent}🔹 ${label}: ${obj} (${type})`);
+        return;
+      }
+
+      if (Array.isArray(obj)) {
+        console.group(`${indent}📋 ${label} (массив, длина: ${obj.length})`);
+        if (obj.length === 0) {
+          console.log(`${indent}   ⚪ пустой массив`);
+        } else {
+          obj.forEach((item, idx) => {
+            if (item && typeof item === 'object' && !Array.isArray(item)) {
+              // объект внутри массива — покажем его id, если есть
+              const idHint = item.id ? ` id="${item.id}"` : '';
+              printTree(item, `[${idx}]${idHint}`, indent + '   ');
+            } else {
+              printTree(item, `[${idx}]`, indent + '   ');
+            }
+          });
+        }
+        console.groupEnd();
+        return;
+      }
+
+      // Обычный объект
+      console.group(`${indent}📁 ${label} (объект)`);
+      const entries = Object.entries(obj);
+      if (entries.length === 0) {
+        console.log(`${indent}   ⚪ пустой объект`);
+      } else {
+        entries.forEach(([key, val]) => {
+          if (val && typeof val === 'object') {
+            printTree(val, key, indent + '   ');
+          } else {
+            console.log(`${indent}   🔸 ${key}: ${val} (${typeof val})`);
+          }
+        });
+      }
+      console.groupEnd();
+    };
+
+    // Вывод всех корневых полей в порядке значимости
+    const rootKeys = [
+      'gameId', 'turnCount',         // мета
+      'heroState',                  // состояние героя
+      'gameState',                 // состояние игры
+      'thoughtsOfHero',            // мысли
+      'settings',                 // настройки
+      'ui'                        // интерфейс
+    ];
+
+    // Добавляем остальные ключи, которые не перечислили явно
+    const otherKeys = Object.keys(s).filter(k => !rootKeys.includes(k));
+
+    rootKeys.concat(otherKeys).forEach(key => {
+      const value = s[key];
+      if (value !== undefined) {
+        printTree(value, key, '');
+      } else {
+        console.log(`⚠️ ${key} — отсутствует в состоянии`);
+      }
+    });
+
+    console.log('='.repeat(60));
+    console.log('✅ КОНЕЦ ПОЛНОГО ДЕРЕВА');
+    
+    return s; // возвращаем полное состояние на случай, если нужно в консоли продолжить
+  },
   
   /**
    * Инициализация глобальных команд для консоли
@@ -299,6 +391,7 @@ export const DebugState = {
       window.stFind = this.stFind.bind(this);
       window.stJson = this.stJson.bind(this);
       window.stPart = this.stPart.bind(this);
+      window.stFull = this.stFull.bind(this); // НОВАЯ КОМАНДА
       
       // Сообщение о доступных командах
       console.log(`
@@ -309,11 +402,13 @@ export const DebugState = {
 • stFind("текст") - Поиск объектов
 • stJson()      - Экспорт в JSON
 • stPart('hero') - Частичный просмотр
+• stFull()      - ПОЛНОЕ ДЕРЕВО состояния (все разделы, рекурсивно) 🌳
 
 💡 Примеры:
 stFind("will")    - найти всё связанное с волей
 stFind("effect")  - найти все эффекты
 stPart('scene')   - посмотреть текущую сцену
+stFull()          - вывести всё дерево целиком
       `);
     }
   }

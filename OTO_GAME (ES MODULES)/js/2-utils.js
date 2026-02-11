@@ -996,6 +996,24 @@ function formatJsonWithUnicode(jsonString) {
     }
 }
 
+
+    /**
+     * Экранирует HTML-спецсимволы для безопасной вставки в DOM.
+     * @param {string} unsafe - Неэкранированная строка
+     * @returns {string} Экранированная строка
+     */
+   function escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) {
+            return '';
+        }
+        return String(unsafe)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');  // апостроф (важно для атрибутов)
+    }
+    
 /**
  * Показывает всплывающее уведомление (toast)
  * @param {string} message - Сообщение для показа
@@ -1237,6 +1255,7 @@ export const Utils = {
     decodeUnicodeEscapes,
     safeFormatJsonWithUnicode,
     formatJsonWithUnicode,
+    escapeHtml,
     getOperationDetails,
     showToast
 };

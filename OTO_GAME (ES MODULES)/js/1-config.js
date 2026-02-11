@@ -8,14 +8,16 @@ import { PROMPTS } from './prompts.js';
 export const CONFIG = {
     // Игровые настройки
     maxChoices: 3,
-    historyContext: 5,
+    fullTurnsToSendInContext: 3, // полных сцен для отправки ИИ для поддержания контекста
     activeContextTurns: 3,
     
-    maxRetries: 3,
+    historyContext: 1000, // ходов в отображении истории
+    
+    maxRetries: 2,
     autoRepairAttempts: 2,
     
     retryDelayMs: 1000,
-    requestTimeout: 90000,
+    requestTimeout: 120000,
     stateVersion: '4.1.0', // Обновляем версию
     
     // Шаги масштабирования

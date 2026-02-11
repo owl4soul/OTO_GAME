@@ -186,7 +186,7 @@ function buildContextBlock(state) {
   }
   
   // Г. КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ходы)
-  const turnsToTake = state.gameState.summary ? CONFIG.activeContextTurns : CONFIG.historyContext;
+  const turnsToTake = state.gameState.summary ? CONFIG.activeContextTurns : CONFIG.fullTurnsToSendInContext;
   const historySlice = state.gameState.history.slice(-turnsToTake);
   
   if (historySlice.length > 0) {

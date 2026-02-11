@@ -3,6 +3,7 @@
 
 import { State } from './3-state.js';
 import { DOM } from './4-dom.js';
+import { Utils } from '././2-utils.js';
 
 const dom = DOM.getDOM();
 
@@ -18,26 +19,11 @@ class HistoryUI {
     // =========== КОМПОНЕНТЫ ДЛЯ ОТОБРАЖЕНИЯ ===========
     
     /**
-     * БЕЗОПАСНОЕ экранирование HTML
-     */
-    escapeHtml(text) {
-        if (text == null) return '';
-        if (typeof text !== 'string') text = String(text);
-        
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
-    
-    /**
      * Форматирование текста с сохранением структуры абзацев
      */
     formatTextWithParagraphs(text) {
         if (!text) return '';
-        const escaped = this.escapeHtml(text);
+        const escaped = Utils.escapeHtml(text);
         
         const paragraphs = escaped.split(/(?:\r?\n){2,}/);
         const nonEmptyParagraphs = paragraphs.filter(p => p.trim().length > 0);
@@ -203,8 +189,8 @@ class HistoryUI {
                 <span style="color:${accentColor};font-weight:bold;font-size:0.8em;">Ход ${turnNumber}</span>
             </div>
             <div style="display:flex;justify-content:space-between;font-size:0.65em;">
-                <span style="color:#aaa;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${this.escapeHtml(collapsedSummary)}">
-                    ${this.escapeHtml(collapsedSummary)}
+                <span style="color:#aaa;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${Utils.escapeHtml(collapsedSummary)}">
+                    ${Utils.escapeHtml(collapsedSummary)}
                 </span>
                 <span style="color:#666;margin-left:4px;white-space:nowrap;">
                     ${actionCount} ${this.getActionWord(actionCount)}
@@ -315,7 +301,7 @@ class HistoryUI {
                         <i class="fas fa-hand-point-right" style="font-size:0.6em;"></i> Выбор
                     </div>
                     <div style="color:#ddd;font-size:0.75em;">
-                        ${this.escapeHtml(entry.choice)}
+                        ${Utils.escapeHtml(entry.choice)}
                     </div>
                 </div>
             `;
@@ -380,7 +366,7 @@ class HistoryUI {
                 displayValue = `[${value.length}]`;
                 color = '#9c88ff';
             } else if (typeof value === 'string') {
-                const safeValue = this.escapeHtml(value);
+                const safeValue = Utils.escapeHtml(value);
                 displayValue = value.length > 15 ? `"${safeValue.substring(0,15)}..."` : `"${safeValue}"`;
                 color = '#ccc';
             } else if (typeof value === 'object') {
@@ -388,7 +374,7 @@ class HistoryUI {
                 color = '#48dbfb';
             }
             
-            const safeKey = this.escapeHtml(key.length > 8 ? key.substring(0,8) + '...' : key);
+            const safeKey = Utils.escapeHtml(key.length > 8 ? key.substring(0,8) + '...' : key);
             
             html += `<span style="background:rgba(0,0,0,0.2);padding:1px 2px;border-radius:1px;border-left:1px solid ${color};">
                 <span style="color:#fbc531;">${safeKey}</span>
@@ -444,7 +430,7 @@ class HistoryUI {
             html += `
                 <div style="padding:1px 2px;background:${bgColor};border-left:2px solid ${color};border-radius:1px;font-size:0.75em;">
                     <span style="color:${color};font-weight:bold;">${icon}</span>
-                    <span style="color:#ddd;margin-left:2px;">${this.escapeHtml(shortText)}</span>
+                    <span style="color:#ddd;margin-left:2px;">${Utils.escapeHtml(shortText)}</span>
                 </div>
             `;
         });

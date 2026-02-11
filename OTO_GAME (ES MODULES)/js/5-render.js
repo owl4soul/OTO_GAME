@@ -1393,11 +1393,71 @@ function updateModelStats() {
 }
 
 // ====================================================================
-// УПРАВЛЕНИЕ АУДИТ-ЛОГОМ
+// АУДИТ-ЛОГ: РЕНДЕРИНГ, КОПИРОВАНИЕ, ЭКСПОРТ
 // ====================================================================
+// ------------------ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АУДИТА ------------------
 
 /**
- * Обновляет счетчик записей в аудит-логе
+ * Безопасно форматирует JSON для отображения с реальными переносами строк.
+ * - Если data — строка, пытается распарсить и затем красиво сериализовать.
+ * - Если data — объект, сериализует с отступами.
+ * - Затем заменяет все экранированные \n на реальные переносы строк.
+ */
+function formatJsonForDisplay(data) {
+    if (!data) return '';
+    let pretty;
+    try {
+        if (typeof data === 'string') {
+            const parsed = JSON.parse(data);
+            pretty = JSON.stringify(parsed, null, 2);
+        } else {
+            pretty = JSON.stringify(data, null, 2);
+        }
+        // Заменяем \n на реальные переносы строк, \t на табуляцию и т.д.
+        return pretty
+            .replace(/\\n/g, '\n')
+            .replace(/\\t/g, '\t')
+            .replace(/\\r/g, '\r');
+    } catch (e) {
+        // Не JSON — показываем как есть
+        return String(data);
+    }
+}
+
+/**
+ * Безопасно форматирует JSON для КОПИРОВАНИЯ (сохраняет валидную структуру).
+ * Возвращает строку, пригодную для вставки как JSON (с экранированными \n).
+ */
+function formatJsonForCopy(data) {
+    if (!data) return '';
+    try {
+        if (typeof data === 'string') {
+            const parsed = JSON.parse(data);
+            return JSON.stringify(parsed, null, 2);
+        } else {
+            return JSON.stringify(data, null, 2);
+        }
+    } catch (e) {
+        return String(data);
+    }
+}
+
+/**
+ * Проверяет, является ли данные валидным JSON.
+ */
+function isValidJson(data) {
+    if (!data) return false;
+    if (typeof data === 'object') return true;
+    try {
+        JSON.parse(data);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Обновляет счётчик записей в аудит-логе.
  */
 function updateLogCount() {
     const state = State.getState();
@@ -1410,8 +1470,230 @@ function updateLogCount() {
 }
 
 /**
- * Рендерит список записей аудит-лога
+ * Универсальное копирование текста в буфер обмена с уведомлением.
  */
+function copyTextToClipboard(text, successMessage = 'Скопировано', errorMessage = 'Ошибка копирования') {
+    if (!text) {
+        showNotification('❌ Нет данных для копирования', '#e74c3c');
+        return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification(`✅ ${successMessage}`, '#4cd137');
+    }).catch(err => {
+        console.error('Ошибка копирования:', err);
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        try {
+            document.execCommand('copy');
+            showNotification(`✅ ${successMessage} (fallback)`, '#4cd137');
+        } catch (e) {
+            showNotification(`❌ ${errorMessage}`, '#e74c3c');
+        }
+        document.body.removeChild(textArea);
+    });
+}
+
+/**
+ * Показывает временное уведомление в правом верхнем углу.
+ */
+function showNotification(message, color = '#4cd137') {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${color};
+        color: white;
+        padding: 12px 16px;
+        border-radius: 6px;
+        z-index: 10000;
+        font-size: 0.85rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        opacity: 0;
+        transform: translateY(-20px);
+        transition: all 0.3s ease;
+    `;
+    notification.innerHTML = `<i class="fas fa-check-circle"></i><span>${message}</span>`;
+    document.body.appendChild(notification);
+    setTimeout(() => {
+        notification.style.opacity = '1';
+        notification.style.transform = 'translateY(0)';
+    }, 10);
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateY(-20px)';
+        setTimeout(() => {
+            if (notification.parentNode) document.body.removeChild(notification);
+        }, 300);
+    }, 2500);
+}
+
+// ------------------ ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ONCLICK ------------------
+
+/**
+ * Универсальная функция копирования содержимого аудита по ID и типу.
+ * Копирует данные в JSON-формате (с экранированными \n для валидности).
+ */
+window.copyAuditContent = function(entryId, type) {
+    const state = State.getState();
+    const entry = state.auditLog.find(e => e.id === entryId);
+    if (!entry) {
+        showNotification('❌ Запись не найдена', '#e74c3c');
+        return;
+    }
+
+    let textToCopy = '';
+    let successMsg = '';
+
+    switch (type) {
+        case 'request':
+            if (entry.requestDebug?.body) {
+                textToCopy = formatJsonForCopy(entry.requestDebug.body);
+                successMsg = 'Request скопирован';
+            } else {
+                showNotification('❌ Нет данных Request', '#e74c3c');
+                return;
+            }
+            break;
+        case 'formatted':
+            if (entry.fullResponse) {
+                textToCopy = formatJsonForCopy(entry.fullResponse);
+                successMsg = 'Форматированный ответ скопирован';
+            } else {
+                showNotification('❌ Нет форматированного ответа', '#e74c3c');
+                return;
+            }
+            break;
+        case 'raw':
+            if (entry.rawResponse) {
+                textToCopy = typeof entry.rawResponse === 'string'
+                    ? entry.rawResponse
+                    : JSON.stringify(entry.rawResponse, null, 2);
+                successMsg = 'Сырой ответ скопирован';
+            } else {
+                showNotification('❌ Нет сырого ответа', '#e74c3c');
+                return;
+            }
+            break;
+        case 'error':
+            if (entry.rawError) {
+                textToCopy = formatJsonForCopy(entry.rawError);
+                successMsg = 'Ошибка скопирована';
+            } else {
+                showNotification('❌ Нет данных ошибки', '#e74c3c');
+                return;
+            }
+            break;
+        default:
+            return;
+    }
+
+    copyTextToClipboard(textToCopy, successMsg, 'Ошибка копирования');
+};
+
+/**
+ * Копирует полную запись аудита в формате plain text.
+ * Используется кнопкой «Копировать» внизу каждой записи.
+ */
+window.copyAuditEntry = function(entryId) {
+    const state = State.getState();
+    const entry = state.auditLog.find(e => e.id === entryId);
+    if (!entry) {
+        showNotification('❌ Запись не найдена', '#e74c3c');
+        return;
+    }
+
+    let textToCopy = `=== АУДИТ ЗАПИСЬ ===\n\n`;
+    textToCopy += `ID: ${entry.id}\n`;
+    textToCopy += `Запрос: ${entry.request || 'Нет'}\n`;
+    textToCopy += `Время: ${entry.timestamp || 'Нет'}\n`;
+    textToCopy += `Статус: ${entry.status || 'Нет'}\n`;
+    textToCopy += `Модель: ${entry.model || 'Нет'}\n`;
+    textToCopy += `Провайдер: ${entry.provider || 'Нет'}\n`;
+    if (entry.d10 !== undefined && entry.d10 !== null) textToCopy += `d10: ${entry.d10}\n`;
+    textToCopy += `Токены: ${entry.tokens || 'Нет'}\n`;
+
+    textToCopy += `\n=== REQUEST PAYLOAD ===\n`;
+    if (entry.requestDebug?.body) {
+        // Для копирования используем валидный JSON с экранированными \n
+        textToCopy += formatJsonForCopy(entry.requestDebug.body) + '\n';
+    } else {
+        textToCopy += 'Нет данных\n';
+    }
+
+    textToCopy += `\n=== RESPONSE ===\n`;
+    if (entry.fullResponse) {
+        textToCopy += formatJsonForCopy(entry.fullResponse) + '\n';
+    } else if (entry.rawResponse) {
+        textToCopy += (typeof entry.rawResponse === 'string' ? entry.rawResponse : JSON.stringify(entry.rawResponse, null, 2)) + '\n';
+    } else {
+        textToCopy += 'Нет данных\n';
+    }
+
+    if (entry.rawError) {
+        textToCopy += `\n=== ERROR ===\n${formatJsonForCopy(entry.rawError)}\n`;
+    }
+
+    textToCopy += `\n=== КОНЕЦ ЗАПИСИ ===`;
+    copyTextToClipboard(textToCopy, 'Запись скопирована', 'Ошибка копирования записи');
+};
+
+/**
+ * Экспорт одной записи аудита в JSON-файл.
+ */
+window.exportSingleAuditEntry = function(entryId) {
+    const state = State.getState();
+    const entry = state.auditLog.find(e => e.id === entryId);
+    if (!entry) {
+        showNotification('❌ Запись не найдена', '#e74c3c');
+        return;
+    }
+    try {
+        const dataStr = JSON.stringify(entry, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit-entry-${entry.id}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showNotification('✅ Запись экспортирована', '#4cd137');
+    } catch (error) {
+        showNotification('❌ Ошибка экспорта', '#e74c3c');
+    }
+};
+
+/**
+ * Экспорт всего аудит-лога в JSON-файл.
+ */
+window.exportFullAuditLog = function() {
+    const state = State.getState();
+    if (!state.auditLog || state.auditLog.length === 0) {
+        showNotification('❌ Аудит-лог пуст', '#e74c3c');
+        return;
+    }
+    try {
+        const dataStr = JSON.stringify(state.auditLog, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit-log-${Date.now()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showNotification('✅ Весь лог экспортирован', '#4cd137');
+    } catch (error) {
+        showNotification('❌ Ошибка экспорта', '#e74c3c');
+    }
+};
+
+// ------------------ ОСНОВНОЙ РЕНДЕРИНГ АУДИТ-ЛОГА ------------------
+
 function renderAuditList() {
     const state = State.getState();
     const list = document.getElementById('auditList');
@@ -1421,7 +1703,6 @@ function renderAuditList() {
         return;
     }
     
-    // Берем последние 20 записей (самые свежие)
     const displayLog = state.auditLog.slice(-50);
     
     if (displayLog.length === 0) {
@@ -1440,26 +1721,30 @@ function renderAuditList() {
     displayLog.forEach(entry => {
         if (!entry) return;
         
-        // Определяем цвета в зависимости от статуса
+        // ---------- Цветовая схема ----------
         let statusColor = '#888';
         let borderColor = '#444';
         let bgColor = 'rgba(0,0,0,0.1)';
+        let responseColor = '#4cd137';
         
         if (entry.status === 'success') {
             statusColor = '#4cd137';
             borderColor = '#2d8b57';
             bgColor = 'rgba(76, 209, 55, 0.05)';
+            responseColor = '#4cd137';
         } else if (entry.status === 'error') {
             statusColor = '#e84118';
             borderColor = '#c23616';
             bgColor = 'rgba(232, 65, 24, 0.05)';
+            responseColor = '#e84118';
         } else if (entry.status === 'pending') {
             statusColor = '#fbc531';
             borderColor = '#e1b12c';
             bgColor = 'rgba(251, 197, 49, 0.05)';
+            responseColor = '#fbc531';
         }
         
-        // Заголовок записи
+        // ---------- Заголовок записи ----------
         let headerText = `
             <span style="color:${statusColor}; font-weight:bold;">${entry.timestamp || 'Нет времени'}</span>: 
             [${entry.status ? entry.status.toUpperCase() : 'UNKNOWN'}] - 
@@ -1470,55 +1755,111 @@ function renderAuditList() {
             headerText += ` <span style="color:#9c88ff;">(d10=${entry.d10})</span>`;
         }
         
-        // Детали запроса (если есть)
+        // ---------- БЛОК: REQUEST PAYLOAD ----------
         let requestHtml = '';
         if (entry.requestDebug && entry.requestDebug.body) {
-            const formattedRequest = Utils.formatJsonWithUnicode(entry.requestDebug.body);
+            // Для отображения: с реальными переносами строк
+            const displayRequest = formatJsonForDisplay(entry.requestDebug.body);
             requestHtml = `
             <details style="margin-top: 8px;">
-                <summary style="cursor:pointer; color:#aaa; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 3px;">
-                    <i class="fas fa-code"></i> Request Payload
+                <summary style="cursor:pointer; color:#aaa; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 3px; position: relative;">
+                    <!-- ТОЛЬКО ИКОНКА И ТЕКСТ - НИКАКИХ ДАННЫХ ЗАПРОСА! -->
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-share" style="color: inherit;"></i> Request Payload
+                    </span>
+                    <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'request');" 
+                          style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: #aaa; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
+                        ⧉
+                    </span>
                 </summary>
                 <pre style="font-size:0.7rem; color:#ccc; background:#111; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #333; border-radius: 4px; margin-top: 5px;">
-${(formattedRequest)}
+${Utils.escapeHtml(displayRequest)}
                 </pre>
             </details>`;
         }
         
-        // Полный ответ (если есть)
+        // ---------- БЛОК: ОТВЕТ СЕРВЕРА ----------
         let responseHtml = '';
-        if (entry.fullResponse) {
-            const formattedResponse = Utils.formatJsonWithUnicode(entry.fullResponse);
-            responseHtml = `
+        if (entry.rawResponse) {
+            const rawPretty = typeof entry.rawResponse === 'string'
+                ? entry.rawResponse
+                : JSON.stringify(entry.rawResponse, null, 2);
+            const sizeInfo = entry.responseSizeKB ?
+                ` (${entry.responseSizeKB})` :
+                ` (${rawPretty.length} символов)`;
+            
+            const hasFullResponse = !!(entry.fullResponse);
+            
+            // ---- 1. Форматированный ответ ----
+            if (hasFullResponse) {
+                const displayFormatted = formatJsonForDisplay(entry.fullResponse);
+                responseHtml += `
+                <details style="margin-top: 8px;">
+                    <summary style="cursor:pointer; color:${responseColor}; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 3px; position: relative;">
+                        <span style="display: inline-flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-reply" style="color: inherit;"></i> Форматированный ответ ${sizeInfo}
+                        </span>
+                        <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'formatted');" 
+                              style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: ${responseColor}; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
+                            ⧉
+                        </span>
+                    </summary>
+                    <pre style="font-size:0.7rem; color:${responseColor}; background:${entry.status === 'error' ? '#2d0000' : '#1a3a1a'}; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid ${responseColor}; border-radius: 4px; margin-top: 5px;">
+${Utils.escapeHtml(displayFormatted)}
+                    </pre>
+                </details>`;
+            }
+            
+            // ---- 2. Сырой ответ ----
+            const isValid = isValidJson(entry.rawResponse);
+            const rawSummaryColor = hasFullResponse ? '#aaa' : '#e74c3c';
+            
+            responseHtml += `
             <details style="margin-top: 8px;">
-                <summary style="cursor:pointer; color:${statusColor}; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 3px;">
-                    <i class="fas fa-reply"></i> Full Response
+                <summary style="cursor:pointer; color:${rawSummaryColor}; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 3px; position: relative;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-file-code" style="color: inherit;"></i> Сырой ответ ${sizeInfo}
+                        ${!hasFullResponse ? ' <span style="color:#e74c3c;">(не удалось отформатировать)</span>' : ''}
+                    </span>
+                    <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'raw');" 
+                          style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: ${rawSummaryColor}; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
+                        ⧉
+                    </span>
                 </summary>
-                <pre style="font-size:0.7rem; color:${statusColor}; background:#1a1a1a; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid ${borderColor}; border-radius: 4px; margin-top: 5px;">
-${(formattedResponse)}
+                <pre style="font-size:0.7rem; color:#ccc; background:#111; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #666; border-radius: 4px; margin-top: 5px;">
+${entry.rawResponse}
                 </pre>
+                ${isValid 
+                    ? '<div style="margin-top: 4px; color: #888; font-size:0.7rem;">✓ Ответ является валидным JSON</div>' 
+                    : '<div style="margin-top: 4px; color: #e74c3c; font-size:0.7rem;">✗ Ответ НЕ является валидным JSON</div>'}
             </details>`;
         }
         
-        // Детали ошибки (если есть)
+        // ---------- БЛОК: ДЕТАЛИ ОШИБКИ ----------
         let errorHtml = '';
         if (entry.rawError) {
-            const formattedError = Utils.formatJsonWithUnicode(entry.rawError);
+            const displayError = formatJsonForDisplay(entry.rawError);
             errorHtml = `
-            <details open style="margin-top: 8px;">
-                <summary style="cursor:pointer; color:#e84118; font-size:0.85em; padding: 5px; background: rgba(232, 65, 24, 0.1); border-radius: 3px;">
-                    <i class="fas fa-exclamation-triangle"></i> ERROR DETAILS
+            <details style="margin-top: 8px;">
+                <summary style="cursor:pointer; color:#e84118; font-size:0.85em; padding: 5px; background: rgba(232, 65, 24, 0.1); border-radius: 3px; position: relative;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-exclamation-triangle" style="color: inherit;"></i> ERROR DETAILS
+                    </span>
+                    <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'error');" 
+                          style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: #e84118; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
+                        ⧉
+                    </span>
                 </summary>
                 <pre style="font-size:0.7rem; color:#e84118; background:#2d0000; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #c23616; border-radius: 4px; margin-top: 5px;">
-${(formattedError)}
+${Utils.escapeHtml(displayError)}
                 </pre>
             </details>`;
         }
         
-        // Кнопки действий
+        // ---------- ОБЩИЕ КНОПКИ (Скачать / Копировать) ----------
         const actionButtons = `
         <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
-            <button onclick="window.Audit && window.Audit.exportSingleAuditEntry(${entry.id})" 
+            <button onclick="exportSingleAuditEntry(${entry.id})" 
                     style="padding:5px 10px; font-size:0.75rem; background:#333; color:#ccc; border:1px solid #555; border-radius:4px; cursor:pointer; transition: all 0.2s;">
                 <i class="fas fa-download"></i> Скачать
             </button>
@@ -1528,7 +1869,7 @@ ${(formattedError)}
             </button>
         </div>`;
         
-        // Собираем всю запись
+        // ---------- СБОРКА ----------
         listHTML += `
         <div style="padding:12px; border-bottom:1px solid #333; border-left: 4px solid ${borderColor}; margin-bottom: 10px; background: ${bgColor}; border-radius: 4px;">
             <div style="font-size: 0.85rem; margin-bottom: 10px; line-height: 1.4;">${headerText}</div>
@@ -1541,102 +1882,6 @@ ${(formattedError)}
     
     list.innerHTML = listHTML;
     updateLogCount();
-    
-    // Добавляем глобальную функцию копирования, если еще не добавлена
-    if (!window.copyAuditEntry) {
-        window.copyAuditEntry = function(entryId) {
-            const state = State.getState();
-            const entry = state.auditLog.find(e => e.id === entryId);
-            
-            if (!entry) {
-                console.error('Запись аудита не найдена:', entryId);
-                return;
-            }
-            
-            let textToCopy = `=== АУДИТ ЗАПИСЬ ===\n\n`;
-            textToCopy += `ID: ${entry.id}\n`;
-            textToCopy += `Запрос: ${entry.request || 'Нет'}\n`;
-            textToCopy += `Время: ${entry.timestamp || 'Нет'}\n`;
-            textToCopy += `Статус: ${entry.status || 'Нет'}\n`;
-            textToCopy += `Модель: ${entry.model || 'Нет'}\n`;
-            textToCopy += `Провайдер: ${entry.provider || 'Нет'}\n`;
-            if (entry.d10 !== undefined && entry.d10 !== null) {
-                textToCopy += `d10: ${entry.d10}\n`;
-            }
-            textToCopy += `Токены: ${entry.tokens || 'Нет'}\n`;
-            
-            textToCopy += `\n=== REQUEST PAYLOAD ===\n`;
-            if (entry.requestDebug?.body) {
-                textToCopy += Utils.formatJsonWithUnicode(entry.requestDebug.body) + '\n';
-            } else {
-                textToCopy += 'Нет данных\n';
-            }
-            
-            textToCopy += `\n=== RESPONSE ===\n`;
-            if (entry.fullResponse) {
-                textToCopy += Utils.formatJsonWithUnicode(entry.fullResponse) + '\n';
-            } else if (entry.rawResponse){
-                textToCopy += Utils.formatJsonWithUnicode(entry.rawResponse) + '\n';
-            } else {
-                textToCopy += 'Нет данных\n';
-            }
-            
-            
-            if (entry.rawError) {
-                textToCopy += `\n=== ERROR ===\n${Utils.formatJsonWithUnicode(entry.rawError)}\n`;
-            }
-            
-            textToCopy += `\n=== КОНЕЦ ЗАПИСИ ===`;
-            
-            // Копируем в буфер обмена
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                // Показываем уведомление
-                const notification = document.createElement('div');
-                notification.style.cssText = `
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    background: #4cd137;
-                    color: white;
-                    padding: 12px 16px;
-                    border-radius: 6px;
-                    z-index: 10000;
-                    font-size: 0.85rem;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                `;
-                notification.innerHTML = `
-                    <i class="fas fa-check-circle"></i>
-                    <span>Запись скопирована в буфер обмена</span>
-                `;
-                document.body.appendChild(notification);
-                
-                // Автоматически скрываем через 2 секунды
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        document.body.removeChild(notification);
-                    }
-                }, 2000);
-            }).catch(err => {
-                console.error('Ошибка копирования в буфер обмена:', err);
-                
-                // Альтернативный метод для старых браузеров
-                const textArea = document.createElement('textarea');
-                textArea.value = textToCopy;
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    console.log('Скопировано через execCommand');
-                } catch (e) {
-                    console.error('Не удалось скопировать:', e);
-                }
-                document.body.removeChild(textArea);
-            });
-        };
-    }
 }
 
 // ====================================================================
@@ -2005,6 +2250,14 @@ export const Render = {
     // Инициализация
     setupStateObservers
 };
+
+// ГЛОБАЛЬНЫЕ ССЫЛКИ (ДЛЯ ONCLICK)
+window.copyAuditContent = window.copyAuditContent;
+window.copyAuditEntry = window.copyAuditEntry;
+window.exportSingleAuditEntry = window.exportSingleAuditEntry;
+window.exportFullAuditLog = window.exportFullAuditLog;
+window.showNotification = showNotification;
+window.copyTextToClipboard = copyTextToClipboard;
 
 console.log('✅ Модуль 5-render.js загружен успешно');
 console.log('📋 Функциональность: рендеринг сцены, выборов, памяти ГМ с полным рекурсивным раскрытием');
