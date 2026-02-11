@@ -54,6 +54,7 @@
 
 import { CONFIG } from './1-config.js';
 import { Utils } from './2-utils.js';
+import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js';
 
 // Константы для типов game_item
 export const GAME_ITEM_TYPES = {
@@ -100,10 +101,16 @@ class OperationsService {
      * @returns {Object} - Результат {success: boolean, action: string, warnings: Array, error?: string, details: Object}
      */
     applyOperation(operation, targetState) {
+        const operationId = log.operation(operation, { 
+            targetStateLength: targetState?.length,
+            debug: this.DEBUG_MODE 
+        });
+
         if (this.DEBUG_MODE) {
-            console.group(`🔧 [OperationsService] Операция ${operation.operation} над ${operation.id}`);
-            console.log('Состояние до:', JSON.parse(JSON.stringify(targetState)));
-            console.log('Операция:', operation);
+            log.debug(LOG_CATEGORIES.OPERATIONS, `🔧 Операция ${operation.operation} над ${operation.id}`, {
+                before: JSON.parse(JSON.stringify(targetState?.find(item => item.id === operation.id))),
+                operation
+            });
         }
         
         // 1. Валидация базовой структуры операции
@@ -117,14 +124,15 @@ class OperationsService {
             
             this.logError(`❌ Некорректная операция: ${validation.errors.join(', ')}`, errorDetails);
             
-            if (this.DEBUG_MODE) console.groupEnd();
-            
-            return {
+            const result = {
                 success: false,
                 action: 'validation_failed',
                 error: `Некорректная операция: ${validation.errors.join(', ')}`,
                 details: errorDetails
             };
+            
+            log.operationResult(operationId, result);
+            return result;
         }
         
         const [type, name] = operation.id.split(':');
@@ -186,14 +194,17 @@ class OperationsService {
             };
         }
         
-        // 3. Логирование и возврат результата
-        this.logOperation(operation, result);
+        // 3. Логирование результата
+        log.operationResult(operationId, result);
         
         if (this.DEBUG_MODE) {
-            console.log('Результат:', result);
-            console.log('Состояние после:', JSON.parse(JSON.stringify(targetState)));
-            console.groupEnd();
+            log.debug(LOG_CATEGORIES.OPERATIONS, 'Результат операции', {
+                result,
+                after: JSON.parse(JSON.stringify(targetState?.find(item => item.id === operation.id)))
+            });
         }
+        
+        this.logOperation(operation, result);
         
         return result;
     }
@@ -217,6 +228,11 @@ class OperationsService {
                 errors: [error]
             };
         }
+
+        log.info(LOG_CATEGORIES.OPERATIONS, '📦 Применение массива операций', {
+            count: operations.length,
+            targetStateLength: targetState.length
+        });
         
         const results = [];
         const errors = [];
@@ -261,7 +277,9 @@ class OperationsService {
         
         // Логируем сводку по операциям
         if (errors.length > 0) {
-            console.warn(`⚠️ Применение операций: ${appliedCount}/${operations.length} успешно, ${errors.length} с ошибками`);
+            log.warn(LOG_CATEGORIES.OPERATIONS, `⚠️ Применение операций: ${appliedCount}/${operations.length} успешно, ${errors.length} с ошибками`, summary);
+        } else {
+            log.info(LOG_CATEGORIES.OPERATIONS, `✅ Применение операций: ${appliedCount}/${operations.length} успешно`, summary);
         }
         
         return summary;
@@ -273,6 +291,9 @@ class OperationsService {
     getAndClearErrors() {
         const errors = [...this.errorBuffer];
         this.errorBuffer = [];
+        if (errors.length > 0) {
+            log.debug(LOG_CATEGORIES.ERROR_TRACKING, 'Очистка буфера ошибок операций', { errorsCount: errors.length });
+        }
         return errors;
     }
     
@@ -326,7 +347,7 @@ class OperationsService {
         switch (operation.operation) {
             case OPERATIONS.ADD:
                 // Для buff/debuff обязателен duration
-                if (operation.id && operation.id.startsWith('buff:') || operation.id.startsWith('debuff:')) {
+                if (operation.id && (operation.id.startsWith('buff:') || operation.id.startsWith('debuff:'))) {
                     if (operation.duration === undefined || typeof operation.duration !== 'number') {
                         errors.push(`Для ${operation.id.split(':')[0]} обязателен числовой duration`);
                     }
@@ -385,6 +406,14 @@ class OperationsService {
             }
         }
         
+        // Логируем ошибки валидации, если они есть
+        if (errors.length > 0) {
+            log.debug(LOG_CATEGORIES.VALIDATION, 'Ошибки валидации операции', {
+                operation,
+                errors
+            });
+        }
+        
         return {
             isValid: errors.length === 0,
             errors: errors.length > 0 ? errors : null
@@ -401,6 +430,8 @@ class OperationsService {
             const newItem = this.createNewGameItem(operation, type, name);
             targetState.push(newItem);
             
+            log.debug(LOG_CATEGORIES.OPERATIONS, `➕ ADD: создан ${operation.id}`, { value: newItem.value });
+            
             return {
                 success: true,
                 action: 'created',
@@ -415,6 +446,8 @@ class OperationsService {
         }
         
         // Для нестекуемых типов - игнорируем (не создаем дубликаты)
+        log.debug(LOG_CATEGORIES.OPERATIONS, `⚠️ ADD: ${operation.id} уже существует, дубликат не создан`);
+        
         return {
             success: false,
             action: 'ignored',
@@ -430,6 +463,7 @@ class OperationsService {
     applyRemove(operation, type, name, existingItem, targetState, existingIndex) {
         // Если item не существует - ничего не делаем
         if (!existingItem) {
+            log.debug(LOG_CATEGORIES.OPERATIONS, `❌ REMOVE: ${operation.id} не найден`);
             return {
                 success: false,
                 action: 'ignored',
@@ -440,6 +474,7 @@ class OperationsService {
         
         // Запрет на удаление определенных типов
         if (type === GAME_ITEM_TYPES.STAT) {
+            log.warn(LOG_CATEGORIES.OPERATIONS, `⛔ REMOVE: попытка удалить stat ${operation.id}`);
             return {
                 success: false,
                 action: 'rejected',
@@ -449,6 +484,7 @@ class OperationsService {
         }
         
         if (type === GAME_ITEM_TYPES.SKILL) {
+            log.warn(LOG_CATEGORIES.OPERATIONS, `⛔ REMOVE: попытка удалить skill ${operation.id}`);
             return {
                 success: false,
                 action: 'rejected',
@@ -464,6 +500,7 @@ class OperationsService {
         
         // Полное удаление
         targetState.splice(existingIndex, 1);
+        log.debug(LOG_CATEGORIES.OPERATIONS, `🗑️ REMOVE: удален ${operation.id}`);
         
         return {
             success: true,
@@ -479,6 +516,7 @@ class OperationsService {
     applyModify(operation, type, name, existingItem, targetState, existingIndex) {
         // Проверка, что тип поддерживает MODIFY (числовые значения)
         if (!this.supportsModify(type)) {
+            log.debug(LOG_CATEGORIES.OPERATIONS, `⛔ MODIFY: ${type} не поддерживает MODIFY`);
             return {
                 success: false,
                 action: 'rejected',
@@ -497,7 +535,7 @@ class OperationsService {
             if (type === GAME_ITEM_TYPES.STAT) {
                 const clampedValue = Math.max(0, Math.min(100, newValue));
                 if (clampedValue !== newValue) {
-                    console.warn(`⚠️ ${operation.id} ограничен от ${newValue} до ${clampedValue}`);
+                    log.warn(LOG_CATEGORIES.OPERATIONS, `⚠️ ${operation.id} ограничен от ${newValue} до ${clampedValue}`);
                 }
             }
             
@@ -509,6 +547,8 @@ class OperationsService {
             };
             
             targetState.push(newItem);
+            
+            log.debug(LOG_CATEGORIES.OPERATIONS, `➕ MODIFY: создан ${operation.id} = ${newValue} (дефолт ${baseValue} + ${operation.delta})`);
             
             return {
                 success: true,
@@ -550,6 +590,7 @@ class OperationsService {
             if (!isNaN(numericValue)) {
                 newValue = numericValue + operation.delta;
             } else {
+                log.warn(LOG_CATEGORIES.OPERATIONS, `⚠️ MODIFY: ${operation.id} имеет нечисловое значение: ${oldValue}`);
                 return {
                     success: false,
                     action: 'failed',
@@ -564,6 +605,8 @@ class OperationsService {
             ...existingItem,
             value: newValue
         };
+        
+        log.debug(LOG_CATEGORIES.OPERATIONS, `📊 MODIFY: ${operation.id}: ${oldValue} → ${newValue} (Δ${operation.delta})`);
         
         return {
             success: true,
@@ -592,6 +635,8 @@ class OperationsService {
             
             targetState.push(newItem);
             
+            log.debug(LOG_CATEGORIES.OPERATIONS, `➕ SET: создан ${operation.id} = ${operation.value}`);
+            
             return {
                 success: true,
                 action: 'created',
@@ -601,6 +646,7 @@ class OperationsService {
         }
         
         // Если существует - БЕЗОПАСНОЕ обновление (не теряем данные)
+        const oldValue = existingItem.value;
         const updatedItem = {
             ...existingItem,
             // Обновляем только если явно передано значение
@@ -613,10 +659,15 @@ class OperationsService {
         
         targetState[existingIndex] = updatedItem;
         
+        log.debug(LOG_CATEGORIES.OPERATIONS, `🔄 SET: обновлен ${operation.id}`, {
+            old: oldValue,
+            new: operation.value
+        });
+        
         return {
             success: true,
             action: 'updated',
-            oldValue: existingItem.value,
+            oldValue: oldValue,
             newValue: operation.value,
             message: `${operation.id} обновлен`
         };
@@ -642,9 +693,9 @@ class OperationsService {
                 default:
                     return {
                         success: false,
-                            action: 'stacking_failed',
-                            reason: 'unknown_stackable_type',
-                            message: `Неизвестный stackable тип: ${type}`
+                        action: 'stacking_failed',
+                        reason: 'unknown_stackable_type',
+                        message: `Неизвестный stackable тип: ${type}`
                     };
             }
         } catch (error) {
@@ -665,35 +716,46 @@ class OperationsService {
      */
     stackBuffDebuff(operation, existingItem, targetState, index) {
         const updatedItem = { ...existingItem };
+        const changes = {};
         
         // 1. Суммирование значений (если числовые)
         if (typeof operation.value === 'number' && typeof updatedItem.value === 'number') {
+            const oldVal = updatedItem.value;
             updatedItem.value += operation.value;
+            changes.value = { old: oldVal, new: updatedItem.value, delta: operation.value };
         }
         
         // 2. Максимальная длительность
         if (operation.duration !== undefined) {
+            const oldDur = updatedItem.duration;
             if (updatedItem.duration !== undefined) {
                 updatedItem.duration = Math.max(updatedItem.duration, operation.duration);
             } else {
                 updatedItem.duration = operation.duration;
             }
+            changes.duration = { old: oldDur, new: updatedItem.duration };
         }
         
         // 3. Учет оригинальной длительности для стеков
         if (operation.duration && !updatedItem.originalDuration) {
             updatedItem.originalDuration = operation.duration;
+            changes.originalDuration = { new: operation.duration };
         }
         
         // 4. Увеличение счетчика стеков для нечисловых значений
         if (operation.value !== undefined && updatedItem.value !== undefined &&
             typeof operation.value !== 'number') {
+            const oldStack = updatedItem.stack || 1;
             updatedItem.stack = (updatedItem.stack || 1) + 1;
+            changes.stack = { old: oldStack, new: updatedItem.stack };
+            
             updatedItem.description = updatedItem.description ?
                 `${updatedItem.description} (x${updatedItem.stack})` : `(x${updatedItem.stack})`;
         }
         
         targetState[index] = updatedItem;
+        
+        log.debug(LOG_CATEGORIES.OPERATIONS, `📚 Стекинг ${operation.id}`, changes);
         
         return {
             success: true,
@@ -701,6 +763,7 @@ class OperationsService {
             newValue: updatedItem.value,
             duration: updatedItem.duration,
             stack: updatedItem.stack,
+            changes,
             message: `${operation.id} стекован: значение ${updatedItem.value}, длительность ${updatedItem.duration}`
         };
     }
@@ -711,24 +774,33 @@ class OperationsService {
      */
     stackBlessCurse(operation, existingItem, targetState, index) {
         const updatedItem = { ...existingItem };
+        const changes = {};
         
         // Если оба значения числовые - суммируем
         if (typeof operation.value === 'number' && typeof updatedItem.value === 'number') {
+            const oldVal = updatedItem.value;
             updatedItem.value += operation.value;
+            changes.value = { old: oldVal, new: updatedItem.value, delta: operation.value };
         } else {
             // Иначе увеличиваем счетчик стеков
+            const oldStack = updatedItem.stack || 1;
             updatedItem.stack = (updatedItem.stack || 1) + 1;
+            changes.stack = { old: oldStack, new: updatedItem.stack };
+            
             updatedItem.description = updatedItem.description ?
                 `${updatedItem.description} (x${updatedItem.stack})` : `(x${updatedItem.stack})`;
         }
         
         targetState[index] = updatedItem;
         
+        log.debug(LOG_CATEGORIES.OPERATIONS, `📚 Стекинг ${operation.id}`, changes);
+        
         return {
             success: true,
             action: 'stacked',
             newValue: updatedItem.value,
             stack: updatedItem.stack,
+            changes,
             message: `${operation.id} стекован: значение ${updatedItem.value}, стеки ${updatedItem.stack}`
         };
     }
@@ -762,6 +834,7 @@ class OperationsService {
         
         if (updatedItem.stack <= 0) {
             targetState[index] = null;
+            log.debug(LOG_CATEGORIES.OPERATIONS, `🧹 Дестекинг ${operation.id}: удалён стек по достижении 0`);
             return {
                 success: true,
                 action: 'destacked',
@@ -769,6 +842,7 @@ class OperationsService {
                 message: `${operation.id} удалён стек по достижении 0`
             };
         } else {
+            log.debug(LOG_CATEGORIES.OPERATIONS, `📉 Дестекинг ${operation.id}: стек уменьшен до ${updatedItem.stack}`);
             return {
                 success: true,
                 action: 'destacked',
@@ -776,7 +850,6 @@ class OperationsService {
                 message: `${operation.id} уменьшен стек до ${updatedItem.stack || 1}`
             };
         }
-        
     }
     
     /**
@@ -888,7 +961,7 @@ class OperationsService {
     }
     
     /**
-     * Логирует ошибку с деталями
+     * Логирует ошибку с деталями через логгер
      * @private
      */
     logError(message, details = {}) {
@@ -899,7 +972,7 @@ class OperationsService {
             stack: new Error().stack
         };
         
-        console.error('❌ Ошибка OperationsService:', message, details);
+        log.error(LOG_CATEGORIES.ERROR_TRACKING, message, { ...details, errorEntry });
         
         // Также сохраняем в специальный лог ошибок
         const errorLog = JSON.parse(localStorage.getItem('oto_operations_errors') || '[]');
@@ -919,13 +992,19 @@ class OperationsService {
      */
     decreaseBuffDurations(targetState) {
         if (!Array.isArray(targetState)) {
-            this.logError('Некорректный targetState для decreaseBuffDurations', { targetState });
-            return { processed: 0, removed: 0, updated: 0, errors: ['Некорректный targetState'] };
+            const error = 'Некорректный targetState для decreaseBuffDurations';
+            this.logError(error, { targetState });
+            return { processed: 0, removed: 0, updated: 0, errors: [error] };
         }
+        
+        log.info(LOG_CATEGORIES.OPERATIONS, '⏳ Уменьшение длительности эффектов', {
+            targetStateLength: targetState.length
+        });
         
         let processed = 0;
         let removed = 0;
         let updated = 0;
+        const details = [];
         
         // Обрабатываем в обратном порядке для безопасного удаления
         for (let i = targetState.length - 1; i >= 0; i--) {
@@ -938,14 +1017,23 @@ class OperationsService {
                     item.duration !== undefined && item.duration > 0) {
                     
                     processed++;
+                    const oldDuration = item.duration;
                     item.duration -= 1;
                     
                     if (item.duration <= 0) {
                         // Для стеков уменьшаем стек вместо удаления
                         if (item.stack && item.stack > 1) {
+                            const oldStack = item.stack;
                             item.stack -= 1;
                             item.duration = item.originalDuration || 1; // Восстанавливаем длительность
                             updated++;
+                            
+                            details.push({
+                                id: item.id,
+                                action: 'stack_decreased',
+                                stack: { old: oldStack, new: item.stack },
+                                duration: { old: oldDuration, new: item.duration }
+                            });
                             
                             if (item.stack === 1) {
                                 delete item.stack;
@@ -953,11 +1041,21 @@ class OperationsService {
                             }
                         } else {
                             // Полное удаление
+                            details.push({
+                                id: item.id,
+                                action: 'removed',
+                                duration: oldDuration
+                            });
                             targetState.splice(i, 1);
                             removed++;
                         }
                     } else {
                         updated++;
+                        details.push({
+                            id: item.id,
+                            action: 'duration_decreased',
+                            duration: { old: oldDuration, new: item.duration }
+                        });
                     }
                 }
             } catch (error) {
@@ -966,7 +1064,14 @@ class OperationsService {
             }
         }
         
-        return { processed, removed, updated };
+        log.info(LOG_CATEGORIES.OPERATIONS, '✅ Уменьшение длительности завершено', {
+            processed,
+            updated,
+            removed,
+            details: details.slice(0, 5) // логируем первые 5 для компактности
+        });
+        
+        return { processed, removed, updated, details };
     }
     
     /**
@@ -1018,6 +1123,13 @@ class OperationsService {
                 }
                 return total;
             }, 0);
+            
+            log.debug(LOG_CATEGORIES.GAME_STATE, '📊 Расчет изменений состояний', {
+                totalChanges: changes.totalChanges,
+                stats: Object.keys(changes.stats).length,
+                buffs: changes.buffs.added.length + changes.buffs.removed.length + changes.buffs.updated.length,
+                inventory: changes.inventory.added.length + changes.inventory.removed.length
+            });
             
         } catch (error) {
             this.logError('Ошибка при расчете изменений состояний', { error, oldState, newState });
@@ -1110,7 +1222,7 @@ class OperationsService {
     setDebugMode(enabled) {
         this.DEBUG_MODE = enabled;
         localStorage.setItem('oto_debug_operations', enabled.toString());
-        console.log(`🔧 Режим отладки операций: ${enabled ? 'ВКЛ' : 'ВЫКЛ'}`);
+        log.info(LOG_CATEGORIES.OPERATIONS, `🔧 Режим отладки операций: ${enabled ? 'ВКЛ' : 'ВЫКЛ'}`);
     }
     
     /**
@@ -1136,6 +1248,7 @@ class OperationsService {
         this.errorBuffer = [];
         localStorage.removeItem('oto_operations_log');
         localStorage.removeItem('oto_operations_errors');
+        log.info(LOG_CATEGORIES.OPERATIONS, '🗑️ Журналы операций и ошибок очищены');
     }
     
     /**
@@ -1172,6 +1285,8 @@ class OperationsService {
         
         report.successRate = this.operationLog.length > 0 ?
             Math.round((successCount / this.operationLog.length) * 100) : 0;
+        
+        log.debug(LOG_CATEGORIES.PERFORMANCE, '📈 Отчет OperationsService', report);
         
         return report;
     }

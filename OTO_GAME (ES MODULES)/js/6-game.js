@@ -10,6 +10,7 @@ import { API } from './7-api-facade.js';
 import { Saveload } from './9-saveload.js';
 import { UI } from './ui.js';
 import { OperationsServiceInstance, OPERATIONS } from './operations-service.js';
+import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js'; // ДОБАВЛЕНО
 
 const dom = DOM.getDOM();
 
@@ -261,7 +262,7 @@ function createOperationHTML(operation, source) {
 
 // Функция для создания HTML изменений за ход
 function createTurnUpdatesHTML(actionResults, events, turnNumber) {
-    console.log(`🔍 createTurnUpdatesHTML called for turn ${turnNumber}:`, { actionResults, events });
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, `createTurnUpdatesHTML called for turn ${turnNumber}`, { actionResults, events });
     
     // ВСЕГДА возвращаем блок, даже если нет изменений
     let html = `
@@ -402,7 +403,7 @@ function createTurnUpdatesHTML(actionResults, events, turnNumber) {
 // Компактное отображение операции
 function createCompactOperationHTML(operation, source) {
     if (!operation || !operation.id || !operation.operation) {
-        console.warn('Некорректная операция:', operation);
+        log.warn(LOG_CATEGORIES.VALIDATION, 'Некорректная операция', operation);
         return '';
     }
     
@@ -561,10 +562,10 @@ function createCompactOperationHTML(operation, source) {
 }
 
 function calculateChoiceResult(choice, d10) {
-    console.log('🔍 calculateChoiceResult:', { choice, d10 });
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'calculateChoiceResult', { choice, d10 });
     
     if (!choice || typeof choice !== 'object') {
-        console.error('❌ Некорректный choice для расчета:', choice);
+        log.error(LOG_CATEGORIES.VALIDATION, 'Некорректный choice для расчета', choice);
         return null;
     }
     
@@ -642,7 +643,7 @@ function calculateChoiceResult(choice, d10) {
         operations = choice.fail_penalties || [];
     }
     
-    console.log('📊 Результат расчета:', { success, partial, operationsCount: operations.length });
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результат расчета', { success, partial, operationsCount: operations.length });
     
     return {
         success: success,
@@ -734,9 +735,21 @@ function toggleChoice(idx) {
 
 // ИСПРАВЛЕННАЯ submitTurn - оптимальная реализация с использованием OperationsService
 async function submitTurn(retries = CONFIG.maxRetries) {
-    console.log('🔍 submitTurn called');
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'submitTurn called');
     
     const state = State.getState();
+    const turnNumber = state.turnCount;
+    
+    // Начинаем логирование хода
+    Logger.startTurnLogging(turnNumber);
+    log.info(LOG_CATEGORIES.TURN_PROCESSING, `🔄 НАЧАЛО ОБРАБОТКИ ХОДА ${turnNumber}`, {
+        timestamp: new Date().toISOString(),
+        selectedActionsCount: state.freeMode ? 'free' : state.gameState.selectedActions?.length || 0,
+        freeMode: state.freeMode,
+        freeText: state.freeMode ? state.freeModeText : null
+    });
+    
+    console.log('🔍 submitTurn called');
     
     console.log(`🎯 Отправка ХОДА ${state.turnCount} к ИИ...`);
     
@@ -753,7 +766,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     if (state.freeMode) {
         const requestText = state.freeModeText.trim();
         if (requestText.length === 0) {
-            console.log('⚠️ Свободный ввод пуст');
+            log.warn(LOG_CATEGORIES.VALIDATION, 'Свободный ввод пуст');
             return;
         }
         
@@ -769,36 +782,39 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         dom.freeInputText.style.opacity = '0.7';
     } else {
         if (!state.gameState.selectedActions || state.gameState.selectedActions.length === 0) {
-            console.log('⚠️ Нет выбранных действий');
+            log.warn(LOG_CATEGORIES.VALIDATION, 'Нет выбранных действий');
             return;
         }
         
-        console.log('📋 Выбранные действия:', state.gameState.selectedActions);
+        log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Выбранные действия', state.gameState.selectedActions);
         
         selectedChoicesData = state.gameState.selectedActions.map(i => {
             if (!state.gameState.currentScene || !state.gameState.currentScene.choices) {
-                console.error('❌ Нет currentScene или choices');
+                log.error(LOG_CATEGORIES.ERROR_TRACKING, 'Нет currentScene или choices');
                 return null;
             }
             
             if (!state.gameState.currentScene.choices[i]) {
-                console.error(`❌ Choice с индексом ${i} не найден`);
+                log.error(LOG_CATEGORIES.ERROR_TRACKING, `Choice с индексом ${i} не найден`);
                 return null;
             }
             return state.gameState.currentScene.choices[i];
         }).filter(Boolean);
         
-        console.log('📊 Данные выбранных choices:', selectedChoicesData);
+        log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Данные выбранных choices', selectedChoicesData);
     }
     
     if (selectedChoicesData.length === 0) {
-        console.error('❌ Нет данных для выбранных действий');
+        log.error(LOG_CATEGORIES.ERROR_TRACKING, 'Нет данных для выбранных действий');
         Render.showErrorAlert("Ошибка", "Нет выбранных действий или данных о них");
         return;
     }
     
     const d10 = Math.floor(Math.random() * 10) + 1;
-    console.log(`🎲 Общий бросок удачи на ход: d10 = ${d10}`);
+    log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎲 Общий бросок удачи на ход: d10 = ${d10}`, {
+        d10: d10,
+        turn: turnNumber
+    });
     
     const actionResults = [];
     
@@ -810,20 +826,39 @@ async function submitTurn(retries = CONFIG.maxRetries) {
                 choice_text: choice.text,
                 choice_index: state.freeMode ? null : state.gameState.selectedActions[idx]
             });
+            
+            // Логируем результат каждого действия
+            log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎯 Результат действия ${idx + 1}`, {
+                success: result.success,
+                partial: result.partial,
+                reason: result.reason,
+                difficulty: result.difficulty,
+                d10: result.d10,
+                operationsCount: result.operations?.length || 0
+            });
         }
     });
     
-    console.log('📊 Результаты действий:', actionResults);
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результаты действий', actionResults);
     
     // Сохраняем оригинальное состояние и результаты действий
     pendingOriginalHeroState = JSON.parse(JSON.stringify(state.heroState));
     pendingActionResults = actionResults;
     pendingD10 = d10;
     
+    // Логируем оригинальное состояние
+    log.debug(LOG_CATEGORIES.GAME_STATE, 'Оригинальное состояние героя', {
+        stats: pendingOriginalHeroState.filter(item => item.id.startsWith('stat:')).map(s => ({ id: s.id, value: s.value })),
+        totalItems: pendingOriginalHeroState.length
+    });
+    
     // Создаем расчетное состояние для ИИ с использованием OperationsService
     const stateForAI = State.calculateStateForAI(pendingOriginalHeroState, actionResults);
     
-    console.log('🧮 Расчетное состояние для ИИ готово');
+    log.info(LOG_CATEGORIES.TURN_PROCESSING, '🧮 Расчетное состояние для ИИ готово', {
+        calculatedStats: stateForAI.filter(item => item.id.startsWith('stat:')).map(s => ({ id: s.id, value: s.value })),
+        changesCount: actionResults.reduce((acc, r) => acc + (r.operations?.length || 0), 0)
+    });
     
     // Подготавливаем данные для отправки ИИ
     const selectedActions = actionResults.map(result => ({
@@ -835,7 +870,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         d10_roll: result.d10
     }));
     
-    console.log('📤 Данные для отправки ИИ:', selectedActions);
+    log.debug(LOG_CATEGORIES.AI_REQUESTS, 'Данные для отправки ИИ', selectedActions);
     
     dom.btnSubmit.innerHTML = '<span class="spinner"></span>';
     dom.btnSubmit.disabled = true;
@@ -854,7 +889,15 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }, CONFIG.requestTimeout);
     
     try {
-        console.log('📡 Отправляем запрос к ИИ с РАСЧЕТНЫМ состоянием...');
+        log.info(LOG_CATEGORIES.AI_REQUESTS, '📡 Отправляем запрос к ИИ с РАСЧЕТНЫМ состоянием...', {
+            turn: turnNumber,
+            selectedActionsCount: selectedActions.length,
+            calculatedStateSummary: {
+                stats: stateForAI.filter(item => item.id.startsWith('stat:')).length,
+                items: stateForAI.length
+            }
+        });
+        
         Render.startThoughtsOfHeroDisplay();
         
         // Создаем временное состояние с расчетными данными для отправки ИИ
@@ -863,7 +906,12 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             heroState: stateForAI
         };
         
+        // Логируем AI запрос
+        log.aiRequest(stateForAIRequest, selectedActions, turnNumber);
+        
+        const startTime = Date.now();
         const data = await API.sendAIRequest(stateForAIRequest, selectedActions, activeAbortController, d10);
+        const processingTime = Date.now() - startTime;
         
         clearTimeout(timeoutId);
         activeAbortController = null;
@@ -875,7 +923,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             pendingD10 = null;
             
             if (retries > 0) {
-                console.warn(`Ответ ИИ не содержит сцены. Повторная попытка ${CONFIG.maxRetries - retries + 1}.`);
+                log.warn(LOG_CATEGORIES.AI_REQUESTS, `Ответ ИИ не содержит сцены. Повторная попытка ${CONFIG.maxRetries - retries + 1}.`);
                 await new Promise(r => setTimeout(r, CONFIG.retryDelayMs));
                 return submitTurn(retries - 1);
             } else {
@@ -883,28 +931,16 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             }
         }
         
-        console.log('✅ Получен ответ от ИИ:', data);
-        
-        // Проверяем, что данные от ИИ валидны
-        if (!data) {
-            throw new Error("Ответ от ИИ пустой");
-        }
-        
-        if (!data.scene || typeof data.scene !== 'string' || data.scene.trim() === '') {
-            console.warn('⚠️ Ответ ИИ не содержит сцены:', data);
-            data.scene = data.scene || "Сцена не была сгенерирована. Пожалуйста, попробуйте еще раз.";
-        }
-        
-        if (!data.choices || !Array.isArray(data.choices)) {
-            console.warn('⚠️ Ответ ИИ не содержит choices или это не массив:', data);
-            data.choices = data.choices || [];
-        }
-        
-        console.log('✅ Данные от ИИ проверены:', {
+        log.info(LOG_CATEGORIES.AI_REQUESTS, '✅ Получен ответ от ИИ', {
             hasScene: !!data.scene,
-            sceneLength: data.scene ? data.scene.length : 0,
-            choicesCount: data.choices ? data.choices.length : 0
+            sceneLength: data.scene?.length || 0,
+            choicesCount: data.choices?.length || 0,
+            eventsCount: data.events?.length || 0,
+            hasOrganizationsHierarchy: !!data._organizationsHierarchy
         });
+        
+        // Логируем AI ответ
+        log.aiResponse(data, processingTime);
         
         // Обрабатываем ход с сохраненными данными
         processTurn(data);
@@ -921,17 +957,21 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         Render.stopThoughtsOfHeroDisplay();
         
         if (e.name === 'AbortError') {
-            console.log('Запрос отменен');
+            log.info(LOG_CATEGORIES.AI_REQUESTS, 'Запрос отменен');
             return;
         }
         
         if (e.message.includes("парсинга JSON") && retries > 0) {
-            console.warn(`JSON повреждён. Повторяем запрос... (${retries} попыток осталось)`);
+            log.warn(LOG_CATEGORIES.AI_REQUESTS, `JSON повреждён. Повторяем запрос... (${retries} попыток осталось)`);
             await new Promise(r => setTimeout(r, 1500));
             return submitTurn(retries - 1);
         }
         
-        console.error('💥 Ошибка в submitTurn:', e);
+        log.error(LOG_CATEGORIES.ERROR_TRACKING, '💥 Ошибка в submitTurn', {
+            error: e.message,
+            stack: e.stack,
+            turn: turnNumber
+        });
         
         if (state.freeMode) {
             dom.freeInputText.disabled = false;
@@ -957,42 +997,63 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             dom.freeInputText.focus();
         }
         State.saveStateToLocalStorage();
+        
+        // Завершаем логирование хода
+        Logger.endTurnLogging(turnNumber, {
+            operationsCount: actionResults.reduce((acc, r) => acc + (r.operations?.length || 0), 0),
+            successfulOperations: actionResults.filter(r => r.success).length,
+            failedOperations: actionResults.filter(r => !r.success).length
+        });
     }
 }
 
 // ОПТИМИЗИРОВАННАЯ processTurn с использованием OperationsService
 function processTurn(data) {
-    console.log('🔍 processTurn called with pending data');
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'processTurn called with pending data');
     Render.stopThoughtsOfHeroDisplay();
     
     if (!pendingOriginalHeroState || !pendingActionResults) {
-        console.error('❌ Нет pending данных для обработки хода');
+        log.error(LOG_CATEGORIES.ERROR_TRACKING, 'Нет pending данных для обработки хода');
         return;
     }
     
     const state = State.getState();
     const completedTurn = state.turnCount;
     
-    console.log(`🎯 Обработка ответа на ХОД ${completedTurn}...`);
+    log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎯 Обработка ответа на ХОД ${completedTurn}...`, {
+        hasScene: !!data.scene,
+        choicesCount: data.choices?.length || 0,
+        eventsCount: data.events?.length || 0
+    });
     
     const previousScene = state.gameState.currentScene;
     
     // 1. Уменьшаем длительность эффектов в реальном состоянии через OperationsService
     const buffResult = OperationsServiceInstance.decreaseBuffDurations(state.heroState);
-    console.log(`🕐 Уменьшена длительность эффектов: ${buffResult.processed} обработано, ${buffResult.removed} удалено`);
+    log.info(LOG_CATEGORIES.OPERATIONS, `🕐 Уменьшена длительность эффектов`, {
+        processed: buffResult.processed,
+        removed: buffResult.removed
+    });
     
     // 2. Применяем операции от действий к реальному состоянию через OperationsService
+    let totalActionOperations = 0;
     pendingActionResults.forEach(result => {
         if (result.operations && Array.isArray(result.operations)) {
-            console.log('📦 Применяем операции от действия:', result.operations.length);
+            totalActionOperations += result.operations.length;
+            log.debug(LOG_CATEGORIES.OPERATIONS, `Применяем операции от действия`, {
+                operationsCount: result.operations.length,
+                actionText: result.choice_text
+            });
+            
             const operationResult = OperationsServiceInstance.applyOperations(result.operations, state.heroState);
             if (!operationResult.success) {
-                console.warn('⚠️ Некоторые операции от действий не были применены:', operationResult);
+                log.warn(LOG_CATEGORIES.OPERATIONS, 'Некоторые операции от действий не были применены', operationResult);
             }
         }
     });
     
     // 3. Применяем операции от событий через OperationsService
+    let totalEventOperations = 0;
     if (data.events && Array.isArray(data.events)) {
         const eventOperations = [];
         data.events.forEach(event => {
@@ -1001,18 +1062,32 @@ function processTurn(data) {
             }
         });
         
+        totalEventOperations = eventOperations.length;
         if (eventOperations.length > 0) {
-            console.log('📦 Применяем операции от событий:', eventOperations.length);
+            log.info(LOG_CATEGORIES.OPERATIONS, 'Применяем операции от событий', {
+                operationsCount: eventOperations.length,
+                eventsCount: data.events.length
+            });
+            
             const eventResult = OperationsServiceInstance.applyOperations(eventOperations, state.heroState);
             if (!eventResult.success) {
-                console.warn('⚠️ Некоторые операции от событий не были применены:', eventResult);
+                log.warn(LOG_CATEGORIES.OPERATIONS, 'Некоторые операции от событий не были применены', eventResult);
             }
         }
     }
     
     // 4. Рассчитываем изменения статов через OperationsService
     const changes = OperationsServiceInstance.calculateChanges(pendingOriginalHeroState, state.heroState);
-    console.log('📊 Изменения за ход:', changes);
+    log.info(LOG_CATEGORIES.GAME_STATE, '📊 Изменения за ход', {
+        totalChanges: Object.keys(changes).reduce((acc, key) => acc + Object.keys(changes[key]).length, 0),
+        stats: changes.stats ? Object.keys(changes.stats).length : 0,
+        items: changes.items ? Object.keys(changes.items).length : 0
+    });
+    
+    // Логируем детальные изменения состояния
+    if (changes.stats && Object.keys(changes.stats).length > 0) {
+        log.stateChange(changes.stats, pendingOriginalHeroState, state.heroState);
+    }
     
     // Сохраняем изменения статов для отображения
     const statChanges = {};
@@ -1028,6 +1103,9 @@ function processTurn(data) {
     
     if (data.thoughts && Array.isArray(data.thoughts)) {
         State.addHeroPhrases(data.thoughts);
+        log.info(LOG_CATEGORIES.GAME_STATE, '💭 Получены мысли героя', {
+            thoughtsCount: data.thoughts.length
+        });
     }
     
     const updatedScene = {
@@ -1062,7 +1140,7 @@ function processTurn(data) {
     
     // 6. ОБРАБОТКА ОРГАНИЗАЦИЙ
     if (data._organizationsHierarchy && typeof data._organizationsHierarchy === 'object') {
-        console.log('🏛️ Обновление иерархий организаций из ответа ИИ');
+        log.info(LOG_CATEGORIES.ORGANIZATIONS, '🏛️ Обновление иерархий организаций из ответа ИИ');
         
         let updatedHierarchies = 0;
         for (const orgId in data._organizationsHierarchy) {
@@ -1071,12 +1149,13 @@ function processTurn(data) {
                 const success = State.setOrganizationHierarchy(orgId, hierarchy);
                 if (success) {
                     updatedHierarchies++;
+                    log.organization('UPDATE_HIERARCHY', orgId, null, null);
                 }
             }
         }
         
         if (updatedHierarchies > 0) {
-            console.log(`✅ Обновлено иерархий организаций: ${updatedHierarchies}`);
+            log.info(LOG_CATEGORIES.ORGANIZATIONS, `✅ Обновлено иерархий организаций: ${updatedHierarchies}`);
         }
     }
     
@@ -1120,7 +1199,9 @@ function processTurn(data) {
     }
     
     if (organizationOperations.length > 0) {
-        console.log('🏛️ Найдены операции с организациями:', organizationOperations);
+        log.info(LOG_CATEGORIES.ORGANIZATIONS, 'Найдены операции с организациями', {
+            operationsCount: organizationOperations.length
+        });
     }
     
     // 8. Создаем блок изменений за ход
@@ -1128,7 +1209,11 @@ function processTurn(data) {
     
     // 9. Увеличиваем счетчик ходов
     const nextTurn = State.incrementTurnCount();
-    console.log(`➡️ Переход к ХОДУ ${nextTurn}`);
+    log.info(LOG_CATEGORIES.TURN_PROCESSING, `➡️ Переход к ХОДУ ${nextTurn}`, {
+        completedTurn: completedTurn,
+        nextTurn: nextTurn,
+        totalOperations: totalActionOperations + totalEventOperations
+    });
     
     // 10. Сохраняем все изменения
     State.setState({
@@ -1175,7 +1260,8 @@ function processTurn(data) {
     State.emit(State.EVENTS.TURN_COMPLETED, {
         actions: pendingActionResults,
         statChanges: statChanges,
-        turnNumber: completedTurn
+        turnNumber: completedTurn,
+        operationsCount: totalActionOperations + totalEventOperations
     });
     
     // 14. Восстанавливаем UI
@@ -1188,26 +1274,33 @@ function processTurn(data) {
     // 15. Сохраняем состояние
     State.saveStateToLocalStorage();
     
-    console.log('✅ processTurn завершен с сохранением всего функционала');
+    log.info(LOG_CATEGORIES.TURN_PROCESSING, '✅ processTurn завершен с сохранением всего функционала', {
+        turn: completedTurn,
+        sceneLength: updatedScene.scene?.length || 0,
+        choicesCount: updatedScene.choices?.length || 0
+    });
 }
 
 // Восстановленная функция для уменьшения длительности временных эффектов (для обратной совместимости)
 function decreaseBuffDurations() {
-    console.log('🕐 Уменьшаем длительность временных эффектов (legacy function)');
+    log.debug(LOG_CATEGORIES.OPERATIONS, 'Уменьшаем длительность временных эффектов (legacy function)');
     
     const state = State.getState();
     const result = OperationsServiceInstance.decreaseBuffDurations(state.heroState);
     
     if (result.processed > 0) {
         State.setState({ heroState: state.heroState });
-        console.log(`✅ Длительность временных эффектов уменьшена: ${result.processed} обработано`);
+        log.info(LOG_CATEGORIES.OPERATIONS, `✅ Длительность временных эффектов уменьшена`, {
+            processed: result.processed,
+            removed: result.removed
+        });
     }
     
     return result;
 }
 
 function showEndScreen(title, msg, color, isVictory = false) {
-    console.log("showEndScreen called");
+    log.info(LOG_CATEGORIES.GAME_STATE, "showEndScreen called", { title, isVictory });
     
     const canvas = document.getElementById('matrixCanvas');
     const ctx = canvas.getContext('2d');
@@ -1253,7 +1346,6 @@ function showEndScreen(title, msg, color, isVictory = false) {
             speed: layer.speed,
             alpha: layer.alpha,
             colorFactor: layer.colorFactor,
-            density: layer.density,
             resetChance: layer.resetChance,
             columns: columns,
             drops: Array(columns).fill(0).map(() => Math.random() * -canvas.height / layer.fontSize),
@@ -1362,6 +1454,11 @@ function handleFreeModeToggle(e) {
     const state = State.getState();
     const isFreeMode = e.target.checked;
     
+    log.info(LOG_CATEGORIES.UI_EVENTS, 'Переключение режима', {
+        mode: isFreeMode ? 'free' : 'choices',
+        previousMode: state.freeMode ? 'free' : 'choices'
+    });
+    
     State.setState({
         freeMode: isFreeMode,
         freeModeText: isFreeMode ? dom.freeInputText.value : ''
@@ -1376,11 +1473,11 @@ function handleFreeModeToggle(e) {
 
 // Подписка на события состояния
 function setupGameObservers() {
-    console.log('🔍 Настройка игровых подписок...');
+    log.debug(LOG_CATEGORIES.GAME_STATE, 'Настройка игровых подписок...');
     
     // Обработка ритуалов
     State.on(State.EVENTS.RITUAL_STARTED, (data) => {
-        console.log('🕯️ Начался ритуал:', data);
+        log.info(LOG_CATEGORIES.GAME_STATE, '🕯️ Начался ритуал', data);
         document.body.classList.add('ritual-mode');
     });
     
@@ -1392,7 +1489,7 @@ function setupGameObservers() {
     });
     
     State.on(State.EVENTS.DEGREE_UPGRADED, (data) => {
-        console.log(`🎓 Повышение степени: ${data.oldDegree} → ${data.newDegree}`);
+        log.info(LOG_CATEGORIES.ORGANIZATIONS, `🎓 Повышение степени: ${data.oldDegree} → ${data.newDegree}`, data);
         Render.showSuccessAlert('🎓 Новый ранг!',
             `Вы достигли степени: ${data.degreeName}. Получен бонус ко всем характеристикам!`);
     });
@@ -1409,11 +1506,13 @@ function setupGameObservers() {
     
     // Подписка на смерть героя
     State.on(State.EVENTS.HERO_DEATH, (data) => {
+        log.error(LOG_CATEGORIES.GAME_STATE, '☠️ Герой умер', data);
         showEndScreen("ПОРАЖЕНИЕ", "Твоя воля иссякла, рассудок померк, скрытность раскрыта, влияние утрачено.", "#800");
     });
     
     // Подписка на победу
     State.on(State.EVENTS.VICTORY, () => {
+        log.info(LOG_CATEGORIES.GAME_STATE, '🎉 Победа достигнута');
         showEndScreen("ПОБЕДА", "Ты достиг высшей степени посвящения. Орден признал тебя равным.", "#d4af37", true);
     });
 }
@@ -1422,7 +1521,7 @@ function setupGameObservers() {
  * Упрощенный блок для Истории ходов
  */
 function createSimplifiedTurnUpdatesHTML(actionResults, events, turnNumber) {
-    console.log(`🔍 createSimplifiedTurnUpdatesHTML called for turn ${turnNumber}`);
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, `createSimplifiedTurnUpdatesHTML called for turn ${turnNumber}`);
     
     if ((!actionResults || actionResults.length === 0) &&
         (!events || events.length === 0)) {

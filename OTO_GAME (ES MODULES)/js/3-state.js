@@ -6,6 +6,7 @@ import { Utils } from './2-utils.js';
 import { PROMPTS } from './prompts.js';
 import { GameItemUI } from './gameitem-ui.js';
 import { OperationsServiceInstance, GAME_ITEM_TYPES, OPERATIONS } from './operations-service.js';
+import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js'; // ДОБАВЛЕНО
 
 // ========================
 // ПАТТЕРН OBSERVER (НАБЛЮДАТЕЛЬ)
@@ -90,7 +91,6 @@ const STATE_EVENTS = {
   SETTINGS_CHANGED: 'settings:changed',
   MODEL_CHANGED: 'model:changed',
   RITUAL_STARTED: 'ritual:started',
-  RITUAL_PROGRESS: 'ritual:progress',
   DEGREE_UPGRADED: 'degree:upgraded',
   STATE_EXPORTED: 'state:exported',
   STATE_IMPORTED: 'state:imported',
@@ -177,7 +177,7 @@ let state = null;
 
 function initializeState() {
   try {
-    console.log('🔍 Инициализация состояния (формат 4.1)...');
+    log.info(LOG_CATEGORIES.GAME_STATE, '🔍 Инициализация состояния (формат 4.1)...');
     
     state = { ...DEFAULT_STATE };
     
@@ -188,7 +188,7 @@ function initializeState() {
         const parsed = JSON.parse(savedState);
         
         if (parsed.version !== '4.1.0') {
-          console.warn('Версия состояния памяти не совпадает с версией приложения (4.1.0):', parsed.version);
+          log.warn(LOG_CATEGORIES.GAME_STATE, 'Версия состояния памяти не совпадает с версией приложения (4.1.0):', parsed.version);
         }
         
         for (const [key, defaultValue] of Object.entries(DEFAULT_STATE)) {
@@ -201,7 +201,7 @@ function initializeState() {
               // ГАРАНТИРУЕМ наличие organizationsHierarchy
               if (!state.gameState.organizationsHierarchy) {
                 state.gameState.organizationsHierarchy = {};
-                console.log('✅ Инициализирован пустой объект organizationsHierarchy');
+                log.info(LOG_CATEGORIES.GAME_STATE, '✅ Инициализирован пустой объект organizationsHierarchy');
               }
             } else if (key === 'ui' && typeof parsed[key] === 'object') {
               state.ui = { ...defaultValue.ui, ...parsed[key] };
@@ -220,15 +220,16 @@ function initializeState() {
         
         // Проверяем currentScene
         if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
-          console.warn('⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
+          log.warn(LOG_CATEGORIES.GAME_STATE, '⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
           state.gameState.currentScene = state.gameType === 'standard' ? { ...PROMPTS.standardGameOTO.initialGameState } : { scene: "Сцена не загружена", choices: [], aiMemory: {}, gameType: 'custom' };
         }
         
         // После загрузки состояния
-        console.log('✅ Состояние загружено из localStorage (формат 4.1)');
-        stateObserver.notify(STATE_EVENTS.LOADED, {
+        log.info(LOG_CATEGORIES.GAME_STATE, '✅ Состояние загружено из localStorage (формат 4.1)', {
           gameId: state.gameId,
-          gameType: state.gameType
+          gameType: state.gameType,
+          turnCount: state.turnCount,
+          heroItems: state.heroState.length
         });
         
         // Добавляем начальную сцену в историю, если история пуста
@@ -240,20 +241,20 @@ function initializeState() {
             turn: 1
           });
           state.turnCount = 1;
-          console.log('✅ Начальная сцена добавлена в историю как ход #1');
+          log.info(LOG_CATEGORIES.GAME_STATE, '✅ Начальная сцена добавлена в историю как ход #1');
         }
         
         // Инициализируем иерархии организаций (ВСЕГДА)
         initializeOrganizationHierarchies();
         
       } catch (parseError) {
-        console.error('❌ Ошибка парсинга сохраненного состояния:', parseError);
+        log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ Ошибка парсинга сохраненного состояния:', parseError);
         state = { ...DEFAULT_STATE };
         state.gameId = Utils.generateUniqueId();
         initializeOrganizationHierarchies();
       }
     } else {
-      console.log('🆕 Первый запуск, используем дефолтное состояние');
+      log.info(LOG_CATEGORIES.GAME_STATE, '🆕 Первый запуск, используем дефолтное состояние');
       state = { ...DEFAULT_STATE };
       state.gameId = Utils.generateUniqueId();
       initializeOrganizationHierarchies();
@@ -267,7 +268,14 @@ function initializeState() {
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
     document.documentElement.style.fontSize = `${state.settings.scale * 16}px`;
     
-    console.log('✅ Состояние полностью инициализировано (формат 4.1)');
+    log.info(LOG_CATEGORIES.GAME_STATE, '✅ Состояние полностью инициализировано (формат 4.1)', {
+      gameId: state.gameId,
+      turnCount: state.turnCount,
+      heroItems: state.heroState.length,
+      gameType: state.gameType,
+      organizations: Object.keys(state.gameState.organizationsHierarchy).length
+    });
+    
     stateObserver.notify(STATE_EVENTS.INITIALIZED, {
       gameId: state.gameId,
       turnCount: state.turnCount,
@@ -277,7 +285,7 @@ function initializeState() {
     });
     
   } catch (error) {
-    console.error('❌ Критическая ошибка инициализации состояния:', error);
+    log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ Критическая ошибка инициализации состояния:', error);
     state = { ...DEFAULT_STATE };
     state.gameId = Utils.generateUniqueId();
     state.models = [...aiModels];
@@ -285,7 +293,7 @@ function initializeState() {
     try {
       localStorage.setItem('oto_v4_state', JSON.stringify(state));
     } catch (saveError) {
-      console.error('❌ Не удалось сохранить аварийное состояние:', saveError);
+      log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ Не удалось сохранить аварийное состояние:', saveError);
     }
   }
   
@@ -303,12 +311,12 @@ function initializeState() {
  */
 function initializeOrganizationHierarchies() {
   try {
-    console.log('🏛️ Инициализация иерархий организаций...');
+    log.info(LOG_CATEGORIES.ORGANIZATIONS, '🏛️ Инициализация иерархий организаций...');
     
     // ГАРАНТИРУЕМ, что объект иерархий существует
     if (!state.gameState.organizationsHierarchy) {
       state.gameState.organizationsHierarchy = {};
-      console.log('✅ Создан новый объект organizationsHierarchy');
+      log.info(LOG_CATEGORIES.ORGANIZATIONS, '✅ Создан новый объект organizationsHierarchy');
     }
     
     // ЗАГРУЖАЕМ ИЕРАРХИЮ О.Т.О. ИЗ НАЧАЛЬНОЙ СЦЕНЫ СТАНДАРТНОЙ ИГРЫ (ДИНАМИЧЕСКИ)
@@ -317,7 +325,7 @@ function initializeOrganizationHierarchies() {
     // Ищем organization_rank_hierarchy в начальной сцене
     if (initialScene && initialScene['organization_rank_hierarchy:oto']) {
       state.gameState.organizationsHierarchy['oto'] = initialScene['organization_rank_hierarchy:oto'];
-      console.log('✅ Иерархия О.Т.О. загружена из начальной сцены стандартной игры');
+      log.info(LOG_CATEGORIES.ORGANIZATIONS, '✅ Иерархия О.Т.О. загружена из начальной сцены стандартной игры');
     }
     
     // ДОПОЛНИТЕЛЬНО: Проверяем текущую сцену на наличие иерархий (для кастомных игр)
@@ -329,7 +337,7 @@ function initializeOrganizationHierarchies() {
           const orgId = key.split(':')[1];
           if (orgId) {
             state.gameState.organizationsHierarchy[orgId] = currentScene[key];
-            console.log(`✅ Иерархия организации ${orgId} загружена из текущей сцены`);
+            log.info(LOG_CATEGORIES.ORGANIZATIONS, `✅ Иерархия организации ${orgId} загружена из текущей сцены`);
           }
         }
       });
@@ -340,16 +348,16 @@ function initializeOrganizationHierarchies() {
     const orgIds = Object.keys(savedHierarchies);
     
     if (orgIds.length > 0) {
-      console.log(`✅ Загружено иерархий организаций: ${orgIds.join(', ')}`);
+      log.info(LOG_CATEGORIES.ORGANIZATIONS, `✅ Загружено иерархий организаций: ${orgIds.join(', ')}`);
       orgIds.forEach(orgId => {
-        console.log(`   ${orgId}: ${savedHierarchies[orgId].description?.length || 0} уровней`);
+        log.debug(LOG_CATEGORIES.ORGANIZATIONS, `   ${orgId}: ${savedHierarchies[orgId].description?.length || 0} уровней`);
       });
     } else {
-      console.log('ℹ️ Нет сохраненных иерархий организаций');
+      log.info(LOG_CATEGORIES.ORGANIZATIONS, 'ℹ️ Нет сохраненных иерархий организаций');
     }
     
   } catch (error) {
-    console.error('❌ Ошибка инициализации иерархий организаций:', error);
+    log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ Ошибка инициализации иерархий организаций:', error);
     // Гарантируем хотя бы пустой объект
     if (!state.gameState.organizationsHierarchy) {
       state.gameState.organizationsHierarchy = {};
@@ -362,20 +370,20 @@ function initializeOrganizationHierarchies() {
  */
 function getOrganizationHierarchy(orgId) {
   if (!state || !state.gameState || !state.gameState.organizationsHierarchy) {
-    console.warn('❌ State не инициализирован или organizationsHierarchy отсутствует');
+    log.warn(LOG_CATEGORIES.ORGANIZATIONS, '❌ State не инициализирован или organizationsHierarchy отсутствует');
     return null;
   }
   
   const hierarchy = state.gameState.organizationsHierarchy[orgId];
   
   if (!hierarchy) {
-    console.warn(`⚠️ Иерархия для организации ${orgId} не найдена`);
+    log.warn(LOG_CATEGORIES.ORGANIZATIONS, `⚠️ Иерархия для организации ${orgId} не найдена`);
     return null;
   }
   
   // ВАЛИДАЦИЯ: проверяем структуру иерархии
   if (!hierarchy.description || !Array.isArray(hierarchy.description)) {
-    console.error(`❌ Некорректная структура иерархии для организации ${orgId}`);
+    log.error(LOG_CATEGORIES.ORGANIZATIONS, `❌ Некорректная структура иерархии для организации ${orgId}`);
     return null;
   }
   
@@ -391,25 +399,25 @@ function getHeroOrganizationHierarchies() {
   // Получаем все organization_rank у героя
   const orgRanks = state.heroState.filter(item => item.id.startsWith('organization_rank:'));
   
-  console.log(`🔍 Поиск иерархий для ${orgRanks.length} организаций героя`);
+  log.debug(LOG_CATEGORIES.ORGANIZATIONS, `🔍 Поиск иерархий для ${orgRanks.length} организаций героя`);
   
   orgRanks.forEach(rankItem => {
     try {
       const orgId = rankItem.id.split(':')[1];
       if (!orgId) {
-        console.warn(`⚠️ Некорректный ID organization_rank: ${rankItem.id}`);
+        log.warn(LOG_CATEGORIES.ORGANIZATIONS, `⚠️ Некорректный ID organization_rank: ${rankItem.id}`);
         return;
       }
       
       const hierarchy = getOrganizationHierarchy(orgId);
       if (hierarchy) {
         hierarchies[orgId] = hierarchy;
-        console.log(`✅ Иерархия организации ${orgId} найдена`);
+        log.debug(LOG_CATEGORIES.ORGANIZATIONS, `✅ Иерархия организации ${orgId} найдена`);
       } else {
-        console.warn(`⚠️ Иерархия для организации ${orgId} не найдена в состоянии`);
+        log.warn(LOG_CATEGORIES.ORGANIZATIONS, `⚠️ Иерархия для организации ${orgId} не найдена в состоянии`);
       }
     } catch (error) {
-      console.error(`❌ Ошибка при обработке organization_rank:`, rankItem, error);
+      log.error(LOG_CATEGORIES.ERROR_TRACKING, `❌ Ошибка при обработке organization_rank:`, rankItem, error);
     }
   });
   
@@ -422,13 +430,13 @@ function getHeroOrganizationHierarchies() {
 function setOrganizationHierarchy(orgId, hierarchy) {
   try {
     if (!hierarchy || typeof hierarchy !== 'object') {
-      console.error(`❌ Некорректная иерархия для организации ${orgId}`);
+      log.error(LOG_CATEGORIES.ORGANIZATIONS, `❌ Некорректная иерархия для организации ${orgId}`);
       return false;
     }
     
     // ВАЛИДАЦИЯ: проверяем обязательные поля
     if (!hierarchy.description || !Array.isArray(hierarchy.description)) {
-      console.error(`❌ Иерархия организации ${orgId} должна содержать массив description`);
+      log.error(LOG_CATEGORIES.ORGANIZATIONS, `❌ Иерархия организации ${orgId} должна содержать массив description`);
       return false;
     }
     
@@ -439,7 +447,7 @@ function setOrganizationHierarchy(orgId, hierarchy) {
     
     // Сохраняем иерархию
     state.gameState.organizationsHierarchy[orgId] = hierarchy;
-    console.log(`✅ Иерархия организации ${orgId} сохранена (${hierarchy.description.length} уровней)`);
+    log.info(LOG_CATEGORIES.ORGANIZATIONS, `✅ Иерархия организации ${orgId} сохранена (${hierarchy.description.length} уровней)`);
     
     // Обновляем описание ранга, если игрок состоит в этой организации
     const rankItem = state.heroState.find(item => item.id === `organization_rank:${orgId}`);
@@ -447,7 +455,7 @@ function setOrganizationHierarchy(orgId, hierarchy) {
       const rankInfo = hierarchy.description.find(item => item.lvl === rankItem.value);
       if (rankInfo) {
         rankItem.description = rankInfo.rank;
-        console.log(`✅ Описание ранга обновлено: ${orgId} ${rankItem.value}° = ${rankInfo.rank}`);
+        log.info(LOG_CATEGORIES.ORGANIZATIONS, `✅ Описание ранга обновлено: ${orgId} ${rankItem.value}° = ${rankInfo.rank}`);
       }
     }
     
@@ -460,7 +468,7 @@ function setOrganizationHierarchy(orgId, hierarchy) {
     
     return true;
   } catch (error) {
-    console.error(`❌ Ошибка сохранения иерархии для организации ${orgId}:`, error);
+    log.error(LOG_CATEGORIES.ERROR_TRACKING, `❌ Ошибка сохранения иерархии для организации ${orgId}:`, error);
     return false;
   }
 }
@@ -486,7 +494,7 @@ function getOrganizationRankName(orgId, rankValue) {
     
     return `${rankValue}°`;
   } catch (error) {
-    console.error(`❌ Ошибка получения названия ранга для ${orgId}:${rankValue}`, error);
+    log.error(LOG_CATEGORIES.ERROR_TRACKING, `❌ Ошибка получения названия ранга для ${orgId}:${rankValue}`, error);
     return `${rankValue}°`;
   }
 }
@@ -499,13 +507,13 @@ function getHeroOrganizations() {
     const orgRanks = state.heroState.filter(item => item.id.startsWith('organization_rank:'));
     const organizations = [];
     
-    console.log(`🔍 Формирование списка организаций героя (найдено рангов: ${orgRanks.length})`);
+    log.debug(LOG_CATEGORIES.ORGANIZATIONS, `🔍 Формирование списка организаций героя (найдено рангов: ${orgRanks.length})`);
     
     orgRanks.forEach(rankItem => {
       try {
         const orgId = rankItem.id.split(':')[1];
         if (!orgId) {
-          console.warn(`⚠️ Пропущен некорректный organization_rank: ${rankItem.id}`);
+          log.warn(LOG_CATEGORIES.ORGANIZATIONS, `⚠️ Пропущен некорректный organization_rank: ${rankItem.id}`);
           return;
         }
         
@@ -520,16 +528,16 @@ function getHeroOrganizations() {
           hierarchy: hierarchy
         });
         
-        console.log(`✅ Организация добавлена: ${orgId} (ранг ${rankItem.value}: ${rankName})`);
+        log.debug(LOG_CATEGORIES.ORGANIZATIONS, `✅ Организация добавлена: ${orgId} (ранг ${rankItem.value}: ${rankName})`);
       } catch (error) {
-        console.error(`❌ Ошибка обработки organization_rank:`, rankItem, error);
+        log.error(LOG_CATEGORIES.ERROR_TRACKING, `❌ Ошибка обработки organization_rank:`, rankItem, error);
       }
     });
     
-    console.log(`✅ Сформирован список из ${organizations.length} организаций героя`);
+    log.debug(LOG_CATEGORIES.ORGANIZATIONS, `✅ Сформирован список из ${organizations.length} организаций героя`);
     return organizations;
   } catch (error) {
-    console.error('❌ Критическая ошибка при получении организаций героя:', error);
+    log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ Критическая ошибка при получении организаций героя:', error);
     return [];
   }
 }
@@ -546,7 +554,7 @@ function syncOrganizationRank() {
   
   const orgRankItem = state.heroState.find(item => item.id === 'organization_rank:oto');
   if (!orgRankItem) {
-    console.warn('⚠️ Нет organization_rank:oto для синхронизации');
+    log.warn(LOG_CATEGORIES.ORGANIZATIONS, '⚠️ Нет organization_rank:oto для синхронизации');
     return;
   }
   
@@ -554,7 +562,7 @@ function syncOrganizationRank() {
   const hierarchy = getOrganizationHierarchy('oto');
   
   if (!hierarchy || !hierarchy.description) {
-    console.warn('⚠️ Нет иерархии О.Т.О. для синхронизации');
+    log.warn(LOG_CATEGORIES.ORGANIZATIONS, '⚠️ Нет иерархии О.Т.О. для синхронизации');
     return;
   }
   
@@ -597,7 +605,7 @@ function syncOrganizationRank() {
     state.ritualProgress = 0;
     state.ritualTarget = newRank;
     
-    console.log(`🎓 Повышение ранга в О.Т.О.: ${oldRankName} (${currentRank}) → ${newRankName} (${newRank})`);
+    log.info(LOG_CATEGORIES.ORGANIZATIONS, `🎓 Повышение ранга в О.Т.О.: ${oldRankName} (${currentRank}) → ${newRankName} (${newRank})`);
     
     stateObserver.notify(STATE_EVENTS.DEGREE_UPGRADED, {
       organization: 'oto',
@@ -621,7 +629,7 @@ function checkHeroDeath() {
   const deadStats = stats.filter(stat => stat.value <= 0);
   
   if (deadStats.length > 0) {
-    console.warn('☠️ Герой мертв! Статы достигли 0:', deadStats.map(s => s.id));
+    log.warn(LOG_CATEGORIES.GAME_STATE, '☠️ Герой мертв! Статы достигли 0:', deadStats.map(s => s.id));
     stateObserver.notify(STATE_EVENTS.HERO_DEATH, {
       deadStats: deadStats.map(s => s.id),
       heroState: state.heroState
@@ -715,10 +723,10 @@ function calculateStateForAI(originalState, actionResults) {
  * Использует OperationsService для обработки операций
  */
 function applyOperations(operations) {
-  console.log('🔍 applyOperations called with:', operations);
+  log.debug(LOG_CATEGORIES.OPERATIONS, 'applyOperations called', { operationsCount: operations?.length });
   
   if (!Array.isArray(operations) || operations.length === 0) {
-    console.warn('⚠️ Пустой массив операций');
+    log.warn(LOG_CATEGORIES.OPERATIONS, '⚠️ Пустой массив операций');
     return false;
   }
   
@@ -729,7 +737,7 @@ function applyOperations(operations) {
   const result = OperationsServiceInstance.applyOperations(operations, newHeroState);
   
   if (!result.success) {
-    console.error('❌ Ошибка применения операций:', result);
+    log.error(LOG_CATEGORIES.OPERATIONS, '❌ Ошибка применения операций:', result);
     return false;
   }
   
@@ -746,7 +754,12 @@ function applyOperations(operations) {
   // Проверяем смерть героя после изменений
   checkHeroDeath();
   
-  console.log('✅ applyOperations завершен, применено операций:', result.applied);
+  log.info(LOG_CATEGORIES.OPERATIONS, '✅ applyOperations завершен', {
+    applied: result.applied,
+    failed: result.failed,
+    total: operations.length
+  });
+  
   return true;
 }
 
@@ -773,6 +786,7 @@ function getGameItemValue(id) {
 
 function resetFullGame() {
   if (confirm("[HARD RESET] Сбросить ВСЮ игру, включая настройки?")) {
+    log.info(LOG_CATEGORIES.GAME_STATE, '🔄 Полный сброс игры');
     localStorage.clear();
     state = null;
     setTimeout(() => {
@@ -806,6 +820,12 @@ function exportFullState() {
     lastTurnUpdates: state.lastTurnUpdates,
     lastTurnStatChanges: state.lastTurnStatChanges
   };
+  
+  log.info(LOG_CATEGORIES.GAME_STATE, '📤 Экспорт состояния игры', {
+    gameId: state.gameId,
+    turnCount: state.turnCount,
+    exportTime: exportData.exportTime
+  });
   
   stateObserver.notify(STATE_EVENTS.STATE_EXPORTED, { data: exportData });
   return exportData;
@@ -855,6 +875,13 @@ function importFullState(importData) {
     syncOrganizationRank();
   }
   
+  log.info(LOG_CATEGORIES.GAME_STATE, '📥 Импорт состояния игры', {
+    gameId: state.gameId,
+    gameType: state.gameType,
+    turnCount: state.turnCount,
+    importTime: new Date().toISOString()
+  });
+  
   stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, { gameType: state.gameType });
   stateObserver.notify(STATE_EVENTS.STATE_IMPORTED, { data: importData });
   stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'import', heroState: state.heroState });
@@ -887,6 +914,10 @@ function exportAllAppData() {
       }
     }
   };
+  
+  log.info(LOG_CATEGORIES.GAME_STATE, '📤 Экспорт данных приложения', {
+    exportTime: exportData.exportTime
+  });
   
   return exportData;
 }
@@ -933,6 +964,12 @@ function importAllAppData(importData) {
     state.lastSaveTime = importData.appData.metadata.lastSaveTime || state.lastSaveTime;
   }
   
+  log.info(LOG_CATEGORIES.GAME_STATE, '📥 Импорт данных приложения', {
+    gameId: state.gameId,
+    gameType: state.gameType,
+    importTime: new Date().toISOString()
+  });
+  
   stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, { gameType: state.gameType });
   stateObserver.notify(STATE_EVENTS.SETTINGS_CHANGED);
   stateObserver.notify(STATE_EVENTS.MODEL_CHANGED);
@@ -969,6 +1006,11 @@ function addHeroPhrases(phrases) {
     state.thoughtsOfHero = state.thoughtsOfHero.concat(phrases);
     localStorage.setItem('oto_thoughts_of_hero', JSON.stringify(state.thoughtsOfHero));
     stateObserver.notify(STATE_EVENTS.THOUGHTS_UPDATED, { thoughts: phrases });
+    
+    log.debug(LOG_CATEGORIES.GAME_STATE, '💭 Добавлены мысли героя', {
+      count: phrases.length,
+      total: state.thoughtsOfHero.length
+    });
   }
 }
 
@@ -1027,6 +1069,8 @@ function setGameType(gameType, initialScene = null) {
     initializeOrganizationHierarchies();
   }
   
+  log.info(LOG_CATEGORIES.GAME_STATE, `🎮 Тип игры изменен: ${oldGameType} → ${gameType}`);
+  
   stateObserver.notify(STATE_EVENTS.GAME_TYPE_CHANGED, {
     oldGameType,
     newGameType: gameType
@@ -1037,7 +1081,6 @@ function setGameType(gameType, initialScene = null) {
     gameType: state.gameType
   });
   
-  console.log(`🎮 Тип игры изменен: ${oldGameType} → ${gameType}`);
   saveStateToLocalStorage();
 }
 
@@ -1047,7 +1090,7 @@ function setGameType(gameType, initialScene = null) {
 
 // Сохранения текущего состояния state
 function saveStateToLocalStorage() {
-  console.log('💾 Сохранение состояния игры...');
+  log.debug(LOG_CATEGORIES.GAME_STATE, '💾 Сохранение состояния игры...');
   
   try {
     // Используем текущее состояние
@@ -1092,10 +1135,14 @@ function saveStateToLocalStorage() {
       timestamp: currentState.lastSaveTime
     });
     
-    console.log('✅ Игра сохранена в localStorage (формат 4.1)');
+    log.debug(LOG_CATEGORIES.GAME_STATE, '✅ Игра сохранена в localStorage (формат 4.1)', {
+      gameId: currentState.gameId,
+      turnCount: currentState.turnCount
+    });
+    
     return true;
   } catch (error) {
-    console.error('❌ Ошибка сохранения состояния:', error);
+    log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ Ошибка сохранения состояния:', error);
     return false;
   }
 }
@@ -1104,7 +1151,7 @@ function saveStateToLocalStorage() {
  * Загрузка состояния игры из localStorage (ФОРМАТ 4.1)
  */
 function loadStateFromLocalStorage() {
-  console.log('📥 Загрузка состояния...');
+  log.debug(LOG_CATEGORIES.GAME_STATE, '📥 Загрузка состояния...');
   const savedState = localStorage.getItem('oto_v4_state');
   return savedState;
 }
@@ -1118,7 +1165,7 @@ initializeState();
 export const State = {
   getState: () => {
     if (!state || typeof state !== 'object') {
-      console.error('❌ State is corrupted! Reinitializing...');
+      log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ State is corrupted! Reinitializing...');
       initializeState();
     }
     return state;
@@ -1126,9 +1173,24 @@ export const State = {
   
   setState: (newState) => {
     if (!state) {
-      console.error('⚠️ Cannot setState on undefined state');
+      log.error(LOG_CATEGORIES.ERROR_TRACKING, '⚠️ Cannot setState on undefined state');
       initializeState();
     }
+    
+    const changes = {};
+    Object.keys(newState).forEach(key => {
+      if (JSON.stringify(state[key]) !== JSON.stringify(newState[key])) {
+        changes[key] = { from: state[key], to: newState[key] };
+      }
+    });
+    
+    if (Object.keys(changes).length > 0) {
+      log.debug(LOG_CATEGORIES.GAME_STATE, '🔄 Обновление состояния', {
+        changes: Object.keys(changes),
+        details: changes
+      });
+    }
+    
     state = { ...state, ...newState };
     saveStateToLocalStorage();
   },
@@ -1136,6 +1198,7 @@ export const State = {
   resetGameProgress: (silent = false) => {
     if (!silent) {
       if (confirm("[SOFT RESET] Сбросить прогресс текущей игры?")) {
+        log.info(LOG_CATEGORIES.GAME_STATE, '🔄 Сброс прогресса игры');
         const currentSettings = state.settings;
         const currentUI = state.ui;
         const currentModels = state.models;
@@ -1198,6 +1261,7 @@ export const State = {
       }
     } else {
       // SILENT режим - без подтверждения и перезагрузки
+      log.info(LOG_CATEGORIES.GAME_STATE, '🔄 Тихий сброс прогресса игры');
       const currentSettings = state.settings;
       const currentUI = state.ui;
       const currentModels = state.models;
@@ -1260,7 +1324,7 @@ export const State = {
         turn: 1
       });
       state.turnCount = 1; // Устанавливаем счетчик ходов в 1
-      console.log('Начальная сцена добавлена в историю как ход #1');
+      log.info(LOG_CATEGORIES.GAME_STATE, 'Начальная сцена добавлена в историю как ход #1');
     }
   },
   
@@ -1320,6 +1384,7 @@ export const State = {
   incrementTurnCount: () => {
     state.turnCount++;
     localStorage.setItem('oto_turn_count', state.turnCount.toString());
+    log.debug(LOG_CATEGORIES.GAME_STATE, `➡️ Увеличение счетчика ходов: ${state.turnCount}`);
     return state.turnCount;
   },
   getTurnCount: () => state.turnCount,
@@ -1335,6 +1400,11 @@ export const State = {
     
     localStorage.setItem('oto_scale', state.settings.scale.toString());
     localStorage.setItem('oto_scale_index', newScaleIndex.toString());
+    
+    log.info(LOG_CATEGORIES.UI_EVENTS, '🔍 Изменение масштаба', {
+      scaleIndex: newScaleIndex,
+      scale: state.settings.scale
+    });
     
     stateObserver.notify(STATE_EVENTS.SCALE_CHANGED, {
       scaleIndex: newScaleIndex,
@@ -1352,6 +1422,8 @@ export const State = {
     if (state.auditLog.length > 100) {
       state.auditLog = state.auditLog.slice(0, 100);
     }
+    
+    log.debug(LOG_CATEGORIES.AUDIT, '📝 Добавлена запись в аудит-лог', entry);
   },
   
   getModelStats: () => {
