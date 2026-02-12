@@ -461,16 +461,10 @@ function createAuditEntryForGameTurn(selectedActions, payload, state, d10) {
 function updateAIMemory(processedData) {
     if (processedData.aiMemory && Object.keys(processedData.aiMemory).length > 0) {
         const currentState = State.getState();
-        // Убедимся, что gameType сохранен в памяти ИИ
         const updatedMemory = {
             ...currentState.gameState.aiMemory,
             ...processedData.aiMemory
         };
-        
-        // Если в ответе не указан gameType, сохраняем текущий
-        if (!updatedMemory.gameType) {
-            updatedMemory.gameType = currentState.gameType;
-        }
         
         currentState.gameState.aiMemory = updatedMemory;
         State.setState({

@@ -400,66 +400,109 @@ function setupSettingsModalEvents() {
     // Принять сгенерированный сюжет (начало игры по сгенерированному сюжету):
     if (btnAccept && plotInput) {
         btnAccept.onclick = () => {
-            const text = plotInput.value.trim();
-            if (!text) return;
-            
-            try {
-                const sceneData = Utils.safeParseAIResponse(text);
-                
-                // SILENT сброс - без подтверждения и перезагрузки
-                State.resetGameProgress(true);
-                const state = State.getState();
-                
-                // Устанавливаем новую сцену
-                state.gameState.currentScene = {
-                    scene: sceneData.scene || sceneData.text || "",
-                    choices: sceneData.choices || [],
-                    reflection: sceneData.reflection || "",
-                    typology: sceneData.typology || "",
-                    thoughts: sceneData.thoughts || [],
-                    summary: sceneData.summary || "",
-                    aiMemory: sceneData.aiMemory || {},
-                    events: sceneData.events || [],
-                    design_notes: sceneData.design_notes || ""
-                };
-                
-                // Очищаем историю и добавляем новую начальную сцену
-                state.gameState.history = [{
-                    fullText: sceneData.scene || sceneData.text || "",
-                    choice: "Начало игры (загруженный сюжет)",
-                    changes: "Загружен новый сюжет",
-                    turn: 1
-                }];
-                
-                // Устанавливаем счетчик ходов
-                state.turnCount = 1;
-                
-                // Явное сохранение ВСЕГО состояния:
-                State.setState({
-                    gameState: state.gameState,
-                    thoughtsOfHero: state.thoughtsOfHero,
-                    turnCount: state.turnCount,
-                    heroState: state.heroState,
-                    lastSaveTime: new Date().toISOString()
-                });
-                
-                // Сохраняем
-                State.saveStateToLocalStorage();
-                
-                // Рендерим через специализированные модули
-                Render.renderScene();
-                Render.renderChoices();
-                GameItemUI.forceUpdate();
-                StatsUI.render();
-                HistoryUI.render();
-                
-                UI.closeSettingsModal();
-                Render.showSuccessAlert("Сюжет принят", "Сюжет загружен. Начало новой игры.");
-                
-            } catch (error) {
-                Render.showErrorAlert("Ошибка загру", "Текст не является валидным JSON или отсутствует поле 'scene'.", error);
-            }
+    const text = plotInput.value.trim();
+    if (!text) return;
+
+    try {
+        const sceneData = Utils.safeParseAIResponse(text);
+        const state = State.getState();
+
+        // -------------------------------------------------
+        //  ПОЛНЫЙ СБРОС ПРОГРЕССА БЕЗ resetGameProgress
+        // -------------------------------------------------
+        // Сохраняем только настройки, UI, модели, аудит и API-ключи
+        const preserved = {
+            settings: { ...state.settings },
+            ui: { ...state.ui },
+            models: [...state.models],
+            auditLog: [...state.auditLog],
+            gameId: Utils.generateUniqueId(),
+            lastSaveTime: new Date().toISOString()
         };
+
+        // ✅ Получаем чистый дефолтный герой через метод State
+        const newHeroState = State.getDefaultHeroState();
+
+        // Новое состояние игры — полностью с нуля
+        const newGameState = {
+            summary: "",
+            history: [],
+            aiMemory: {},
+            currentScene: {
+                scene: sceneData.scene || sceneData.text || "",
+                choices: sceneData.choices || [],
+                reflection: sceneData.reflection || "",
+                typology: sceneData.typology || "",
+                thoughts: sceneData.thoughts || [],
+                summary: sceneData.summary || "",
+                aiMemory: sceneData.aiMemory || {},
+                events: sceneData.events || [],
+                design_notes: sceneData.design_notes || "",
+                gameType: 'custom'               // 👈 ключевое поле
+            },
+            selectedActions: [],
+            organizationsHierarchy: sceneData.organization_rank_hierarchy
+                ? { ...sceneData.organization_rank_hierarchy }
+                : {}
+        };
+
+        // Первая запись в истории
+        newGameState.history.push({
+            fullText: newGameState.currentScene.scene,
+            choice: "Начало игры (загруженный сюжет)",
+            changes: "Загружен новый сюжет",
+            turn: 1
+        });
+
+        // Собираем полное новое состояние
+        const newState = {
+            ...preserved,
+            version: '4.1.0',
+            gameType: 'custom',
+            turnCount: 1,
+            heroState: newHeroState,
+            gameState: newGameState,
+            isRitualActive: false,
+            ritualProgress: 0,
+            ritualTarget: null,
+            freeMode: false,
+            freeModeText: '',
+            lastTurnUpdates: "",
+            lastTurnStatChanges: null,
+            thoughtsOfHero: [],
+            pendingRequest: null
+        };
+
+        // Применяем и сохраняем
+        State.setState(newState);
+        State.saveStateToLocalStorage();
+
+        // Оповещаем систему
+        State.emit(State.EVENTS.GAME_TYPE_CHANGED, {
+            oldGameType: state.gameType,
+            newGameType: 'custom'
+        });
+        State.emit(State.EVENTS.HERO_CHANGED, { type: 'reset', heroState: newHeroState });
+        State.emit(State.EVENTS.SCENE_CHANGED, { scene: newGameState.currentScene });
+
+        // Перерисовка
+        Render.renderScene();
+        Render.renderChoices();
+        if (typeof GameItemUI?.forceUpdate === 'function') GameItemUI.forceUpdate();
+        if (typeof StatsUI?.render === 'function') StatsUI.render();
+        if (typeof HistoryUI?.render === 'function') HistoryUI.render();
+
+        UI.closeSettingsModal();
+        Render.showSuccessAlert("Сюжет принят", "Новая кастомная игра запущена.");
+
+    } catch (error) {
+        Render.showErrorAlert(
+            "Ошибка загрузки",
+            "Текст не является валидным JSON или отсутствует поле 'scene'.",
+            error
+        );
+    }
+};
     }
 }
 

@@ -89,7 +89,7 @@ function getDynamicSystemInjections(state) {
   const turn = state.turnCount;
   
   // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА (каждые 10 ходов)
-  if (turn > 0 && turn % 10 === 0) {
+  if (turn > 0 && turn % 15 === 0) {
     console.log(`🌀 [Client Director] Turn ${turn}: Injecting Narrative Twist.`);
     injections.push(`>>> [TRIGGER: TURN ${turn}] ${PROMPTS.injections.twist}`);
   }
@@ -102,6 +102,7 @@ function getDynamicSystemInjections(state) {
   }
   
   // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ СЮЖЕТНЫХ ПЕТЕЛЬ
+  /*
   if (state.gameState.history.length > 0) {
     const lastHistory = state.gameState.history[state.gameState.history.length - 1];
     const lastSceneText = lastHistory.fullText || '';
@@ -121,7 +122,7 @@ function getDynamicSystemInjections(state) {
       }
     }
   }
-  
+  */
   // 4. ИНЪЕКЦИЯ РИТУАЛА (только для стандартной игры О.Т.О.)
   if (state.gameType === 'standard' && state.isRitualActive) {
     console.log(`🕯️ [Client Director] RITUAL MODE ACTIVE (О.Т.О.).`);
@@ -138,12 +139,6 @@ function getDynamicSystemInjections(state) {
   // 6. БАЗОВЫЕ ИНСТРУКЦИИ (всегда добавляются)
   injections.push(PROMPTS.injections.coreMovement);
   
-  // 7. УКАЗАНИЕ ТИПА ИГРЫ (для лучшего понимания контекста ИИ)
-  if (state.gameType === 'standard') {
-    injections.push(`>>> [КОНТЕКСТ ИГРЫ: Стандартная игра "Орден О.Т.О."]`);
-  } else {
-    injections.push(`>>> [КОНТЕКСТ ИГРЫ: Кастомный сценарий]`);
-  }
   
   return injections.join('\n\n');
 }
@@ -168,10 +163,6 @@ function buildContextBlock(state) {
   // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ ИИ (aiMemory) - контекст для Гейм-мастера
   if (state.gameState.aiMemory && Object.keys(state.gameState.aiMemory).length > 0) {
     const memoryForPrompt = { ...state.gameState.aiMemory };
-    // Убедимся, что gameType есть в памяти ИИ
-    if (!memoryForPrompt.gameType) {
-      memoryForPrompt.gameType = state.gameType;
-    }
     parts.push(`### ТВОЯ ДИНАМИЧЕСКАЯ ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(memoryForPrompt, null, 2)}`);
   }
   

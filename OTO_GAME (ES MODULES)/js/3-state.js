@@ -114,18 +114,18 @@ const DEFAULT_HERO_STATE = [
   { "id": "stat:stealth", "value": 50 },
   { "id": "stat:influence", "value": 50 },
   { "id": "progress:level", "value": 0 },
-  {
+ /* {
     "id": "organization_rank:oto",
     "value": 0,
     "description": "0° — Минервал (кандидат)"
-  },
+  },*/
   {
     "id": "personality:hero",
     "value": "Молодой искатель приключений, полный энтузиазма."
   }
 ];
 
-const DEFAULT_STATE = {
+export const DEFAULT_STATE = {
   version: '4.1.0',
   gameId: Utils.generateUniqueId(),
   lastSaveTime: new Date().toISOString(),
@@ -234,6 +234,8 @@ function initializeState() {
         
         // Добавляем начальную сцену в историю, если история пуста
         if (state.gameState.history.length === 0 && state.gameState.currentScene) {
+          // Сброс памяти ИИ при смене типа игры – контекст полностью меняется
+          state.gameState.aiMemory = {};
           state.gameState.history.push({
             fullText: state.gameState.currentScene.text || state.gameState.currentScene.scene,
             choice: "Начало игры",
@@ -260,10 +262,7 @@ function initializeState() {
       initializeOrganizationHierarchies();
     }
     
-    checkHeroDeath();
-    if (state.gameType === 'standard') {
-      syncOrganizationRank();
-    }
+    checkHeroDeath()
     
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
     document.documentElement.style.fontSize = `${state.settings.scale * 16}px`;
@@ -581,11 +580,11 @@ function syncOrganizationRank() {
     
     // Используем OperationsService для обновления ранга
     OperationsServiceInstance.applyOperation(
-      { 
-        operation: OPERATIONS.SET, 
-        id: 'organization_rank:oto', 
+      {
+        operation: OPERATIONS.SET,
+        id: 'organization_rank:oto',
         value: newRank,
-        description: newRankName 
+        description: newRankName
       },
       state.heroState
     );
@@ -1032,9 +1031,6 @@ function needsHeroPhrases() {
 // ========================
 
 function setGameType(gameType, initialScene = null) {
-  if (!['standard', 'custom'].includes(gameType)) {
-    throw new Error('Неподдерживаемый тип игры. Допустимые значения: standard, custom');
-  }
   
   const oldGameType = state.gameType;
   state.gameType = gameType;
@@ -1045,12 +1041,6 @@ function setGameType(gameType, initialScene = null) {
       ...initialScene,
       gameType: 'custom'
     };
-    
-    // Обновляем aiMemory, чтобы добавить gameType
-    if (!state.gameState.currentScene.aiMemory) {
-      state.gameState.currentScene.aiMemory = {};
-    }
-    state.gameState.currentScene.aiMemory.gameType = 'custom';
   }
   
   // Если переключаемся на стандартную игру
@@ -1435,6 +1425,8 @@ export const State = {
     
     return { total, success, error, untested };
   },
+  
+    getDefaultHeroState: () => JSON.parse(JSON.stringify(DEFAULT_HERO_STATE)),
   
   // Observer API
   on: (event, callback) => stateObserver.subscribe(event, callback),

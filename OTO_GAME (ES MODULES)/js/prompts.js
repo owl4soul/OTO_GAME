@@ -738,10 +738,10 @@ export const PROMPTS = {
   "typology": "Психологический анализ",
   
   // ОРГАНИЗАЦИОННЫЕ ИЕРАРХИИ (при необходимости, в корне)
-  "organization_rank_hierarchy:oto": {
-    "value": "Орден Восточного Храма",
+  "organization_rank_hierarchy:smith_band": {
+    "value": "Банда Смита",
     "description": [
-      {"lvl": 0, "rank": "0° — Минервал (кандидат)"},
+      {"lvl": 1, "rank": "Мальчик для битья"},
       ...
     ]
   },
