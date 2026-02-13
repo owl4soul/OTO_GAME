@@ -1274,7 +1274,7 @@ function processTurn(data) {
     // 15. Сохраняем состояние
     State.saveStateToLocalStorage();
     
-    log.info(LOG_CATEGORIES.TURN_PROCESSING, '✅ processTurn завершен с сохранением всего функционала', {
+    log.info(LOG_CATEGORIES.TURN_PROCESSING, '✅ processTurn завершен с сохранением состояния', {
         turn: completedTurn,
         sceneLength: updatedScene.scene?.length || 0,
         choicesCount: updatedScene.choices?.length || 0
@@ -1461,12 +1461,10 @@ function handleFreeModeToggle(e) {
     
     State.setState({
         freeMode: isFreeMode,
-        freeModeText: isFreeMode ? dom.freeInputText.value : ''
     });
     
     UI.setFreeModeUI(isFreeMode);
     UI.updateActionButtons();
-    State.saveStateToLocalStorage();
     
     State.emit(State.EVENTS.MODE_CHANGED, { mode: isFreeMode ? 'free' : 'choices' });
 }

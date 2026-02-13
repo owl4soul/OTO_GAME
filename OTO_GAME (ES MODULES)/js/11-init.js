@@ -84,14 +84,22 @@ function init() {
         setupFullscreenListeners();
         Logger.success('EVENTS', "Обработчики событий настроены");
         
+        // ✅ КРИТИЧЕСКИ ВАЖНО: принудительно устанавливаем сохранённый текст в поле свободного ввода
+        // Даже если режим свободного ввода выключен, поле должно содержать текст для будущего включения
+        if (dom.freeInputText) {
+            dom.freeInputText.value = state.freeModeText || '';
+        }
+        
         // Обновляем кнопки действий
         UI.updateActionButtons();
+        
+        // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода и т.д.)
+        Render.updateUIMode();
         
         // Финальная проверка: убеждаемся, что все контейнеры отображены
         setTimeout(() => {
             checkAllContainersVisible();
         }, 100);
-        
         
         Logger.success('SYSTEM', `📊 Статистика: Ход ${state.turnCount}, Организации: ${State.getHeroOrganizations().length}`);
         
@@ -209,15 +217,25 @@ function setupEventListeners() {
     
     // ========== ПОЛЕ СВОБОДНОГО ВВОДА ==========
     if (dom.freeInputText) {
+        // ✅ Debounce-таймер для сохранения
+        let saveTimeout;
+        
         // Обработка ввода текста для активации кнопки
         dom.freeInputText.oninput = (e) => {
             const state = State.getState();
-            state.freeModeText = e.target.value;
+            state.freeModeText = e.target.value; // изменяем объект напрямую
+            
             const hasText = state.freeModeText.trim().length > 0;
             dom.choicesCounter.textContent = hasText ? '✓/∞' : '0/∞';
-            State.setState({ freeModeText: state.freeModeText });
+            
+            // ❌ УБИРАЕМ State.setState({ freeModeText: ... }) – уже изменили объект
             UI.updateActionButtons();
-            State.saveStateToLocalStorage();
+            
+            // ✅ Debounce сохранения: 500 мс после остановки ввода
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                State.saveStateToLocalStorage(); // теперь быстро – аудит не сериализуется
+            }, 500);
         };
         
         // Отправка по Ctrl+Enter
@@ -520,6 +538,15 @@ function setupSaveLoadEvents() {
                 UI.init();
                 Render.renderScene();
                 Render.renderChoices();
+                
+                // ✅ Принудительно устанавливаем текст в поле свободного ввода
+                const state = State.getState();
+                if (dom.freeInputText) {
+                    dom.freeInputText.value = state.freeModeText || '';
+                }
+                
+                // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода)
+                Render.updateUIMode();
                 GameItemUI.forceUpdate();
                 StatsUI.render();
                 HistoryUI.render();
@@ -561,6 +588,15 @@ function setupSaveLoadEvents() {
                 Render.updateModelDetails();
                 Render.renderAuditList();
                 UI.init();
+                
+                // ✅ Принудительно устанавливаем текст в поле свободного ввода
+                const state = State.getState();
+                if (dom.freeInputText) {
+                    dom.freeInputText.value = state.freeModeText || '';
+                }
+                
+                // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода)
+                Render.updateUIMode();
                 GameItemUI.forceUpdate();
                 StatsUI.render();
                 HistoryUI.render();
@@ -681,7 +717,7 @@ function openSettingsModal() {
         Render.updateApiKeyFields();
         Render.renderModelSelectorByProvider();
         Render.updateModelDetails();
-        Render.renderAuditList();
+        Render.renderAuditList(); // полный рендер при открытии
     }
 }
 
@@ -706,6 +742,15 @@ function showMainInterface() {
         // Рендерим через специализированные модули
         Render.renderScene();
         Render.renderChoices();
+        
+        // ✅ Принудительно устанавливаем текст в поле свободного ввода
+        const state = State.getState();
+        if (dom.freeInputText) {
+            dom.freeInputText.value = state.freeModeText || '';
+        }
+        
+        // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода)
+        Render.updateUIMode();
         GameItemUI.forceUpdate();
         StatsUI.render();
         HistoryUI.render();
@@ -714,6 +759,15 @@ function showMainInterface() {
     }
 }
 
+// КРИТИЧЕСКИ ВАЖНО: гарантированное сохранение состояния перед уходом со страницы
+window.addEventListener('beforeunload', () => {
+    // Сохраняем состояние синхронно – без задержек
+    State.saveStateToLocalStorage();
+    // Дополнительно сохраняем аудит-лог отдельно
+    if (typeof State.saveAuditLogToLocalStorage === 'function') {
+        State.saveAuditLogToLocalStorage();
+    }
+});
 
 // Публичный интерфейс модуля
 export const Init = {

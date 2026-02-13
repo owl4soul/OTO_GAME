@@ -1124,17 +1124,20 @@ function setupStateObservers() {
         }
     });
     
-    // Подписка на обновление аудита
+    // ✅ НОВАЯ ПОДПИСКА: АУДИТ-ЛОГ ОБНОВЛЁН
     State.on(State.EVENTS.AUDIT_LOG_UPDATED, (data) => {
-        console.log('🎯 RENDER: AUDIT_LOG_UPDATED событие получено', {
-            logEntries: data?.auditLog?.length || 0
-        });
-        try {
-            renderAuditList();
-            console.log('✅ RENDER: Аудит обновлен после AUDIT_LOG_UPDATED');
-        } catch (error) {
-            console.error('❌ RENDER: Ошибка при обработке AUDIT_LOG_UPDATED:', error);
+        const modal = document.getElementById('settingsModal');
+        const list = document.getElementById('auditList');
+        if (modal && modal.classList.contains('active') && list) {
+            // ✅ Дописываем только новую запись
+            if (data.newEntry) {
+                appendAuditEntry(data.newEntry);
+            } else {
+                // Если по какой-то причине нет newEntry – полный рендер
+                renderAuditList();
+            }
         }
+        // Если модалка закрыта – ничего не делаем, при открытии отрендерится полностью
     });
     
     console.log('✅ RENDER: Все подписки для сцены успешно настроены');
@@ -1393,7 +1396,7 @@ function updateModelStats() {
 }
 
 // ====================================================================
-// АУДИТ-ЛОГ: РЕНДЕРИНГ, КОПИРОВАНИЕ, ЭКСПОРТ
+// АУДИТ-ЛОГ: РЕНДЕРИНГ, КОПИРОВАНИЕ, ЭКСПОРТ (ОПТИМИЗИРОВАНО)
 // ====================================================================
 // ------------------ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ АУДИТА ------------------
 
@@ -1692,8 +1695,188 @@ window.exportFullAuditLog = function() {
     }
 };
 
-// ------------------ ОСНОВНОЙ РЕНДЕРИНГ АУДИТ-ЛОГА ------------------
+// ------------------ НОВАЯ ФУНКЦИЯ: ГЕНЕРАЦИЯ HTML ОДНОЙ ЗАПИСИ ------------------
+function createAuditEntryHTML(entry) {
+    if (!entry) return '';
 
+    let statusColor = '#888';
+    let borderColor = '#444';
+    let bgColor = 'rgba(0,0,0,0.1)';
+    let responseColor = '#4cd137';
+
+    if (entry.status === 'success') {
+        statusColor = '#4cd137';
+        borderColor = '#2d8b57';
+        bgColor = 'rgba(76, 209, 55, 0.05)';
+        responseColor = '#4cd137';
+    } else if (entry.status === 'error') {
+        statusColor = '#e84118';
+        borderColor = '#c23616';
+        bgColor = 'rgba(232, 65, 24, 0.05)';
+        responseColor = '#e84118';
+    } else if (entry.status === 'pending') {
+        statusColor = '#fbc531';
+        borderColor = '#e1b12c';
+        bgColor = 'rgba(251, 197, 49, 0.05)';
+        responseColor = '#fbc531';
+    }
+
+    let headerText = `
+        <span style="color:${statusColor}; font-weight:bold;">${entry.timestamp || 'Нет времени'}</span>: 
+        [${entry.status ? entry.status.toUpperCase() : 'UNKNOWN'}] - 
+        ${entry.request || 'Нет запроса'}
+    `;
+    if (entry.d10 !== undefined && entry.d10 !== null) {
+        headerText += ` <span style="color:#9c88ff;">(d10=${entry.d10})</span>`;
+    }
+
+    // ---------- БЛОК: REQUEST PAYLOAD ----------
+    let requestHtml = '';
+    if (entry.requestDebug && entry.requestDebug.body) {
+        const displayRequest = formatJsonForDisplay(entry.requestDebug.body);
+        requestHtml = `
+        <details style="margin-top: 8px;">
+            <summary style="cursor:pointer; color:#aaa; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 3px; position: relative;">
+                <span style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-share" style="color: inherit;"></i> Request Payload
+                </span>
+                <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'request');" 
+                      style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: #aaa; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
+                    ⧉
+                </span>
+            </summary>
+            <pre style="font-size:0.7rem; color:#ccc; background:#111; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #333; border-radius: 4px; margin-top: 5px;">
+${Utils.escapeHtml(displayRequest)}
+            </pre>
+        </details>`;
+    }
+
+    // ---------- БЛОК: ОТВЕТ СЕРВЕРА ----------
+    let responseHtml = '';
+    if (entry.rawResponse) {
+        const rawPretty = typeof entry.rawResponse === 'string'
+            ? entry.rawResponse
+            : JSON.stringify(entry.rawResponse, null, 2);
+        const sizeInfo = entry.responseSizeKB ?
+            ` (${entry.responseSizeKB})` :
+            ` (${rawPretty.length} символов)`;
+        
+        const hasFullResponse = !!(entry.fullResponse);
+        
+        // ---- 1. Форматированный ответ ----
+        if (hasFullResponse) {
+            const displayFormatted = formatJsonForDisplay(entry.fullResponse);
+            responseHtml += `
+            <details style="margin-top: 8px;">
+                <summary style="cursor:pointer; color:${responseColor}; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 3px; position: relative;">
+                    <span style="display: inline-flex; align-items: center; gap: 6px;">
+                        <i class="fas fa-reply" style="color: inherit;"></i> Форматированный ответ ${sizeInfo}
+                    </span>
+                    <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'formatted');" 
+                          style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: ${responseColor}; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
+                        ⧉
+                    </span>
+                </summary>
+                <pre style="font-size:0.7rem; color:${responseColor}; background:${entry.status === 'error' ? '#2d0000' : '#1a3a1a'}; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid ${responseColor}; border-radius: 4px; margin-top: 5px;">
+${Utils.escapeHtml(displayFormatted)}
+                </pre>
+            </details>`;
+        }
+        
+        // ---- 2. Сырой ответ ----
+        const rawSummaryColor = hasFullResponse ? '#aaa' : '#e74c3c';
+        responseHtml += `
+        <details style="margin-top: 8px;">
+            <summary style="cursor:pointer; color:${rawSummaryColor}; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 3px; position: relative;">
+                <span style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-file-code" style="color: inherit;"></i> Сырой ответ ${sizeInfo}
+                    ${!hasFullResponse ? ' <span style="color:#e74c3c;">(не удалось отформатировать)</span>' : ''}
+                </span>
+                <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'raw');" 
+                      style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: ${rawSummaryColor}; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
+                    ⧉
+                </span>
+            </summary>
+            <pre style="font-size:0.7rem; color:#ccc; background:#111; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #666; border-radius: 4px; margin-top: 5px;">
+${entry.rawResponse}
+            </pre>
+            ${isValidJson(entry.rawResponse) 
+                ? '<div style="margin-top: 4px; color: #888; font-size:0.7rem;">✓ Ответ является валидным JSON</div>' 
+                : '<div style="margin-top: 4px; color: #e74c3c; font-size:0.7rem;">✗ Ответ НЕ является валидным JSON</div>'}
+        </details>`;
+    }
+
+    // ---------- БЛОК: ДЕТАЛИ ОШИБКИ ----------
+    let errorHtml = '';
+    if (entry.rawError) {
+        const displayError = formatJsonForDisplay(entry.rawError);
+        errorHtml = `
+        <details style="margin-top: 8px;">
+            <summary style="cursor:pointer; color:#e84118; font-size:0.85em; padding: 5px; background: rgba(232, 65, 24, 0.1); border-radius: 3px; position: relative;">
+                <span style="display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-exclamation-triangle" style="color: inherit;"></i> ERROR DETAILS
+                </span>
+                <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'error');" 
+                      style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: #e84118; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
+                    ⧉
+                </span>
+            </summary>
+            <pre style="font-size:0.7rem; color:#e84118; background:#2d0000; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #c23616; border-radius: 4px; margin-top: 5px;">
+${Utils.escapeHtml(displayError)}
+            </pre>
+        </details>`;
+    }
+
+    // ---------- ОБЩИЕ КНОПКИ (Скачать / Копировать) ----------
+    const actionButtons = `
+    <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+        <button onclick="exportSingleAuditEntry(${entry.id})" 
+                style="padding:5px 10px; font-size:0.75rem; background:#333; color:#ccc; border:1px solid #555; border-radius:4px; cursor:pointer; transition: all 0.2s;">
+            <i class="fas fa-download"></i> Скачать
+        </button>
+        <button onclick="copyAuditEntry(${entry.id})" 
+                style="padding:5px 10px; font-size:0.75rem; background:#333; color:#ccc; border:1px solid #555; border-radius:4px; cursor:pointer; transition: all 0.2s;">
+            <i class="fas fa-copy"></i> Копировать
+        </button>
+    </div>`;
+
+    // ---------- СБОРКА ----------
+    return `
+    <div style="padding:12px; border-bottom:1px solid #333; border-left: 4px solid ${borderColor}; margin-bottom: 10px; background: ${bgColor}; border-radius: 4px;">
+        <div style="font-size: 0.85rem; margin-bottom: 10px; line-height: 1.4;">${headerText}</div>
+        ${requestHtml}
+        ${responseHtml}
+        ${errorHtml}
+        ${actionButtons}
+    </div>
+    `;
+}
+
+// ------------------ НОВАЯ ФУНКЦИЯ: ДОПИСЫВАНИЕ ОДНОЙ ЗАПИСИ ------------------
+function appendAuditEntry(entry) {
+    const list = document.getElementById('auditList');
+    if (!list) return;
+    
+    const entryHtml = createAuditEntryHTML(entry);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = entryHtml.trim();
+    const newEntryElement = tempDiv.firstChild;
+    
+    if (list.firstChild) {
+        list.insertBefore(newEntryElement, list.firstChild);
+    } else {
+        list.appendChild(newEntryElement);
+    }
+    
+    updateLogCount();
+    
+    const maxDisplay = 20;
+    if (list.children.length > maxDisplay) {
+        list.removeChild(list.lastChild);
+    }
+}
+
+// ------------------ ОСНОВНОЙ РЕНДЕРИНГ АУДИТ-ЛОГА ------------------
 function renderAuditList() {
     const state = State.getState();
     const list = document.getElementById('auditList');
@@ -1703,7 +1886,7 @@ function renderAuditList() {
         return;
     }
     
-    const displayLog = state.auditLog.slice(-50);
+    const displayLog = state.auditLog.slice(0, 20);
     
     if (displayLog.length === 0) {
         list.innerHTML = `
@@ -1716,171 +1899,8 @@ function renderAuditList() {
         return;
     }
     
-    let listHTML = '';
-    
-    displayLog.forEach(entry => {
-        if (!entry) return;
-        
-        // ---------- Цветовая схема ----------
-        let statusColor = '#888';
-        let borderColor = '#444';
-        let bgColor = 'rgba(0,0,0,0.1)';
-        let responseColor = '#4cd137';
-        
-        if (entry.status === 'success') {
-            statusColor = '#4cd137';
-            borderColor = '#2d8b57';
-            bgColor = 'rgba(76, 209, 55, 0.05)';
-            responseColor = '#4cd137';
-        } else if (entry.status === 'error') {
-            statusColor = '#e84118';
-            borderColor = '#c23616';
-            bgColor = 'rgba(232, 65, 24, 0.05)';
-            responseColor = '#e84118';
-        } else if (entry.status === 'pending') {
-            statusColor = '#fbc531';
-            borderColor = '#e1b12c';
-            bgColor = 'rgba(251, 197, 49, 0.05)';
-            responseColor = '#fbc531';
-        }
-        
-        // ---------- Заголовок записи ----------
-        let headerText = `
-            <span style="color:${statusColor}; font-weight:bold;">${entry.timestamp || 'Нет времени'}</span>: 
-            [${entry.status ? entry.status.toUpperCase() : 'UNKNOWN'}] - 
-            ${entry.request || 'Нет запроса'}
-        `;
-        
-        if (entry.d10 !== undefined && entry.d10 !== null) {
-            headerText += ` <span style="color:#9c88ff;">(d10=${entry.d10})</span>`;
-        }
-        
-        // ---------- БЛОК: REQUEST PAYLOAD ----------
-        let requestHtml = '';
-        if (entry.requestDebug && entry.requestDebug.body) {
-            // Для отображения: с реальными переносами строк
-            const displayRequest = formatJsonForDisplay(entry.requestDebug.body);
-            requestHtml = `
-            <details style="margin-top: 8px;">
-                <summary style="cursor:pointer; color:#aaa; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.1); border-radius: 3px; position: relative;">
-                    <!-- ТОЛЬКО ИКОНКА И ТЕКСТ - НИКАКИХ ДАННЫХ ЗАПРОСА! -->
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-share" style="color: inherit;"></i> Request Payload
-                    </span>
-                    <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'request');" 
-                          style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: #aaa; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
-                        ⧉
-                    </span>
-                </summary>
-                <pre style="font-size:0.7rem; color:#ccc; background:#111; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #333; border-radius: 4px; margin-top: 5px;">
-${Utils.escapeHtml(displayRequest)}
-                </pre>
-            </details>`;
-        }
-        
-        // ---------- БЛОК: ОТВЕТ СЕРВЕРА ----------
-        let responseHtml = '';
-        if (entry.rawResponse) {
-            const rawPretty = typeof entry.rawResponse === 'string'
-                ? entry.rawResponse
-                : JSON.stringify(entry.rawResponse, null, 2);
-            const sizeInfo = entry.responseSizeKB ?
-                ` (${entry.responseSizeKB})` :
-                ` (${rawPretty.length} символов)`;
-            
-            const hasFullResponse = !!(entry.fullResponse);
-            
-            // ---- 1. Форматированный ответ ----
-            if (hasFullResponse) {
-                const displayFormatted = formatJsonForDisplay(entry.fullResponse);
-                responseHtml += `
-                <details style="margin-top: 8px;">
-                    <summary style="cursor:pointer; color:${responseColor}; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 3px; position: relative;">
-                        <span style="display: inline-flex; align-items: center; gap: 6px;">
-                            <i class="fas fa-reply" style="color: inherit;"></i> Форматированный ответ ${sizeInfo}
-                        </span>
-                        <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'formatted');" 
-                              style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: ${responseColor}; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
-                            ⧉
-                        </span>
-                    </summary>
-                    <pre style="font-size:0.7rem; color:${responseColor}; background:${entry.status === 'error' ? '#2d0000' : '#1a3a1a'}; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid ${responseColor}; border-radius: 4px; margin-top: 5px;">
-${Utils.escapeHtml(displayFormatted)}
-                    </pre>
-                </details>`;
-            }
-            
-            // ---- 2. Сырой ответ ----
-            const isValid = isValidJson(entry.rawResponse);
-            const rawSummaryColor = hasFullResponse ? '#aaa' : '#e74c3c';
-            
-            responseHtml += `
-            <details style="margin-top: 8px;">
-                <summary style="cursor:pointer; color:${rawSummaryColor}; font-size:0.85em; padding: 5px; background: rgba(0,0,0,0.2); border-radius: 3px; position: relative;">
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-file-code" style="color: inherit;"></i> Сырой ответ ${sizeInfo}
-                        ${!hasFullResponse ? ' <span style="color:#e74c3c;">(не удалось отформатировать)</span>' : ''}
-                    </span>
-                    <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'raw');" 
-                          style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: ${rawSummaryColor}; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
-                        ⧉
-                    </span>
-                </summary>
-                <pre style="font-size:0.7rem; color:#ccc; background:#111; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #666; border-radius: 4px; margin-top: 5px;">
-${entry.rawResponse}
-                </pre>
-                ${isValid 
-                    ? '<div style="margin-top: 4px; color: #888; font-size:0.7rem;">✓ Ответ является валидным JSON</div>' 
-                    : '<div style="margin-top: 4px; color: #e74c3c; font-size:0.7rem;">✗ Ответ НЕ является валидным JSON</div>'}
-            </details>`;
-        }
-        
-        // ---------- БЛОК: ДЕТАЛИ ОШИБКИ ----------
-        let errorHtml = '';
-        if (entry.rawError) {
-            const displayError = formatJsonForDisplay(entry.rawError);
-            errorHtml = `
-            <details style="margin-top: 8px;">
-                <summary style="cursor:pointer; color:#e84118; font-size:0.85em; padding: 5px; background: rgba(232, 65, 24, 0.1); border-radius: 3px; position: relative;">
-                    <span style="display: inline-flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-exclamation-triangle" style="color: inherit;"></i> ERROR DETAILS
-                    </span>
-                    <span onclick="event.stopPropagation(); event.preventDefault(); copyAuditContent(${entry.id}, 'error');" 
-                          style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; color: #e84118; font-size: 1.2rem; padding: 0 4px; border-radius: 3px; cursor: pointer; background: rgba(255,255,255,0.05);">
-                        ⧉
-                    </span>
-                </summary>
-                <pre style="font-size:0.7rem; color:#e84118; background:#2d0000; padding:10px; overflow-x:auto; white-space: pre-wrap; border: 1px solid #c23616; border-radius: 4px; margin-top: 5px;">
-${Utils.escapeHtml(displayError)}
-                </pre>
-            </details>`;
-        }
-        
-        // ---------- ОБЩИЕ КНОПКИ (Скачать / Копировать) ----------
-        const actionButtons = `
-        <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
-            <button onclick="exportSingleAuditEntry(${entry.id})" 
-                    style="padding:5px 10px; font-size:0.75rem; background:#333; color:#ccc; border:1px solid #555; border-radius:4px; cursor:pointer; transition: all 0.2s;">
-                <i class="fas fa-download"></i> Скачать
-            </button>
-            <button onclick="copyAuditEntry(${entry.id})" 
-                    style="padding:5px 10px; font-size:0.75rem; background:#333; color:#ccc; border:1px solid #555; border-radius:4px; cursor:pointer; transition: all 0.2s;">
-                <i class="fas fa-copy"></i> Копировать
-            </button>
-        </div>`;
-        
-        // ---------- СБОРКА ----------
-        listHTML += `
-        <div style="padding:12px; border-bottom:1px solid #333; border-left: 4px solid ${borderColor}; margin-bottom: 10px; background: ${bgColor}; border-radius: 4px;">
-            <div style="font-size: 0.85rem; margin-bottom: 10px; line-height: 1.4;">${headerText}</div>
-            ${requestHtml}
-            ${responseHtml}
-            ${errorHtml}
-            ${actionButtons}
-        </div>`;
-    });
-    
-    list.innerHTML = listHTML;
+    // Полная перерисовка – используем map и join
+    list.innerHTML = displayLog.map(entry => createAuditEntryHTML(entry)).join('');
     updateLogCount();
 }
 
@@ -2248,7 +2268,11 @@ export const Render = {
     updateThoughtsOfHeroText,
     
     // Инициализация
-    setupStateObservers
+    setupStateObservers,
+    
+    // ✅ Новые экспортируемые функции (для отладки/расширения)
+    createAuditEntryHTML,
+    appendAuditEntry
 };
 
 // ГЛОБАЛЬНЫЕ ССЫЛКИ (ДЛЯ ONCLICK)
@@ -2260,4 +2284,4 @@ window.showNotification = showNotification;
 window.copyTextToClipboard = copyTextToClipboard;
 
 console.log('✅ Модуль 5-render.js загружен успешно');
-console.log('📋 Функциональность: рендеринг сцены, выборов, памяти ГМ с полным рекурсивным раскрытием');
+console.log('📋 Функциональность: рендеринг сцены, выборов, памяти ГМ с полным рекурсивным раскрытием, оптимизированный аудит');

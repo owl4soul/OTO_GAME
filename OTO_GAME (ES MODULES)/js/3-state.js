@@ -6,7 +6,7 @@ import { Utils } from './2-utils.js';
 import { PROMPTS } from './prompts.js';
 import { GameItemUI } from './gameitem-ui.js';
 import { OperationsServiceInstance, GAME_ITEM_TYPES, OPERATIONS } from './operations-service.js';
-import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js'; // ДОБАВЛЕНО
+import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js';
 
 // ========================
 // ПАТТЕРН OBSERVER (НАБЛЮДАТЕЛЬ)
@@ -14,33 +14,23 @@ import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js'; // ДОБ
 
 class StateObserver {
   constructor() {
-    this.observers = new Map(); // eventName -> Set<callback>
+    this.observers = new Map();
   }
   
-  /**
-   * Подписаться на событие
-   */
   subscribe(event, callback) {
     if (!this.observers.has(event)) {
       this.observers.set(event, new Set());
     }
     this.observers.get(event).add(callback);
-    
     return () => this.unsubscribe(event, callback);
   }
   
-  /**
-   * Отписаться от события
-   */
   unsubscribe(event, callback) {
     if (this.observers.has(event)) {
       this.observers.get(event).delete(callback);
     }
   }
   
-  /**
-   * Уведомить всех подписчиков события
-   */
   notify(event, data = null) {
     if (this.observers.has(event)) {
       this.observers.get(event).forEach(callback => {
@@ -56,9 +46,6 @@ class StateObserver {
     }
   }
   
-  /**
-   * Удалить все подписки события
-   */
   clear(event = null) {
     if (event) {
       this.observers.delete(event);
@@ -68,10 +55,16 @@ class StateObserver {
   }
 }
 
-// Создаем глобальный экземпляр наблюдателя
 const stateObserver = new StateObserver();
 
-// События состояния
+// ========================
+// КЛЮЧ ДЛЯ АУДИТ-ЛОГА (ОТДЕЛЬНОЕ ХРАНИЛИЩЕ)
+// ========================
+const AUDIT_LOG_KEY = 'oto_audit_log_v4';
+
+// ========================
+// СОБЫТИЯ СОСТОЯНИЯ
+// ========================
 const STATE_EVENTS = {
   INITIALIZED: 'state:initialized',
   LOADED: 'state:loaded',
@@ -101,7 +94,9 @@ const STATE_EVENTS = {
   ORGANIZATION_JOINED: 'organization:joined',
   ORGANIZATION_RANK_CHANGED: 'organization:rank:changed',
   ORGANIZATION_LEFT: 'organization:left',
-  ORGANIZATION_HIERARCHY_UPDATED: 'organization:hierarchy:updated'
+  ORGANIZATION_HIERARCHY_UPDATED: 'organization:hierarchy:updated',
+  // ✅ НОВОЕ СОБЫТИЕ ДЛЯ АУДИТ-ЛОГА
+  AUDIT_LOG_UPDATED: 'audit:log:updated'
 };
 
 // ========================
@@ -130,7 +125,7 @@ export const DEFAULT_STATE = {
   gameId: Utils.generateUniqueId(),
   lastSaveTime: new Date().toISOString(),
   turnCount: 1,
-  gameType: 'standard', // 'standard' или 'custom'
+  gameType: 'standard',
   heroState: [...DEFAULT_HERO_STATE],
   gameState: {
     summary: "",
@@ -138,7 +133,7 @@ export const DEFAULT_STATE = {
     aiMemory: {},
     currentScene: { ...PROMPTS.standardGameOTO.initialGameState },
     selectedActions: [],
-    organizationsHierarchy: {} // Хранит иерархии всех организаций (ДИНАМИЧЕСКИЕ ДАННЫЕ)
+    organizationsHierarchy: {}
   },
   ui: {
     hTop: 50,
@@ -156,7 +151,7 @@ export const DEFAULT_STATE = {
     scale: CONFIG.scaleSteps[CONFIG.defaultScaleIndex],
     scaleIndex: CONFIG.defaultScaleIndex
   },
-  auditLog: [],
+  // auditLog: [], // ❌ УДАЛЕНО ИЗ ОСНОВНОГО СОСТОЯНИЯ
   models: [...aiModels],
   isRitualActive: false,
   ritualProgress: 0,
@@ -170,6 +165,19 @@ export const DEFAULT_STATE = {
 };
 
 let state = null;
+
+// ========================
+// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ СОХРАНЕНИЯ АУДИТ-ЛОГА (ОТДЕЛЬНО)
+// ========================
+function saveAuditLogToLocalStorage() {
+  try {
+    localStorage.setItem(AUDIT_LOG_KEY, JSON.stringify(state.auditLog));
+    return true;
+  } catch (error) {
+    console.error('❌ Ошибка сохранения аудит-лога:', error);
+    return false;
+  }
+}
 
 // ========================
 // ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЯ
@@ -198,7 +206,6 @@ function initializeState() {
             } else if (key === 'gameState' && typeof parsed[key] === 'object') {
               state.gameState = { ...defaultValue.gameState, ...parsed[key] };
               
-              // ГАРАНТИРУЕМ наличие organizationsHierarchy
               if (!state.gameState.organizationsHierarchy) {
                 state.gameState.organizationsHierarchy = {};
                 log.info(LOG_CATEGORIES.GAME_STATE, '✅ Инициализирован пустой объект organizationsHierarchy');
@@ -213,18 +220,15 @@ function initializeState() {
           }
         }
         
-        // Восстанавливаем gameType, если есть
         if (parsed.gameType) {
           state.gameType = parsed.gameType;
         }
         
-        // Проверяем currentScene
         if (!state.gameState.currentScene || !state.gameState.currentScene.scene) {
           log.warn(LOG_CATEGORIES.GAME_STATE, '⚠️ Восстановление: отсутствует currentScene, использую начальную сцену');
           state.gameState.currentScene = state.gameType === 'standard' ? { ...PROMPTS.standardGameOTO.initialGameState } : { scene: "Сцена не загружена", choices: [], aiMemory: {}, gameType: 'custom' };
         }
         
-        // После загрузки состояния
         log.info(LOG_CATEGORIES.GAME_STATE, '✅ Состояние загружено из localStorage (формат 4.1)', {
           gameId: state.gameId,
           gameType: state.gameType,
@@ -232,9 +236,7 @@ function initializeState() {
           heroItems: state.heroState.length
         });
         
-        // Добавляем начальную сцену в историю, если история пуста
         if (state.gameState.history.length === 0 && state.gameState.currentScene) {
-          // Сброс памяти ИИ при смене типа игры – контекст полностью меняется
           state.gameState.aiMemory = {};
           state.gameState.history.push({
             fullText: state.gameState.currentScene.text || state.gameState.currentScene.scene,
@@ -246,7 +248,6 @@ function initializeState() {
           log.info(LOG_CATEGORIES.GAME_STATE, '✅ Начальная сцена добавлена в историю как ход #1');
         }
         
-        // Инициализируем иерархии организаций (ВСЕГДА)
         initializeOrganizationHierarchies();
         
       } catch (parseError) {
@@ -261,8 +262,23 @@ function initializeState() {
       state.gameId = Utils.generateUniqueId();
       initializeOrganizationHierarchies();
     }
+
+    // ✅ ЗАГРУЖАЕМ АУДИТ-ЛОГ ИЗ ОТДЕЛЬНОГО ХРАНИЛИЩА
+    const savedAuditLog = localStorage.getItem(AUDIT_LOG_KEY);
+    if (savedAuditLog) {
+      try {
+        state.auditLog = JSON.parse(savedAuditLog);
+        log.info(LOG_CATEGORIES.AUDIT, `✅ Аудит-лог загружен из отдельного хранилища (${state.auditLog.length} записей)`);
+      } catch (e) {
+        log.warn(LOG_CATEGORIES.AUDIT, '⚠️ Ошибка парсинга аудит-лога, создаём новый');
+        state.auditLog = [];
+      }
+    } else {
+      state.auditLog = [];
+      log.info(LOG_CATEGORIES.AUDIT, '🆕 Аудит-лог пуст, создан новый');
+    }
     
-    checkHeroDeath()
+    checkHeroDeath();
     
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
     document.documentElement.style.fontSize = `${state.settings.scale * 16}px`;
@@ -272,7 +288,8 @@ function initializeState() {
       turnCount: state.turnCount,
       heroItems: state.heroState.length,
       gameType: state.gameType,
-      organizations: Object.keys(state.gameState.organizationsHierarchy).length
+      organizations: Object.keys(state.gameState.organizationsHierarchy).length,
+      auditLogEntries: state.auditLog.length
     });
     
     stateObserver.notify(STATE_EVENTS.INITIALIZED, {
@@ -288,6 +305,7 @@ function initializeState() {
     state = { ...DEFAULT_STATE };
     state.gameId = Utils.generateUniqueId();
     state.models = [...aiModels];
+    state.auditLog = [];
     
     try {
       localStorage.setItem('oto_v4_state', JSON.stringify(state));
@@ -296,7 +314,6 @@ function initializeState() {
     }
   }
   
-  // Подписка для gameitem-ui на TURN_COMPLETED
   stateObserver.subscribe(STATE_EVENTS.TURN_COMPLETED, (data) => {
     if (GameItemUI && typeof GameItemUI.handleTurnCompleted === 'function') {
       GameItemUI.handleTurnCompleted(state.turnCount);
@@ -830,6 +847,7 @@ function exportFullState() {
   return exportData;
 }
 
+// ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ: importFullState – теперь восстанавливает все поля состояния
 function importFullState(importData) {
   if (!importData || typeof importData !== 'object') {
     throw new Error('Некорректные данные импорта');
@@ -868,6 +886,20 @@ function importFullState(importData) {
   
   if (importData.lastTurnStatChanges !== undefined) {
     state.lastTurnStatChanges = importData.lastTurnStatChanges;
+  }
+  
+  // ✅ ВОССТАНАВЛИВАЕМ ПОЛЯ, КОТОРЫЕ НЕ БЫЛИ ВОССТАНОВЛЕНЫ РАНЕЕ
+  if (importData.freeMode !== undefined) state.freeMode = importData.freeMode;
+  if (importData.freeModeText !== undefined) state.freeModeText = importData.freeModeText;
+  if (importData.isRitualActive !== undefined) state.isRitualActive = importData.isRitualActive;
+  if (importData.ritualProgress !== undefined) state.ritualProgress = importData.ritualProgress;
+  if (importData.ritualTarget !== undefined) state.ritualTarget = importData.ritualTarget;
+  if (importData.thoughtsOfHero) state.thoughtsOfHero = [...importData.thoughtsOfHero];
+  
+  // ✅ ВОССТАНАВЛИВАЕМ АУДИТ-ЛОГ, ЕСЛИ ОН ЕСТЬ В ИМПОРТЕ
+  if (importData.auditLog) {
+    state.auditLog = importData.auditLog;
+    saveAuditLogToLocalStorage();
   }
   
   if (state.gameType === 'standard') {
@@ -955,6 +987,7 @@ function importAllAppData(importData) {
   
   if (importData.appData.auditLog) {
     state.auditLog = importData.appData.auditLog;
+    saveAuditLogToLocalStorage(); // ✅ сохраняем отдельно
   }
   
   if (importData.appData.metadata) {
@@ -1103,7 +1136,7 @@ function saveStateToLocalStorage() {
       },
       ui: { ...currentState.ui },
       settings: { ...currentState.settings },
-      auditLog: [...currentState.auditLog],
+      // auditLog: [...] // ❌ УДАЛЕНО – аудит хранится отдельно
       models: [...currentState.models],
       isRitualActive: currentState.isRitualActive,
       ritualProgress: currentState.ritualProgress,
@@ -1167,21 +1200,10 @@ export const State = {
       initializeState();
     }
     
-    const changes = {};
-    Object.keys(newState).forEach(key => {
-      if (JSON.stringify(state[key]) !== JSON.stringify(newState[key])) {
-        changes[key] = { from: state[key], to: newState[key] };
-      }
-    });
-    
-    if (Object.keys(changes).length > 0) {
-      log.debug(LOG_CATEGORIES.GAME_STATE, '🔄 Обновление состояния', {
-        changes: Object.keys(changes),
-        details: changes
-      });
-    }
-    
+    // ❌ Полностью убираем блок с JSON.stringify – он был нужен только для отладки
     state = { ...state, ...newState };
+    
+    // Сохраняем основное состояние (аудит уже не входит)
     saveStateToLocalStorage();
   },
   
@@ -1192,7 +1214,7 @@ export const State = {
         const currentSettings = state.settings;
         const currentUI = state.ui;
         const currentModels = state.models;
-        const currentAuditLog = state.auditLog;
+        const currentAuditLog = [...state.auditLog]; // ✅ сохраняем
         const currentGameType = state.gameType;
         
         state.heroState = [...DEFAULT_HERO_STATE];
@@ -1221,7 +1243,7 @@ export const State = {
         state.settings = currentSettings;
         state.ui = currentUI;
         state.models = currentModels;
-        state.auditLog = currentAuditLog;
+        state.auditLog = currentAuditLog; // ✅ восстанавливаем
         state.gameType = currentGameType;
         state.turnCount = 1;
         state.isRitualActive = false;
@@ -1237,6 +1259,9 @@ export const State = {
         if (state.gameType === 'standard') {
           syncOrganizationRank();
         }
+        
+        // ✅ Сохраняем аудит-лог отдельно
+        saveAuditLogToLocalStorage();
         
         stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
         stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
@@ -1255,7 +1280,7 @@ export const State = {
       const currentSettings = state.settings;
       const currentUI = state.ui;
       const currentModels = state.models;
-      const currentAuditLog = state.auditLog;
+      const currentAuditLog = [...state.auditLog];
       const currentGameType = state.gameType;
       
       state.heroState = [...DEFAULT_HERO_STATE];
@@ -1298,6 +1323,8 @@ export const State = {
         syncOrganizationRank();
       }
       
+      saveAuditLogToLocalStorage(); // ✅ сохраняем отдельно
+      
       stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
       stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
       
@@ -1329,6 +1356,9 @@ export const State = {
   
   saveStateToLocalStorage,
   loadStateFromLocalStorage,
+  
+  // ✅ Внутренняя функция сохранения аудит-лога (публичный доступ для отладки)
+  saveAuditLogToLocalStorage,
   
   applyOperations,
   getGameItem,
@@ -1405,13 +1435,23 @@ export const State = {
   },
   getScaleIndex: () => state.settings.scaleIndex,
   
+  // Добавляет запись аудита
   addAuditLogEntry: (entry) => {
+    entry.id = entry.id || Date.now();
     entry.timestamp = Utils.formatMoscowTime(new Date());
+    
     state.auditLog.unshift(entry);
     
-    if (state.auditLog.length > 100) {
-      state.auditLog = state.auditLog.slice(0, 100);
+    if (state.auditLog.length > 50) {
+      state.auditLog = state.auditLog.slice(0, 50);
     }
+    
+    saveAuditLogToLocalStorage(); // ✅ сохраняем отдельно
+    
+    stateObserver.notify(STATE_EVENTS.AUDIT_LOG_UPDATED, {
+      auditLog: state.auditLog,
+      newEntry: entry
+    });
     
     log.debug(LOG_CATEGORIES.AUDIT, '📝 Добавлена запись в аудит-лог', entry);
   },
