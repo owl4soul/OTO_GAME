@@ -24,16 +24,6 @@ let pendingD10 = null;
 // Операции над game_item
 const OPERATION_TYPES = OPERATIONS;
 
-function getRussianStatName(key) {
-    const map = {
-        'will': 'Воля',
-        'stealth': 'Скрытность',
-        'influence': 'Влияние',
-        'sanity': 'Разум'
-    };
-    return map[key] || key;
-}
-
 /**
  * Создает HTML для отображения информации об организациях героя (для сцены)
  */
@@ -266,7 +256,7 @@ function createCompactOperationHTML(operation, source) {
         case 'stat':
             icon = 'fas fa-chart-line';
             color = '#fbc531';
-            displayName = getRussianStatName(name);
+            displayName = Utils.getRussianStatName(name);
             break;
         case 'skill':
             icon = 'fas fa-scroll';
@@ -296,12 +286,12 @@ function createCompactOperationHTML(operation, source) {
         case 'buff':
             icon = 'fas fa-arrow-up';
             color = '#4cd137';
-            displayName = getRussianStatName(name);
+            displayName = Utils.getRussianStatName(name);
             break;
         case 'debuff':
             icon = 'fas fa-arrow-down';
             color = '#e84118';
-            displayName = getRussianStatName(name);
+            displayName = Utils.getRussianStatName(name);
             break;
         case 'progress':
             icon = 'fas fa-chart-line';

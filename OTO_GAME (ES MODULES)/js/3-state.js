@@ -1050,15 +1050,6 @@ function saveStateToLocalStorage() {
   }
 }
 
-/**
- * Загрузка состояния игры из localStorage (ФОРМАТ 4.1)
- */
-function loadStateFromLocalStorage() {
-  log.debug(LOG_CATEGORIES.GAME_STATE, '📥 Загрузка состояния...');
-  const savedState = localStorage.getItem('oto_v4_state');
-  return savedState;
-}
-
 // ========================
 // ПУБЛИЧНЫЙ ИНТЕРФЕЙС
 // ========================
@@ -1233,7 +1224,6 @@ export const State = {
   },
   
   saveStateToLocalStorage,
-  loadStateFromLocalStorage,
   
   // Сохранение аудит-лога
   saveAuditLogToLocalStorage,

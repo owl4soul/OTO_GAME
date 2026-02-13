@@ -231,10 +231,10 @@ function setupEventListeners() {
             // ❌ УБИРАЕМ State.setState({ freeModeText: ... }) – уже изменили объект
             UI.updateActionButtons();
             
-            // ✅ Debounce сохранения: 500 мс после остановки ввода
+            // Debounce сохранения: 500 мс после остановки ввода
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => {
-                State.saveStateToLocalStorage(); // теперь быстро – аудит не сериализуется
+                State.saveStateToLocalStorage();
             }, 500);
         };
         

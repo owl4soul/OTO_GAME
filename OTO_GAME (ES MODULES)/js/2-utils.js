@@ -18,6 +18,64 @@ const GAME_ITEM_CATEGORIES = {
     PROGRESS: 'progress'
 };
 
+function getRussianStatName(key) {
+    const map = {
+        'will': 'Воля',
+        'stealth': 'Скрытность',
+        'influence': 'Влияние',
+        'sanity': 'Разум'
+    };
+    return map[key] || key;
+}
+
+/**
+ * Получает иконку для типа игрового предмета
+ * @param {string} itemId - Идентификатор предмета (например, 'stat:will')
+ * @returns {string} Emoji-иконка
+ */
+function getGameItemIcon(itemId) {
+    if (!itemId) return '📌';
+    
+    const type = itemId.split(':')[0];
+    const icons = {
+        'stat': '📊',
+        'skill': '📜',
+        'inventory': '🎒',
+        'relations': '👤',
+        'bless': '✨',
+        'curse': '💀',
+        'buff': '⬆️',
+        'debuff': '⬇️',
+        'initiation_degree': '🎓',
+        'progress': '📈',
+        'personality': '🧠',
+        'effect': '⚡',
+        'status': '🔘',
+        'ability': '💫',
+        'trait': '🎭',
+        'item': '🎁',
+        'ritual': '🕯️',
+        'knowledge': '📚',
+        'secret': '🔐',
+        'location': '📍',
+        'event': '📅',
+        'quest': '🎯',
+        'achievement': '🏆',
+        'reputation': '⭐',
+        'currency': '💰',
+        'resource': '⛏️',
+        'weapon': '⚔️',
+        'armor': '🛡️',
+        'potion': '🧪',
+        'scroll': '📜',
+        'key': '🔑',
+        'map': '🗺️',
+        'tool': '🔧'
+    };
+    
+    return icons[type] || '📌';
+}
+
 function categorizeGameItem(id) {
     if (!id || typeof id !== 'string') return null;
     
@@ -1240,6 +1298,8 @@ export const Utils = {
     repairTruncatedJSON,
     robustJsonParse,
     getStatusEmoji,
+    getGameItemIcon,
+    getRussianStatName,
     formatErrorDetails,
     exportToFile,
     generateUniqueId,

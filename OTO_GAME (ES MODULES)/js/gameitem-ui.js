@@ -1511,22 +1511,13 @@ class GameItemUIManager {
             const fonts = config.fonts;
             
             if (statBuffsDebuffs.length > 0) {
-                const getRussianStatName = (key) => {
-                    const map = {
-                        'will': 'Воля',
-                        'stealth': 'Скрытность',
-                        'influence': 'Влияние',
-                        'sanity': 'Разум'
-                    };
-                    return map[key] || key;
-                };
                 
                 let itemsHTML = '';
                 
                 statBuffsDebuffs.forEach(item => {
                     const isBuff = item.id.startsWith('buff:');
                     const statName = item.id.split(':')[1];
-                    const russianName = getRussianStatName(statName);
+                    const russianName = Utils.getRussianStatName(statName);
                     const value = item.value || 0;
                     const sign = value > 0 ? '+' : '';
                     const duration = item.duration !== undefined ? `[${item.duration}]` : '';
@@ -1859,7 +1850,7 @@ class GameItemUIManager {
                     const [type, name] = item.id.split(':');
                     const displayName = item.value || name || item.id;
                     const duration = item.duration !== undefined ? `[${item.duration}]` : '';
-                    const icon = Render.getGameItemIcon(item.id);
+                    const icon = Utils.getGameItemIcon(item.id);
                     const itemData = JSON.stringify(item).replace(/"/g, '&quot;');
                     
                     detailsHTML += `
@@ -2279,7 +2270,7 @@ class GameItemUIManager {
         
         let content = '';
         
-        const icon = Render.getGameItemIcon(gameItem.id);
+        const icon = Utils.getGameItemIcon(gameItem.id);
         const [type, name] = gameItem.id.split(':');
         
         content += `

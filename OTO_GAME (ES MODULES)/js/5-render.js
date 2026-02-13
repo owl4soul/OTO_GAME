@@ -685,7 +685,7 @@ function formatCompactRequirements(requirements) {
         switch (type) {
             case 'stat':
                 color = '#fbc531';
-                displayName = getRussianStatName(name);
+                displayName = Utils.getRussianStatName(name);
                 icon = '📊';
                 break;
             case 'skill':
@@ -752,15 +752,15 @@ function formatCompactOperations(operations, type) {
             const color = delta > 0 ? '#4cd137' : '#e84118';
             
             if (itemType === 'stat') {
-                display = `<span style="color:${color}; font-weight:bold;">${getRussianStatName(name)} ${sign}${delta}</span>`;
+                display = `<span style="color:${color}; font-weight:bold;">${Utils.getRussianStatName(name)} ${sign}${delta}</span>`;
             } else {
                 display = `<span style="color:${color}; font-weight:bold;">${name} ${sign}${delta}</span>`;
             }
         } else if (op.operation === 'ADD') {
-            const icon = getGameItemIcon(op.id);
+            const icon = Utils.getGameItemIcon(op.id);
             display = `<span style="color:#4cd137; font-weight:bold;">+${icon} ${name}</span>`;
         } else if (op.operation === 'REMOVE') {
-            const icon = getGameItemIcon(op.id);
+            const icon = Utils.getGameItemIcon(op.id);
             display = `<span style="color:#e84118; font-weight:bold;">-${icon} ${name}</span>`;
         } else if (op.operation === 'SET') {
             display = `<span style="color:#48dbfb; font-weight:bold;">${name} → ${op.value}</span>`;
@@ -783,75 +783,7 @@ function formatCompactOperations(operations, type) {
     </div>`;
 }
 
-/**
- * Получает русское название характеристики по ключу
- * @param {string} key - Ключ характеристики (например, 'will')
- * @returns {string} Русское название
- */
-function getRussianStatName(key) {
-    const map = {
-        'will': 'Воля',
-        'stealth': 'Скрытность',
-        'influence': 'Влияние',
-        'sanity': 'Разум',
-        'health': 'Здоровье',
-        'mana': 'Мана',
-        'stamina': 'Выносливость',
-        'strength': 'Сила',
-        'agility': 'Ловкость',
-        'intelligence': 'Интеллект',
-        'charisma': 'Харизма'
-    };
-    return map[key] || key;
-}
 
-/**
- * Получает иконку для типа игрового предмета
- * @param {string} itemId - Идентификатор предмета (например, 'stat:will')
- * @returns {string} Emoji-иконка
- */
-function getGameItemIcon(itemId) {
-    if (!itemId) return '📌';
-    
-    const type = itemId.split(':')[0];
-    const icons = {
-        'stat': '📊',
-        'skill': '📜',
-        'inventory': '🎒',
-        'relations': '👤',
-        'bless': '✨',
-        'curse': '💀',
-        'buff': '⬆️',
-        'debuff': '⬇️',
-        'initiation_degree': '🎓',
-        'progress': '📈',
-        'personality': '🧠',
-        'effect': '⚡',
-        'status': '🔘',
-        'ability': '💫',
-        'trait': '🎭',
-        'item': '🎁',
-        'ritual': '🕯️',
-        'knowledge': '📚',
-        'secret': '🔐',
-        'location': '📍',
-        'event': '📅',
-        'quest': '🎯',
-        'achievement': '🏆',
-        'reputation': '⭐',
-        'currency': '💰',
-        'resource': '⛏️',
-        'weapon': '⚔️',
-        'armor': '🛡️',
-        'potion': '🧪',
-        'scroll': '📜',
-        'key': '🔑',
-        'map': '🗺️',
-        'tool': '🔧'
-    };
-    
-    return icons[type] || '📌';
-}
 
 /**
  * Основная функция рендеринга вариантов выбора
@@ -2257,8 +2189,6 @@ export const Render = {
     // Форматирование
     formatCompactRequirements,
     formatCompactOperations,
-    getGameItemIcon,
-    getRussianStatName,
     
     // Thoughts of Hero
     startThoughtsOfHeroDisplay,

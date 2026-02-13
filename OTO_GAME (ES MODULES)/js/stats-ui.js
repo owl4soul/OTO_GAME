@@ -78,16 +78,6 @@ class StatsUIManager {
         return '#FFFFFF';
     }
     
-    getRussianStatName(key) {
-        const map = {
-            'will': 'Воля',
-            'stealth': 'Скрытность',
-            'influence': 'Влияние',
-            'sanity': 'Разум'
-        };
-        return map[key] || key;
-    }
-    
     getStatDescription(statName, value) {
         const descriptions = {
             will: {
@@ -205,7 +195,7 @@ class StatsUIManager {
         tooltip.className = 'stat-tooltip';
         tooltip.innerHTML = `
             <div style="font-weight: bold; color: ${color}; margin-bottom: 5px; font-size: 1em; text-shadow: 0 0 5px ${color}40;">
-                ${this.getRussianStatName(statName)}: ${value}/100
+                ${Utils.getRussianStatName(statName)}: ${value}/100
             </div>
             <div style="font-size: 0.85em; color: #ccc; line-height: 1.3; font-style: italic;">
                 ${description}
@@ -359,7 +349,7 @@ class StatsUIManager {
                 valElement.innerHTML = `
                     <div class="stat-container" style="display: flex; flex-direction: column; align-items: center; line-height: 1.1; gap: 1px; position: relative;">
                         <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                            <span style="color: #999; font-size: 0.85em; white-space: nowrap;">${this.getRussianStatName(statName)}:</span>
+                            <span style="color: #999; font-size: 0.85em; white-space: nowrap;">${Utils.getRussianStatName(statName)}:</span>
                             <span class="stat-value-clickable" 
                                   data-stat="${statName}" 
                                   data-value="${currentValue}"
@@ -381,7 +371,7 @@ class StatsUIManager {
             } else {
                 valElement.innerHTML = `
                     <div class="stat-container" style="display: flex; justify-content: space-between; align-items: center; position: relative;">
-                        <span style="color: #999; font-size: 0.85em;">${this.getRussianStatName(statName)}:</span>
+                        <span style="color: #999; font-size: 0.85em;">${Utils.getRussianStatName(statName)}:</span>
                         <span class="stat-value-clickable" 
                               data-stat="${statName}" 
                               data-value="${currentValue}"
