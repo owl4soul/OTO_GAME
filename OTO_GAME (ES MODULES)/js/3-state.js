@@ -109,11 +109,11 @@ const DEFAULT_HERO_STATE = [
   { "id": "stat:stealth", "value": 50 },
   { "id": "stat:influence", "value": 50 },
   { "id": "progress:level", "value": 0 },
- /* {
-    "id": "organization_rank:oto",
-    "value": 0,
-    "description": "0° — Минервал (кандидат)"
-  },*/
+  /* {
+     "id": "organization_rank:oto",
+     "value": 0,
+     "description": "0° — Минервал (кандидат)"
+   },*/
   {
     "id": "personality:hero",
     "value": "Молодой искатель приключений, полный энтузиазма."
@@ -151,7 +151,6 @@ export const DEFAULT_STATE = {
     scale: CONFIG.scaleSteps[CONFIG.defaultScaleIndex],
     scaleIndex: CONFIG.defaultScaleIndex
   },
-  // auditLog: [], // ❌ УДАЛЕНО ИЗ ОСНОВНОГО СОСТОЯНИЯ
   models: [...aiModels],
   isRitualActive: false,
   ritualProgress: 0,
@@ -262,7 +261,7 @@ function initializeState() {
       state.gameId = Utils.generateUniqueId();
       initializeOrganizationHierarchies();
     }
-
+    
     // Загружаем аудит-лог из отдельного хранилища
     const savedAuditLog = localStorage.getItem(AUDIT_LOG_KEY);
     if (savedAuditLog) {
@@ -729,7 +728,6 @@ function exportFullState() {
   return exportData;
 }
 
-// ✅ ИСПРАВЛЕННАЯ ФУНКЦИЯ: importFullState – теперь восстанавливает все поля состояния
 function importFullState(importData) {
   if (!importData || typeof importData !== 'object') {
     throw new Error('Некорректные данные импорта');
@@ -869,7 +867,7 @@ function importAllAppData(importData) {
   
   if (importData.appData.auditLog) {
     state.auditLog = importData.appData.auditLog;
-    saveAuditLogToLocalStorage(); // ✅ сохраняем отдельно
+    saveAuditLogToLocalStorage(); // сохраняем отдельно
   }
   
   if (importData.appData.metadata) {
@@ -1081,8 +1079,7 @@ export const State = {
       log.error(LOG_CATEGORIES.ERROR_TRACKING, '⚠️ Cannot setState on undefined state');
       initializeState();
     }
-    
-    // ❌ Полностью убираем блок с JSON.stringify – он был нужен только для отладки
+
     state = { ...state, ...newState };
     
     // Сохраняем основное состояние (аудит уже не входит)
@@ -1096,7 +1093,7 @@ export const State = {
         const currentSettings = state.settings;
         const currentUI = state.ui;
         const currentModels = state.models;
-        const currentAuditLog = [...state.auditLog]; // ✅ сохраняем
+        const currentAuditLog = [...state.auditLog];
         const currentGameType = state.gameType;
         
         state.heroState = [...DEFAULT_HERO_STATE];
@@ -1125,7 +1122,7 @@ export const State = {
         state.settings = currentSettings;
         state.ui = currentUI;
         state.models = currentModels;
-        state.auditLog = currentAuditLog; // ✅ восстанавливаем
+        state.auditLog = currentAuditLog;
         state.gameType = currentGameType;
         state.turnCount = 1;
         state.isRitualActive = false;
@@ -1142,7 +1139,7 @@ export const State = {
           syncOrganizationRank();
         }
         
-        // ✅ Сохраняем аудит-лог отдельно
+        // Сохраняем аудит-лог отдельно
         saveAuditLogToLocalStorage();
         
         stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
@@ -1157,8 +1154,7 @@ export const State = {
         return;
       }
     } else {
-      // SILENT режим - без подтверждения и перезагрузки
-      log.info(LOG_CATEGORIES.GAME_STATE, '🔄 Тихий сброс прогресса игры');
+      log.info(LOG_CATEGORIES.GAME_STATE, '🔄 Тихий рестарт игры');
       const currentSettings = state.settings;
       const currentUI = state.ui;
       const currentModels = state.models;
@@ -1205,7 +1201,7 @@ export const State = {
         syncOrganizationRank();
       }
       
-      saveAuditLogToLocalStorage(); // ✅ сохраняем отдельно
+      saveAuditLogToLocalStorage();
       
       stateObserver.notify(STATE_EVENTS.HERO_CHANGED, { type: 'reset', heroState: state.heroState });
       stateObserver.notify(STATE_EVENTS.SCENE_CHANGED, { scene: state.gameState.currentScene });
@@ -1239,7 +1235,7 @@ export const State = {
   saveStateToLocalStorage,
   loadStateFromLocalStorage,
   
-  // ✅ Внутренняя функция сохранения аудит-лога (публичный доступ для отладки)
+  // Сохранение аудит-лога
   saveAuditLogToLocalStorage,
   addAuditLogEntry: (entry) => {
     entry.id = entry.id || Date.now();
@@ -1251,7 +1247,7 @@ export const State = {
       state.auditLog = state.auditLog.slice(0, 50);
     }
     
-    saveAuditLogToLocalStorage(); // ✅ сохраняем отдельно
+    saveAuditLogToLocalStorage(); // Сохраняем отдельно
     
     stateObserver.notify(STATE_EVENTS.AUDIT_LOG_UPDATED, {
       auditLog: state.auditLog,
@@ -1339,7 +1335,7 @@ export const State = {
     return { total, success, error, untested };
   },
   
-    getDefaultHeroState: () => JSON.parse(JSON.stringify(DEFAULT_HERO_STATE)),
+  getDefaultHeroState: () => JSON.parse(JSON.stringify(DEFAULT_HERO_STATE)),
   
   // Observer API
   on: (event, callback) => stateObserver.subscribe(event, callback),

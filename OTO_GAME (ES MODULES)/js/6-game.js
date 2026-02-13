@@ -98,168 +98,6 @@ function createOrganizationsHTML() {
     return html;
 }
 
-// Функция для создания HTML операций с отображением всех полей
-function createOperationHTML(operation, source) {
-    if (!operation || !operation.id || !operation.operation) {
-        console.warn('Некорректная операция:', operation);
-        return '';
-    }
-    
-    const sourceColor = source === 'action' ? '#4cd137' : '#00a8ff';
-    const [type, name] = operation.id.split(':');
-    
-    let displayName = name;
-    let icon = 'fas fa-question';
-    let valueDisplay = '';
-    let color = '#ccc';
-    
-    // Используем value для отображения, а не id
-    let displayValue = operation.value || '';
-    
-    // Унифицируем отображение длительности
-    let displayDuration = '';
-    if (operation.duration !== undefined) {
-        displayDuration = `[${operation.duration} ход.]`;
-    }
-    
-    switch (type) {
-        case 'stat':
-            icon = 'fas fa-chart-line';
-            color = '#fbc531';
-            displayName = getRussianStatName(name);
-            break;
-        case 'skill':
-            icon = 'fas fa-scroll';
-            color = '#9c88ff';
-            displayName = displayValue || name;
-            break;
-        case 'inventory':
-            icon = 'fas fa-box-open';
-            color = '#d4af37';
-            displayName = displayValue || name;
-            break;
-        case 'relations':
-            icon = 'fas fa-handshake';
-            color = '#ff9ff3';
-            displayName = name.replace(/_/g, ' ');
-            break;
-        case 'bless':
-            icon = 'fas fa-star';
-            color = '#fbc531';
-            displayName = displayValue || name;
-            break;
-        case 'curse':
-            icon = 'fas fa-skull-crossbones';
-            color = '#c23616';
-            displayName = displayValue || name;
-            break;
-        case 'buff':
-            icon = 'fas fa-arrow-up';
-            color = '#4cd137';
-            displayName = getRussianStatName(name);
-            break;
-        case 'debuff':
-            icon = 'fas fa-arrow-down';
-            color = '#e84118';
-            displayName = getRussianStatName(name);
-            break;
-        case 'progress':
-            icon = 'fas fa-chart-line';
-            color = '#00a8ff';
-            displayName = displayValue || name;
-            break;
-        case 'personality':
-            icon = 'fas fa-brain';
-            color = '#1dd1a1';
-            displayName = displayValue || name;
-            break;
-        case 'initiation_degree':
-            icon = 'fas fa-graduation-cap';
-            color = '#ff9ff3';
-            displayName = displayValue || name;
-            break;
-        case 'organization_rank':
-            icon = 'fas fa-users';
-            color = '#d4af37';
-            displayName = displayValue || name || 'Организация';
-            break;
-    }
-    
-    // Форматируем значение в зависимости от типа операции
-    switch (operation.operation) {
-        case OPERATIONS.ADD:
-            if (type === 'buff' || type === 'debuff') {
-                const sign = operation.value > 0 ? '+' : '';
-                valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
-                    ${displayName} ${sign}${operation.value} ${displayDuration}
-                </span>`;
-            } else {
-                const addedValue = displayValue ? `: "${displayValue}"` : '';
-                valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
-                    Добавить ${displayName}${addedValue}
-                </span>`;
-            }
-            break;
-            
-        case OPERATIONS.REMOVE:
-            valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
-                Удалить: ${displayName}
-            </span>`;
-            break;
-            
-        case OPERATIONS.SET:
-            valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
-                Установить ${displayName}: "${String(displayValue).substring(0, 50)}"
-            </span>`;
-            break;
-            
-        case OPERATIONS.MODIFY:
-            const sign = operation.delta > 0 ? '+' : '';
-            const deltaColor = operation.delta > 0 ? '#4cd137' : '#e84118';
-            valueDisplay = `<span style="color: ${deltaColor}; font-weight: bold;">
-                ${displayName} ${sign}${operation.delta}
-            </span>`;
-            break;
-    }
-    
-    // Добавляем описание, если есть
-    let description = '';
-    if (operation.description) {
-        description = `<div style="color: #aaa; font-size: 0.75rem; margin-top: 4px; font-style: italic;">
-            ${operation.description}
-        </div>`;
-    }
-    
-    // ОТОБРАЖЕНИЕ ВСЕХ НЕПУСТЫХ ПОЛЕЙ
-    let extraFields = '';
-    const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta'];
-    
-    Object.keys(operation).forEach(key => {
-        if (!ignoredKeys.includes(key)) {
-            const val = operation[key];
-            if (val !== undefined && val !== null && val !== '') {
-                extraFields += `<div style="color: #666; font-size: 0.7rem;">${key}: ${val}</div>`;
-            }
-        }
-    });
-    
-    return `
-        <div style="display: flex; align-items: flex-start; padding: 8px 0; border-bottom: 1px dotted #333;">
-            <div style="margin-right: 10px;">
-                <i class="${icon}" style="color: ${color}; font-size: 0.9rem;"></i>
-            </div>
-            <div style="flex: 1;">
-                <div style="color: #ccc; font-size: 0.85rem; margin-bottom: 2px;">${displayName}</div>
-                <div style="font-size: 0.9rem;">
-                    ${valueDisplay}
-                </div>
-                ${description}
-                ${extraFields}
-            </div>
-        </div>
-    `;
-}
-
 // Функция для создания HTML изменений за ход
 function createTurnUpdatesHTML(actionResults, events, turnNumber) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, `createTurnUpdatesHTML called for turn ${turnNumber}`, { actionResults, events });
@@ -733,7 +571,7 @@ function toggleChoice(idx) {
     UI.updateActionButtons();
 }
 
-// ИСПРАВЛЕННАЯ submitTurn - оптимальная реализация с использованием OperationsService
+// Завершение и отправка хода
 async function submitTurn(retries = CONFIG.maxRetries) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'submitTurn called');
     
@@ -1007,7 +845,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }
 }
 
-// ОПТИМИЗИРОВАННАЯ processTurn с использованием OperationsService
+// Обработка результатов хода
 function processTurn(data) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'processTurn called with pending data');
     Render.stopThoughtsOfHeroDisplay();
@@ -1281,24 +1119,7 @@ function processTurn(data) {
     });
     
     State.checkHeroDeath();
-}
-
-// Восстановленная функция для уменьшения длительности временных эффектов (для обратной совместимости)
-function decreaseBuffDurations() {
-    log.debug(LOG_CATEGORIES.OPERATIONS, 'Уменьшаем длительность временных эффектов (legacy function)');
-    
-    const state = State.getState();
-    const result = OperationsServiceInstance.decreaseBuffDurations(state.heroState);
-    
-    if (result.processed > 0) {
-        State.setState({ heroState: state.heroState });
-        log.info(LOG_CATEGORIES.OPERATIONS, `✅ Длительность временных эффектов уменьшена`, {
-            processed: result.processed,
-            removed: result.removed
-        });
-    }
-    
-    return result;
+    Render.applyStateEffects();
 }
 
 function showEndScreen(title, msg, color, isVictory = false) {
@@ -1516,76 +1337,6 @@ function setupGameObservers() {
     });
 }
 
-/**
- * Упрощенный блок для Истории ходов
- */
-function createSimplifiedTurnUpdatesHTML(actionResults, events, turnNumber) {
-    log.debug(LOG_CATEGORIES.TURN_PROCESSING, `createSimplifiedTurnUpdatesHTML called for turn ${turnNumber}`);
-    
-    if ((!actionResults || actionResults.length === 0) &&
-        (!events || events.length === 0)) {
-        return `
-        <div style="margin: 10px 0; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 4px; border: 1px solid #444;">
-            <div style="color: #d4af37; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #d4af37; padding-bottom: 3px;">
-                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД ${turnNumber}
-            </div>
-            <div style="color: #888; font-style: italic; text-align: center; padding: 8px;">
-                Нет изменений
-            </div>
-        </div>
-        `;
-    }
-    
-    let html = `
-        <div style="margin: 10px 0; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 4px; border: 1px solid #444;">
-            <div style="color: #d4af37; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #d4af37; padding-bottom: 3px;">
-                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД ${turnNumber}
-            </div>
-    `;
-    
-    // Действия (только статус)
-    if (actionResults && actionResults.length > 0) {
-        actionResults.forEach((result, idx) => {
-            const statusIcon = result.success ? '✅' : result.partial ? '⚠️' : '❌';
-            const statusText = result.success ? 'УСПЕХ' : result.partial ? 'ЧАСТИЧНО' : 'ПРОВАЛ';
-            const statusColor = result.success ? '#4cd137' : result.partial ? '#fbc531' : '#e84118';
-            
-            html += `
-                <div style="margin-bottom: 5px; padding: 5px; background: rgba(0,0,0,0.2); border-left: 3px solid ${statusColor}; border-radius: 3px;">
-                    <span style="color: ${statusColor}; font-weight: bold;">${statusIcon} Действие ${idx + 1}:</span>
-                    <span style="color: #ccc; margin-left: 5px;">"${result.choice_text}"</span>
-                    <span style="color: ${statusColor}; font-weight: bold; margin-left: 10px;">${statusText}</span>
-                </div>
-            `;
-        });
-    }
-    
-    // События (только название)
-    if (events && events.length > 0) {
-        events.forEach((event, idx) => {
-            html += `
-                <div style="margin-bottom: 5px; padding: 5px; background: rgba(0,170,255,0.1); border-left: 3px solid #00a8ff; border-radius: 3px;">
-                    <span style="color: #00a8ff; font-weight: bold;">⚡ Событие:</span>
-                    <span style="color: #ccc; margin-left: 5px;">${event.description.substring(0, 60)}${event.description.length > 60 ? '...' : ''}</span>
-                </div>
-            `;
-        });
-    }
-    
-    // ИТОГИ (без детализации операций)
-    html += `
-        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">
-            <div style="color: #fbc531; font-weight: bold; margin-bottom: 5px;">ИТОГИ:</div>
-            <div style="color: #ccc; font-size: 0.9em;">
-                Характеристики героя изменились
-            </div>
-        </div>
-    `;
-    
-    html += `</div>`;
-    return html;
-}
-
 export const Game = {
     toggleChoice,
     submitTurn,
@@ -1594,10 +1345,7 @@ export const Game = {
     handleClear,
     handleFreeModeToggle,
     checkRequirements,
-    calculateChoiceResult,
-    decreaseBuffDurations,
     createTurnUpdatesHTML,
-    createSimplifiedTurnUpdatesHTML,
     createOrganizationsHTML,
     setupGameObservers
 };

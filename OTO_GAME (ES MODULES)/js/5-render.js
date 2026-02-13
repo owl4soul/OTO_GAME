@@ -1695,7 +1695,7 @@ window.exportFullAuditLog = function() {
     }
 };
 
-// ------------------ НОВАЯ ФУНКЦИЯ: ГЕНЕРАЦИЯ HTML ОДНОЙ ЗАПИСИ ------------------
+// Генерация html одной записи аудита ------------------
 function createAuditEntryHTML(entry) {
     if (!entry) return '';
 
@@ -1852,7 +1852,7 @@ ${Utils.escapeHtml(displayError)}
     `;
 }
 
-// ------------------ НОВАЯ ФУНКЦИЯ: ДОПИСЫВАНИЕ ОДНОЙ ЗАПИСИ ------------------
+// Дописывание в html записи аудита
 function appendAuditEntry(entry) {
     const list = document.getElementById('auditList');
     if (!list) return;
@@ -1876,7 +1876,7 @@ function appendAuditEntry(entry) {
     }
 }
 
-// ------------------ ОСНОВНОЙ РЕНДЕРИНГ АУДИТ-ЛОГА ------------------
+// Основной рендеринг аудит-лога
 function renderAuditList() {
     const state = State.getState();
     const list = document.getElementById('auditList');
@@ -2237,7 +2237,7 @@ export const Render = {
     renderChoices,
     renderAll,
     
-    // UI режимы
+    // Режимы ответа
     updateUIMode,
     
     // API Keys и модели
@@ -2266,6 +2266,9 @@ export const Render = {
     showThoughtsOfHeroLayout,
     hideThoughtsOfHeroLayout,
     updateThoughtsOfHeroText,
+    
+    // Применение эффектов состояния
+    applyStateEffects,
     
     // Инициализация
     setupStateObservers,

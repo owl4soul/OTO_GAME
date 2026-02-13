@@ -917,7 +917,10 @@ class OperationsService {
             GAME_ITEM_TYPES.STAT,
             GAME_ITEM_TYPES.RELATIONS,
             GAME_ITEM_TYPES.PROGRESS,
-            GAME_ITEM_TYPES.ORGANIZATION_RANK
+            GAME_ITEM_TYPES.ORGANIZATION_RANK,
+            // добавлено:
+            GAME_ITEM_TYPES.BUFF,
+            GAME_ITEM_TYPES.DEBUFF
         ];
         
         return numericTypes.includes(type);
