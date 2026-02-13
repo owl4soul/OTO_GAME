@@ -263,7 +263,7 @@ function initializeState() {
       initializeOrganizationHierarchies();
     }
 
-    // ✅ ЗАГРУЖАЕМ АУДИТ-ЛОГ ИЗ ОТДЕЛЬНОГО ХРАНИЛИЩА
+    // Загружаем аудит-лог из отдельного хранилища
     const savedAuditLog = localStorage.getItem(AUDIT_LOG_KEY);
     if (savedAuditLog) {
       try {
@@ -320,6 +320,8 @@ function initializeState() {
     }
   });
 }
+
+// ИНИЦИАЛИЗАЦИЯ ОРГАНИЗАЦИЙ
 
 /**
  * ИНИЦИАЛИЗАЦИЯ ИЕРАРХИЙ ОРГАНИЗАЦИЙ (ДИНАМИЧЕСКАЯ, БЕЗ ХАРДКОДА)
@@ -640,144 +642,9 @@ function syncOrganizationRank() {
   }
 }
 
-function checkHeroDeath() {
-  const stats = state.heroState.filter(item => item.id.startsWith('stat:'));
-  const deadStats = stats.filter(stat => stat.value <= 0);
-  
-  if (deadStats.length > 0) {
-    log.warn(LOG_CATEGORIES.GAME_STATE, '☠️ Герой мертв! Статы достигли 0:', deadStats.map(s => s.id));
-    stateObserver.notify(STATE_EVENTS.HERO_DEATH, {
-      deadStats: deadStats.map(s => s.id),
-      heroState: state.heroState
-    });
-  }
-}
-
 // ========================
-// НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С КОПИЯМИ СОСТОЯНИЯ (ОБНОВЛЕННЫЕ)
+// ПОЛУЧЕНИЕ GAME_ITEM
 // ========================
-
-/**
- * Применяет операцию к произвольному состоянию (без эмита событий)
- * @param {Object} operation - Операция
- * @param {Array} targetState - Целевое состояние (массив game items)
- * @returns {Object} Результат операции
- */
-function applyOperationToState(operation, targetState) {
-  return OperationsServiceInstance.applyOperation(operation, targetState);
-}
-
-/**
- * Применяет массив операций к произвольному состоянию
- * @param {Array} operations - Массив операций
- * @param {Array} targetState - Целевое состояние
- * @returns {Object} Сводный результат
- */
-function applyOperationsToState(operations, targetState) {
-  return OperationsServiceInstance.applyOperations(operations, targetState);
-}
-
-/**
- * Уменьшает длительность эффектов в произвольном состоянии
- * @param {Array} targetState - Целевое состояние
- * @returns {Object} Результат обработки
- */
-function decreaseBuffDurationsInState(targetState) {
-  return OperationsServiceInstance.decreaseBuffDurations(targetState);
-}
-
-/**
- * Получает значение стата из произвольного состояния
- * @param {Array} targetState - Целевое состояние
- * @param {string} statId - ID стата (например, 'stat:will')
- * @returns {number} Значение стата
- */
-function getGameItemValueFromState(targetState, statId) {
-  const item = targetState.find(item => item.id === statId);
-  return item ? item.value : 50; // 50 по умолчанию
-}
-
-/**
- * Рассчитывает изменения статов между двумя состояниями
- * @param {Array} oldState - Старое состояние
- * @param {Array} newState - Новое состояние
- * @returns {Object} Изменения статов
- */
-function calculateStatChanges(oldState, newState) {
-  return OperationsServiceInstance.calculateChanges(oldState, newState);
-}
-
-/**
- * Создает расчетное состояние с уже примененными изменениями от действий
- * @param {Array} originalState - Исходное состояние
- * @param {Array} actionResults - Результаты действий
- * @returns {Array} Расчетное состояние для ИИ
- */
-function calculateStateForAI(originalState, actionResults) {
-  // Глубокая копия исходного состояния
-  const calculatedState = JSON.parse(JSON.stringify(originalState));
-  
-  // Уменьшаем длительность эффектов
-  OperationsServiceInstance.decreaseBuffDurations(calculatedState);
-  
-  // Применяем операции от действий
-  actionResults.forEach(result => {
-    if (result.operations && Array.isArray(result.operations)) {
-      OperationsServiceInstance.applyOperations(result.operations, calculatedState);
-    }
-  });
-  
-  return calculatedState;
-}
-
-// ========================
-// ОПЕРАЦИИ НАД GAME_ITEM (обновленные для работы с OperationsService)
-// ========================
-
-/**
- * УЛУЧШЕННАЯ ФУНКЦИЯ: Применение операций к heroState
- * Использует OperationsService для обработки операций
- */
-function applyOperations(operations) {
-  log.debug(LOG_CATEGORIES.OPERATIONS, 'applyOperations called', { operationsCount: operations?.length });
-  
-  if (!Array.isArray(operations) || operations.length === 0) {
-    log.warn(LOG_CATEGORIES.OPERATIONS, '⚠️ Пустой массив операций');
-    return false;
-  }
-  
-  const stateSnapshot = State.getState();
-  const newHeroState = [...stateSnapshot.heroState];
-  
-  // Применяем все операции через OperationsService
-  const result = OperationsServiceInstance.applyOperations(operations, newHeroState);
-  
-  if (!result.success) {
-    log.error(LOG_CATEGORIES.OPERATIONS, '❌ Ошибка применения операций:', result);
-    return false;
-  }
-  
-  // Обновляем состояние с новым heroState
-  State.setState({ heroState: newHeroState });
-  
-  // Эмитим общее событие о изменении героя
-  stateObserver.notify(STATE_EVENTS.HERO_CHANGED, {
-    timestamp: new Date().toISOString(),
-    operations: operations,
-    results: result.results
-  });
-  
-  // Проверяем смерть героя после изменений
-  checkHeroDeath();
-  
-  log.info(LOG_CATEGORIES.OPERATIONS, '✅ applyOperations завершен', {
-    applied: result.applied,
-    failed: result.failed,
-    total: operations.length
-  });
-  
-  return true;
-}
 
 function getGameItem(id) {
   return state.heroState.find(item => item.id === id);
@@ -810,6 +677,21 @@ function resetFullGame() {
     }, 100);
   }
 }
+
+
+function checkHeroDeath() {
+  const stats = state.heroState.filter(item => item.id.startsWith('stat:'));
+  const deadStats = stats.filter(stat => stat.value <= 0);
+  
+  if (deadStats.length > 0) {
+    log.warn(LOG_CATEGORIES.GAME_STATE, '☠️ Герой мертв! Статы достигли 0:', deadStats.map(s => s.id));
+    stateObserver.notify(STATE_EVENTS.HERO_DEATH, {
+      deadStats: deadStats.map(s => s.id),
+      heroState: state.heroState
+    });
+  }
+}
+
 
 // ========================
 // ЭКСПОРТ/ИМПОРТ
@@ -1359,8 +1241,27 @@ export const State = {
   
   // ✅ Внутренняя функция сохранения аудит-лога (публичный доступ для отладки)
   saveAuditLogToLocalStorage,
+  addAuditLogEntry: (entry) => {
+    entry.id = entry.id || Date.now();
+    entry.timestamp = Utils.formatMoscowTime(new Date());
+    
+    state.auditLog.unshift(entry);
+    
+    if (state.auditLog.length > 50) {
+      state.auditLog = state.auditLog.slice(0, 50);
+    }
+    
+    saveAuditLogToLocalStorage(); // ✅ сохраняем отдельно
+    
+    stateObserver.notify(STATE_EVENTS.AUDIT_LOG_UPDATED, {
+      auditLog: state.auditLog,
+      newEntry: entry
+    });
+    
+    log.debug(LOG_CATEGORIES.AUDIT, '📝 Добавлена запись в аудит-лог', entry);
+  },
   
-  applyOperations,
+  
   getGameItem,
   getGameItemsByType,
   hasGameItem,
@@ -1376,14 +1277,6 @@ export const State = {
   syncOrganizationRank,
   setGameType,
   
-  // Новые функции для работы с копиями состояния (используют OperationsService)
-  applyOperationToState,
-  applyOperationsToState,
-  decreaseBuffDurationsInState,
-  getGameItemValueFromState,
-  calculateStatChanges,
-  calculateStateForAI,
-  
   resetFullGame,
   
   exportFullState,
@@ -1396,6 +1289,7 @@ export const State = {
   getHeroPhrasesCount,
   clearHeroPhrases,
   needsHeroPhrases,
+  checkHeroDeath,
   
   setPendingRequest: (controller) => { state.pendingRequest = controller; },
   clearPendingRequest: () => { state.pendingRequest = null; },
@@ -1435,27 +1329,6 @@ export const State = {
   },
   getScaleIndex: () => state.settings.scaleIndex,
   
-  // Добавляет запись аудита
-  addAuditLogEntry: (entry) => {
-    entry.id = entry.id || Date.now();
-    entry.timestamp = Utils.formatMoscowTime(new Date());
-    
-    state.auditLog.unshift(entry);
-    
-    if (state.auditLog.length > 50) {
-      state.auditLog = state.auditLog.slice(0, 50);
-    }
-    
-    saveAuditLogToLocalStorage(); // ✅ сохраняем отдельно
-    
-    stateObserver.notify(STATE_EVENTS.AUDIT_LOG_UPDATED, {
-      auditLog: state.auditLog,
-      newEntry: entry
-    });
-    
-    log.debug(LOG_CATEGORIES.AUDIT, '📝 Добавлена запись в аудит-лог', entry);
-  },
-  
   getModelStats: () => {
     const models = state.models || [];
     const total = models.length;
@@ -1479,17 +1352,6 @@ export const State = {
     return unsubscribe;
   },
   emit: (event, data) => stateObserver.notify(event, data),
-  
-  // Устаревшие методы для обратной совместимости (будут удалены)
-  onHeroChange: (callback) => stateObserver.subscribe(STATE_EVENTS.HERO_CHANGED, callback),
-  onSceneChange: (callback) => stateObserver.subscribe(STATE_EVENTS.SCENE_CHANGED, callback),
-  onTurnComplete: (callback) => stateObserver.subscribe(STATE_EVENTS.TURN_COMPLETED, callback),
-  onSettingsChange: (callback) => stateObserver.subscribe(STATE_EVENTS.SETTINGS_CHANGED, callback),
-  onGameTypeChange: (callback) => stateObserver.subscribe(STATE_EVENTS.GAME_TYPE_CHANGED, callback),
-  onOrganizationJoined: (callback) => stateObserver.subscribe(STATE_EVENTS.ORGANIZATION_JOINED, callback),
-  onOrganizationRankChanged: (callback) => stateObserver.subscribe(STATE_EVENTS.ORGANIZATION_RANK_CHANGED, callback),
-  onOrganizationLeft: (callback) => stateObserver.subscribe(STATE_EVENTS.ORGANIZATION_LEFT, callback),
-  onOrganizationHierarchyUpdated: (callback) => stateObserver.subscribe(STATE_EVENTS.ORGANIZATION_HIERARCHY_UPDATED, callback),
   
   EVENTS: STATE_EVENTS
 };

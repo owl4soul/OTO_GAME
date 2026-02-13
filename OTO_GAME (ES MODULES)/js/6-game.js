@@ -853,7 +853,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     });
     
     // Создаем расчетное состояние для ИИ с использованием OperationsService
-    const stateForAI = State.calculateStateForAI(pendingOriginalHeroState, actionResults);
+    const stateForAI = OperationsServiceInstance.calculateStateForAI(pendingOriginalHeroState, actionResults);
     
     log.info(LOG_CATEGORIES.TURN_PROCESSING, '🧮 Расчетное состояние для ИИ готово', {
         calculatedStats: stateForAI.filter(item => item.id.startsWith('stat:')).map(s => ({ id: s.id, value: s.value })),
@@ -1028,14 +1028,14 @@ function processTurn(data) {
     
     const previousScene = state.gameState.currentScene;
     
-    // 1. Уменьшаем длительность эффектов в реальном состоянии через OperationsService
+    // 1. Уменьшаем длительность эффектов в реальном состоянии
     const buffResult = OperationsServiceInstance.decreaseBuffDurations(state.heroState);
     log.info(LOG_CATEGORIES.OPERATIONS, `🕐 Уменьшена длительность эффектов`, {
         processed: buffResult.processed,
         removed: buffResult.removed
     });
     
-    // 2. Применяем операции от действий к реальному состоянию через OperationsService
+    // 2. Применяем операции от действий к реальному состоянию
     let totalActionOperations = 0;
     pendingActionResults.forEach(result => {
         if (result.operations && Array.isArray(result.operations)) {
@@ -1052,7 +1052,7 @@ function processTurn(data) {
         }
     });
     
-    // 3. Применяем операции от событий через OperationsService
+    // 3. Применяем операции от событий
     let totalEventOperations = 0;
     if (data.events && Array.isArray(data.events)) {
         const eventOperations = [];
@@ -1076,7 +1076,7 @@ function processTurn(data) {
         }
     }
     
-    // 4. Рассчитываем изменения статов через OperationsService
+    // 4. Рассчитываем изменения статов
     const changes = OperationsServiceInstance.calculateChanges(pendingOriginalHeroState, state.heroState);
     log.info(LOG_CATEGORIES.GAME_STATE, '📊 Изменения за ход', {
         totalChanges: Object.keys(changes).reduce((acc, key) => acc + Object.keys(changes[key]).length, 0),
@@ -1279,6 +1279,8 @@ function processTurn(data) {
         sceneLength: updatedScene.scene?.length || 0,
         choicesCount: updatedScene.choices?.length || 0
     });
+    
+    State.checkHeroDeath();
 }
 
 // Восстановленная функция для уменьшения длительности временных эффектов (для обратной совместимости)
@@ -1424,8 +1426,7 @@ function restartGame() {
             matrixInterval = null;
         }
         dom.overlay.style.display = 'none';
-        localStorage.removeItem('oto_v4_state');
-        location.reload();
+        State.resetGameProgress(true);
     }
 }
 

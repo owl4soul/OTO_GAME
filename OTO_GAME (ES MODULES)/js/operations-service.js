@@ -1075,6 +1075,29 @@ class OperationsService {
     }
     
     /**
+ * Создает расчетное состояние с уже примененными изменениями от действий
+ * @param {Array} originalState - Исходное состояние
+ * @param {Array} actionResults - Результаты действий
+ * @returns {Array} Расчетное состояние для ИИ
+ */
+ calculateStateForAI(originalState, actionResults) {
+  // Глубокая копия исходного состояния
+  const calculatedState = JSON.parse(JSON.stringify(originalState));
+  
+  // Уменьшаем длительность эффектов
+  OperationsServiceInstance.decreaseBuffDurations(calculatedState);
+  
+  // Применяем операции от действий
+  actionResults.forEach(result => {
+    if (result.operations && Array.isArray(result.operations)) {
+      OperationsServiceInstance.applyOperations(result.operations, calculatedState);
+    }
+  });
+  
+  return calculatedState;
+}
+    
+    /**
      * Рассчитывает изменения между двумя состояниями
      * @param {Array} oldState - Исходное состояние
      * @param {Array} newState - Новое состояние
