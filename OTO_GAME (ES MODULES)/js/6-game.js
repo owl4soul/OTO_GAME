@@ -389,154 +389,6 @@ function createCompactOperationHTML(operation, source) {
     `;
 }
 
-function calculateChoiceResult(choice, d10) {
-    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'calculateChoiceResult', { choice, d10 });
-    
-    if (!choice || typeof choice !== 'object') {
-        log.error(LOG_CATEGORIES.VALIDATION, 'Некорректный choice для расчета', choice);
-        return null;
-    }
-    
-    if (choice.difficulty_level === 0) {
-        return {
-            success: true,
-            partial: false,
-            reason: 'Свободный ввод: Автоматический успех',
-            d10: d10,
-            difficulty: 0,
-            operations: []
-        };
-    }
-    
-    const requirementsCheck = checkRequirements(choice.requirements || []);
-    
-    let success = false;
-    let partial = false;
-    let reason = '';
-    
-    if (requirementsCheck.stats.length === 0) {
-        const difficulty = choice.difficulty_level || 5;
-        success = d10 > difficulty;
-        reason = success ? 'Успех: d10 > difficulty' : 'Провал: d10 ≤ difficulty';
-        
-        return {
-            success: success,
-            partial: false,
-            reason: reason,
-            d10: d10,
-            difficulty: difficulty,
-            operations: success ?
-                (choice.success_rewards || []) : (choice.fail_penalties || [])
-        };
-    }
-    
-    const difficulty = choice.difficulty_level || 5;
-    const statValues = requirementsCheck.stats.map(s => s.value);
-    const averageStat = statValues.reduce((a, b) => a + b, 0) / statValues.length;
-    const threshold = averageStat + difficulty;
-    
-    const statChecks = requirementsCheck.stats.map(stat => {
-        const valueWithLuck = stat.value + d10;
-        return {
-            id: stat.id,
-            base: stat.value,
-            withLuck: valueWithLuck,
-            passed: valueWithLuck > threshold
-        };
-    });
-    
-    const passedCount = statChecks.filter(s => s.passed).length;
-    const totalStats = statChecks.length;
-    
-    if (passedCount === totalStats) {
-        success = true;
-        partial = false;
-        reason = 'Полный успех: все статы прошли проверку';
-    } else if (passedCount === 0) {
-        success = false;
-        partial = false;
-        reason = 'Полный провал: ни один стат не прошел проверку';
-    } else {
-        success = true;
-        partial = true;
-        reason = `Частичный успех: ${passedCount}/${totalStats} статов прошли проверку`;
-    }
-    
-    let operations = [];
-    if (success && !partial) {
-        operations = choice.success_rewards || [];
-    } else if (success && partial) {
-        operations = modifyOperationsForPartialResult(choice.success_rewards || []);
-    } else {
-        operations = choice.fail_penalties || [];
-    }
-    
-    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результат расчета', { success, partial, operationsCount: operations.length });
-    
-    return {
-        success: success,
-        partial: partial,
-        reason: reason,
-        d10: d10,
-        difficulty: difficulty,
-        statChecks: statChecks,
-        threshold: threshold,
-        operations: operations
-    };
-}
-
-function modifyOperationsForPartialResult(operations) {
-    if (!Array.isArray(operations)) return [];
-    
-    return operations.map(op => {
-        if (op.operation === 'MODIFY' && typeof op.delta === 'number') {
-            const modifiedDelta = Math.ceil(op.delta * 0.5);
-            const finalDelta = modifiedDelta === 0 ?
-                (op.delta > 0 ? 1 : -1) :
-                modifiedDelta;
-            
-            return {
-                ...op,
-                delta: finalDelta,
-                description: `${op.description || ''} (частичный результат: ${finalDelta})`
-            };
-        }
-        return op;
-    });
-}
-
-function checkRequirements(requirements) {
-    if (!Array.isArray(requirements) || requirements.length === 0) {
-        return { success: true, missing: [], stats: [] };
-    }
-    
-    const missing = [];
-    const stats = [];
-    
-    requirements.forEach(reqId => {
-        const hasItem = State.hasGameItem(reqId);
-        if (!hasItem) {
-            missing.push(reqId);
-        }
-        
-        if (reqId.startsWith('stat:')) {
-            const statValue = State.getGameItemValue(reqId);
-            if (statValue !== null) {
-                stats.push({
-                    id: reqId,
-                    value: statValue
-                });
-            }
-        }
-    });
-    
-    return {
-        success: missing.length === 0,
-        missing: missing,
-        stats: stats
-    };
-}
-
 function toggleChoice(idx) {
     const state = State.getState();
     const selectedActions = [...state.gameState.selectedActions];
@@ -647,7 +499,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     const actionResults = [];
     
     selectedChoicesData.forEach((choice, idx) => {
-        const result = calculateChoiceResult(choice, d10);
+        // Используем сервис операций для расчета результата, передавая текущее состояние героя
+        const result = OperationsServiceInstance.calculateChoiceResult(choice, d10, state.heroState);
         if (result) {
             actionResults.push({
                 ...result,
@@ -1334,7 +1187,6 @@ export const Game = {
     restartGame,
     handleClear,
     handleFreeModeToggle,
-    checkRequirements,
     createTurnUpdatesHTML,
     createOrganizationsHTML,
     setupGameObservers

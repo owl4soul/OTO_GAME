@@ -1078,27 +1078,27 @@ class OperationsService {
     }
     
     /**
- * Создает расчетное состояние с уже примененными изменениями от действий
- * @param {Array} originalState - Исходное состояние
- * @param {Array} actionResults - Результаты действий
- * @returns {Array} Расчетное состояние для ИИ
- */
- calculateStateForAI(originalState, actionResults) {
-  // Глубокая копия исходного состояния
-  const calculatedState = JSON.parse(JSON.stringify(originalState));
-  
-  // Уменьшаем длительность эффектов
-  OperationsServiceInstance.decreaseBuffDurations(calculatedState);
-  
-  // Применяем операции от действий
-  actionResults.forEach(result => {
-    if (result.operations && Array.isArray(result.operations)) {
-      OperationsServiceInstance.applyOperations(result.operations, calculatedState);
+     * Создает расчетное состояние с уже примененными изменениями от действий
+     * @param {Array} originalState - Исходное состояние
+     * @param {Array} actionResults - Результаты действий
+     * @returns {Array} Расчетное состояние для ИИ
+     */
+    calculateStateForAI(originalState, actionResults) {
+        // Глубокая копия исходного состояния
+        const calculatedState = JSON.parse(JSON.stringify(originalState));
+        
+        // Уменьшаем длительность эффектов
+        OperationsServiceInstance.decreaseBuffDurations(calculatedState);
+        
+        // Применяем операции от действий
+        actionResults.forEach(result => {
+            if (result.operations && Array.isArray(result.operations)) {
+                OperationsServiceInstance.applyOperations(result.operations, calculatedState);
+            }
+        });
+        
+        return calculatedState;
     }
-  });
-  
-  return calculatedState;
-}
     
     /**
      * Рассчитывает изменения между двумя состояниями
@@ -1315,6 +1315,179 @@ class OperationsService {
         log.debug(LOG_CATEGORIES.PERFORMANCE, '📈 Отчет OperationsService', report);
         
         return report;
+    }
+
+    // ====================================================================
+    // НОВЫЕ МЕТОДЫ ДЛЯ РАСЧЕТА РЕЗУЛЬТАТОВ ДЕЙСТВИЙ
+    // ====================================================================
+
+    /**
+     * Проверяет требования для действия на основе состояния героя
+     * @param {Array} requirements - Массив идентификаторов требований
+     * @param {Array} heroState - Текущее состояние героя
+     * @returns {Object} - Результат проверки {success: boolean, missing: Array, stats: Array}
+     */
+    checkRequirements(requirements, heroState) {
+        if (!Array.isArray(requirements) || requirements.length === 0) {
+            return { success: true, missing: [], stats: [] };
+        }
+        
+        const missing = [];
+        const stats = [];
+        
+        requirements.forEach(reqId => {
+            const item = heroState.find(item => item.id === reqId);
+            if (!item) {
+                missing.push(reqId);
+            }
+            
+            if (reqId.startsWith('stat:')) {
+                const statValue = item ? item.value : null;
+                if (statValue !== null) {
+                    stats.push({
+                        id: reqId,
+                        value: statValue
+                    });
+                }
+            }
+        });
+        
+        return {
+            success: missing.length === 0,
+            missing: missing,
+            stats: stats
+        };
+    }
+
+    /**
+     * Модифицирует операции для частичного успеха
+     * @param {Array} operations - Исходные операции
+     * @returns {Array} - Модифицированные операции
+     */
+    modifyOperationsForPartialResult(operations) {
+        if (!Array.isArray(operations)) return [];
+        
+        return operations.map(op => {
+            if (op.operation === 'MODIFY' && typeof op.delta === 'number') {
+                const modifiedDelta = Math.ceil(op.delta * 0.5);
+                const finalDelta = modifiedDelta === 0 ?
+                    (op.delta > 0 ? 1 : -1) :
+                    modifiedDelta;
+                
+                return {
+                    ...op,
+                    delta: finalDelta,
+                    description: `${op.description || ''} (частичный результат: ${finalDelta})`
+                };
+            }
+            return op;
+        });
+    }
+
+    /**
+     * Вычисляет результат выбора действия на основе броска d10 и состояния героя
+     * @param {Object} choice - Объект выбора {difficulty_level, requirements, success_rewards, fail_penalties}
+     * @param {number} d10 - Результат броска кубика (1-10)
+     * @param {Array} heroState - Текущее состояние героя
+     * @returns {Object|null} - Результат с полями success, partial, reason, d10, difficulty, operations
+     */
+    calculateChoiceResult(choice, d10, heroState) {
+        log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'calculateChoiceResult', { choice, d10, heroStateLength: heroState?.length });
+        
+        if (!choice || typeof choice !== 'object') {
+            log.error(LOG_CATEGORIES.VALIDATION, 'Некорректный choice для расчета', choice);
+            return null;
+        }
+        
+        // Свободный ввод (difficulty_level = 0) - всегда успех
+        if (choice.difficulty_level === 0) {
+            return {
+                success: true,
+                partial: false,
+                reason: 'Свободный ввод: Автоматический успех',
+                d10: d10,
+                difficulty: 0,
+                operations: []
+            };
+        }
+        
+        const requirementsCheck = this.checkRequirements(choice.requirements || [], heroState);
+        
+        let success = false;
+        let partial = false;
+        let reason = '';
+        
+        // Если нет требований (чистый бросок на сложность)
+        if (requirementsCheck.stats.length === 0) {
+            const difficulty = choice.difficulty_level || 5;
+            success = d10 > difficulty;
+            reason = success ? `Успех: ${difficulty} =< ${d10}` : `Провал:  ${difficulty} >  ${d10}`;
+            
+            return {
+                success: success,
+                partial: false,
+                reason: reason,
+                d10: d10,
+                difficulty: difficulty,
+                operations: success ?
+                    (choice.success_rewards || []) : (choice.fail_penalties || [])
+            };
+        }
+        
+        // Есть требования по статам - усредненная проверка
+        const difficulty = choice.difficulty_level || 5;
+        const statValues = requirementsCheck.stats.map(s => s.value);
+        const averageStat = statValues.reduce((a, b) => a + b, 0) / statValues.length;
+        const threshold = averageStat + difficulty;
+        
+        const statChecks = requirementsCheck.stats.map(stat => {
+            const valueWithLuck = stat.value + d10;
+            return {
+                id: stat.id,
+                base: stat.value,
+                withLuck: valueWithLuck,
+                passed: valueWithLuck >= threshold
+            };
+        });
+        
+        const passedCount = statChecks.filter(s => s.passed).length;
+        const totalStats = statChecks.length;
+        
+        if (passedCount === totalStats) {
+            success = true;
+            partial = false;
+            reason = 'Полный успех: все статы прошли проверку';
+        } else if (passedCount === 0) {
+            success = false;
+            partial = false;
+            reason = 'Полный провал: ни один стат не прошел проверку';
+        } else {
+            success = true;
+            partial = true;
+            reason = `Частичный успех: ${passedCount}/${totalStats} статов прошли проверку`;
+        }
+        
+        let operations = [];
+        if (success && !partial) {
+            operations = choice.success_rewards || [];
+        } else if (success && partial) {
+            operations = this.modifyOperationsForPartialResult(choice.success_rewards || []);
+        } else {
+            operations = choice.fail_penalties || [];
+        }
+        
+        log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результат расчета', { success, partial, operationsCount: operations.length });
+        
+        return {
+            success: success,
+            partial: partial,
+            reason: reason,
+            d10: d10,
+            difficulty: difficulty,
+            statChecks: statChecks,
+            threshold: threshold,
+            operations: operations
+        };
     }
 }
 
