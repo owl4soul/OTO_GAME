@@ -1420,7 +1420,7 @@ class OperationsService {
         // Если нет требований (чистый бросок на сложность)
         if (requirementsCheck.stats.length === 0) {
             const difficulty = choice.difficulty_level || 5;
-            success = d10 > difficulty;
+            success = d10 >= difficulty;
             reason = success ? `Успех: ${difficulty} =< ${d10}` : `Провал:  ${difficulty} >  ${d10}`;
             
             return {

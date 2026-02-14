@@ -102,6 +102,7 @@ function getDynamicSystemInjections(state) {
   }
   
   // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ СЮЖЕТНЫХ ПЕТЕЛЬ
+  /*
   if (state.gameState.history.length > 0) {
     const lastHistory = state.gameState.history[state.gameState.history.length - 1];
     const lastSceneText = lastHistory.fullText || '';
@@ -121,6 +122,7 @@ function getDynamicSystemInjections(state) {
       }
     }
   }
+  */
   
   // 4. ИНЪЕКЦИЯ РИТУАЛА (только для стандартной игры О.Т.О.)
   if (state.gameType === 'standard' && state.isRitualActive) {
