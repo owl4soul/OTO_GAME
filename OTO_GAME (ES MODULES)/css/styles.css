@@ -623,18 +623,18 @@ input:checked+.slider {
   /* Анимация роста */
 }
 
-/* Контейнер информации о персонаже */
+/* Контейнер информации о состоянии различных характеристик персонажа (Личность, Баффы/Дебаффы, Инвентарь и т.д.) */
 .info-container {
   flex: 1;
   /* Занимает остаток места */
-  padding: 5px;
+  padding: 1px;
   /* Отступы */
   overflow-y: auto;
   /* Скролл если много текста */
   font-size: 0.8rem;
   color: var(--c-light-gray);
   font-family: var(--font-sans);
-  line-height: 1;
+  line-height: 1,05;
 }
 
 .persona-text {
@@ -2183,8 +2183,8 @@ input:checked+.slider:before {
 
 /* Секции game items */
 .game-item-section {
-  margin-bottom: 8px;
-  padding: 6px;
+  margin-bottom: 2px;
+  padding: 2px;
   background: linear-gradient(135deg, #0d0000 0%, #000000 100%);
   border: 1px solid #2a0a0a;
   border-radius: 3px;
@@ -2194,8 +2194,8 @@ input:checked+.slider:before {
 .section-header {
   font-weight: bold;
   font-size: 0.8em;
-  padding-bottom: 3px;
-  margin-bottom: 4px;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
   text-shadow: 0 0 5px currentColor;
   font-family: 'Courier New', monospace;
 }
@@ -2205,7 +2205,7 @@ input:checked+.slider:before {
 }
 
 .game-item-badge {
-  display: inline-flex;
+  display: block;
   align-items: center;
   border-radius: 3px;
   transition: all 0.2s ease;
@@ -2214,15 +2214,11 @@ input:checked+.slider:before {
 
 .game-item-badge:hover {
   transform: translateY(-1px);
-  box-shadow: 0 0 10px currentColor;
+  box-shadow: 0 0 3px currentColor;
 }
 
 .relation-badge:hover {
   transform: scale(1.05);
-}
-
-.blood-gothic-panel {
-  font-family: 'Georgia', serif;
 }
 
 /* Тултипы */
@@ -2245,8 +2241,8 @@ input:checked+.slider:before {
   }
   
   .game-item-badge {
-    padding: 1px 4px !important;
-    font-size: 0.7em !important;
+    padding: 1px 4px;
+    font-size: 0.7em;
   }
 }
 
@@ -2257,8 +2253,8 @@ input:checked+.slider:before {
 
 /* Кастомная прокрутка */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
