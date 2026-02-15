@@ -258,7 +258,7 @@ function createCompactOperationHTML(operation, source) {
         case 'stat':
             icon = 'fas fa-chart-line';
             color = '#fbc531';
-            displayName = getRussianStatName(name);
+            displayName = Utils.getRussianStatName(name);
             break;
         case 'skill':
             icon = 'fas fa-scroll';
@@ -288,12 +288,12 @@ function createCompactOperationHTML(operation, source) {
         case 'buff':
             icon = 'fas fa-arrow-up';
             color = '#4cd137';
-            displayName = getRussianStatName(name);
+            displayName = Utils.getRussianStatName(name);
             break;
         case 'debuff':
             icon = 'fas fa-arrow-down';
             color = '#e84118';
-            displayName = getRussianStatName(name);
+            displayName = Utils.getRussianStatName(name);
             break;
         case 'progress':
             icon = 'fas fa-chart-line';
