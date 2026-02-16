@@ -1,0 +1,330 @@
+
+/* === АДАПТАЦИЯ THEME EDITOR PRO ПОД МОБИЛЬНЫЕ === */
+#te-overlay {
+  padding: 0 !important;
+  align-items: stretch !important; /* чтобы окно занимало всю высоту */
+}
+
+#te-overlay > div {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Шапка */
+#te-overlay > div > div:first-child {
+  flex-shrink: 0 !important;
+  padding: 8px 12px !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+}
+
+#te-overlay > div > div:first-child > div:first-child {
+  width: auto !important;
+  flex-wrap: wrap !important;
+}
+
+#te-overlay > div > div:first-child select {
+  max-width: 140px !important;
+  font-size: 13px !important;
+}
+
+/* Боковая панель (вкладки) */
+#te-sidebar {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: colum !important;
+  overflow-x: auto !important;
+  border-right: none !important;
+  border-bottom: 1px solid #333 !important;
+  background: #151515 !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+#te-sidebar > div {
+  flex: 0 0 auto !important;
+  padding: 10px 12px !important;
+  font-size: 13px !important;
+  border-bottom: 2px solid transparent !important;
+  border-left: none !important;
+  white-space: nowrap !important;
+}
+
+#te-sidebar > div[style*="border-left-color: #d4af37"] {
+  border-bottom-color: #d4af37 !important;
+  background: rgba(212,175,55,0.1) !important;
+}
+
+/* Контент */
+#te-content {
+  flex: 1 1 auto !important;
+  padding: 12px !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* Группы настроек */
+#te-content > div {
+  margin-bottom: 16px !important;
+}
+
+#te-content > div > div {
+  padding: 8px !important;
+}
+
+/* Поля */
+#te-content .row-style,
+#te-content div[style*="display: flex"] {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+  margin-bottom: 12px !important;
+}
+
+#te-content label {
+  flex: 0 0 100% !important;
+  margin-bottom: 2px !important;
+  font-size: 13px !important;
+}
+
+#te-content input[type="text"],
+#te-content select {
+  flex: 1 1 auto !important;
+  min-width: 140px !important;
+  font-size: 14px !important;
+  padding: 8px !important;
+  height: auto !important;
+}
+
+/* Специально для полей цвет/градиент */
+#te-content div[style*="width:30px; height:30px;"] {
+  width: 36px !important;
+  height: 36px !important;
+  flex-shrink: 0 !important;
+}
+
+#te-content div[style*="display: flex"] > input[type="text"] {
+  flex: 1 1 auto !important;
+}
+
+/* Кнопки в футере */
+#te-overlay > div > div:last-child {
+  flex-shrink: 0 !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  padding: 12px !important;
+}
+
+#te-overlay > div > div:last-child button {
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 12px !important;
+  font-size: 16px !important;
+}
+
+/* Убираем ненужные скроллы на уровне body */
+body.modal-open {
+  overflow: hidden !important;
+}
+
+
+
+
+/* Поля с предпросмотром цвета/градиента */
+#te-content div[style*="display: flex"] {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  align-items: center !important;
+  margin-bottom: 10px !important;
+}
+
+#te-content div[style*="display: flex"] > div[style*="width:30px; height:30px;"] {
+  width: 36px !important;
+  height: 36px !important;
+  flex-shrink: 0 !important;
+  border-radius: 4px !important;
+}
+
+#te-content div[style*="display: flex"] > input[type="text"] {
+  flex: 1 !important;
+  min-width: 120px !important;
+}
+
+/* Футер редактора (кнопки Discard / Save) */
+#te-overlay > div > div:last-child {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: flex-end !important;
+  gap: 10px !important;
+  padding: 12px 20px !important;
+  background: #111 !important;
+  border-top: 1px solid #333 !important;
+}
+
+#te-overlay > div > div:last-child button {
+  flex: 0 1 auto !important;
+  width: auto !important;
+  padding: 8px 20px !important;
+  font-size: 14px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+  transition: opacity 0.2s;
+}
+
+#te-overlay > div > div:last-child button:first-child {
+  background: transparent !important;
+  border: 1px solid #666 !important;
+  color: #aaa !important;
+}
+
+#te-overlay > div > div:last-child button:last-child {
+  background: #d4af37 !important;
+  border: none !important;
+  color: #000 !important;
+  font-weight: bold !important;
+}
+
+/* 2. КОРРЕКЦИЯ COLOR PICKER PRO (z-index 20001) */
+body > div[style*="z-index: 20001"] {
+  padding: 10px !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+}
+
+body > div[style*="z-index: 20001"] > div {
+  max-width: 95% !important;
+  width: 100% !important;
+  max-height: 95% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+  background: #1a1a1a !important;
+  border: 1px solid #d4af37 !important;
+}
+
+/* Прокручиваемая область (всё, кроме футера) */
+body > div[style*="z-index: 20001"] > div > div:not(:last-child) {
+  overflow-y: auto !important;
+  flex: 1 1 auto !important;
+  padding: 15px !important;
+}
+
+/* Футер с кнопками */
+body > div[style*="z-index: 20001"] > div > div:last-child {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  gap: 8px !important;
+  padding: 12px !important;
+  border-top: 1px solid #333 !important;
+  background: #111 !important;
+}
+
+body > div[style*="z-index: 20001"] button {
+  font-size: 14px !important;
+  padding: 8px 12px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+}
+
+/* Палитры и история */
+body > div[style*="z-index: 20001"] div[style*="max-height: 200px;"] {
+  max-height: 120px !important;
+}
+
+/* Поля ввода */
+body > div[style*="z-index: 20001"] input[type="text"],
+body > div[style*="z-index: 20001"] input[type="range"] {
+  font-size: 14px !important;
+  padding: 6px !important;
+}
+
+/* Область выбора цвета */
+body > div[style*="z-index: 20001"] #color-picker-area {
+  height: 150px !important; /* чуть меньше */
+}
+
+/* 3. КОРРЕКЦИЯ GRADIENT PICKER PRO (z-index 20000) */
+body > div[style*="z-index: 20000"] {
+  padding: 10px !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+}
+
+body > div[style*="z-index: 20000"] > div {
+  max-width: 95% !important;
+  width: 100% !important;
+  max-height: 95% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+  background: #1a1a1a !important;
+  border: 2px solid #d4af37 !important;
+}
+
+/* Прокручиваемая область */
+body > div[style*="z-index: 20000"] > div > div:not(:last-child) {
+  overflow-y: auto !important;
+  flex: 1 1 auto !important;
+  padding: 15px !important;
+}
+
+/* Футер с кнопками */
+body > div[style*="z-index: 20000"] > div > div:last-child {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  gap: 10px !important;
+  padding: 12px !important;
+  border-top: 1px solid #333 !important;
+  background: #111 !important;
+}
+
+body > div[style*="z-index: 20000"] button {
+  font-size: 14px !important;
+  padding: 10px !important;
+  border-radius: 4px !important;
+  cursor: pointer !important;
+}
+
+/* Уменьшим предпросмотр градиента */
+body > div[style*="z-index: 20000"] #gradient-preview {
+  height: 80px !important;
+}
+
+/* Ползунки и поля */
+body > div[style*="z-index: 20000"] input[type="range"],
+body > div[style*="z-index: 20000"] input[type="number"] {
+  font-size: 14px !important;
+}
+
+/* Контейнер с цветовыми остановками */
+body > div[style*="z-index: 20000"] #stops-container {
+  /* уже норм */
+}
+
+/* Адаптация для совсем маленьких экранов */
+@media (max-width: 480px) {
+  #te-sidebar {
+    min-width: 110px !important;
+  }
+  #te-sidebar > div {
+    padding: 10px 6px !important;
+    font-size: 12px !important;
+  }
+  #te-content {
+    padding: 10px !important;
+  }
+  body > div[style*="z-index: 20001"] > div > div:not(:last-child),
+  body > div[style*="z-index: 20000"] > div > div:not(:last-child) {
+    padding: 10px !important;
+  }
+}
