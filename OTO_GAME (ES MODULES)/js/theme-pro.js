@@ -1,4 +1,3 @@
-// js/theme-pro.js
 'use strict';
 
 import { DEFAULT_THEME_CONFIG, PRESET_THEMES, FONT_LIBRARY, ICON_MAPPINGS } from './theme-config-pro.js';
@@ -28,6 +27,10 @@ class ThemeManagerPro {
         
         // 3. Гарантируем целостность структуры
         if (!this.currentTheme.icons) this.currentTheme.icons = ICON_MAPPINGS;
+        // Если в загруженной теме нет раздела history, добавляем из DEFAULT
+        if (!this.currentTheme.history) {
+            this.currentTheme.history = this._deepClone(DEFAULT_THEME_CONFIG.history);
+        }
         
         // 4. Применяем тему
         this.applyTheme(this.currentTheme);
@@ -94,6 +97,9 @@ class ThemeManagerPro {
         if (PRESET_THEMES[key]) {
             this.currentTheme = this._deepClone(PRESET_THEMES[key].config);
             if (!this.currentTheme.icons) this.currentTheme.icons = ICON_MAPPINGS;
+            if (!this.currentTheme.history) {
+                this.currentTheme.history = this._deepClone(DEFAULT_THEME_CONFIG.history);
+            }
             this.applyTheme(this.currentTheme);
             console.log(`📦 Загружен пресет: ${key}`);
         }
@@ -118,6 +124,9 @@ class ThemeManagerPro {
             if (!theme.global || !theme.scene) throw new Error("Invalid theme format");
             
             this.currentTheme = theme;
+            if (!this.currentTheme.history) {
+                this.currentTheme.history = this._deepClone(DEFAULT_THEME_CONFIG.history);
+            }
             this.applyTheme(theme);
             return true;
         } catch (e) {
@@ -167,7 +176,15 @@ class ThemeManagerPro {
         css += '\n';
 
         // 2. Глобальные настройки
-        const g = theme.global;
+        const g = theme.global || {
+            icons: { set: 'fa', emojiFilter: 'none' },
+            layout: {
+                scrollbarColor: "#d4af37",
+                scrollbarBg: "#1a1a1a",
+                selectionColor: "#d4af37",
+                selectionBg: "rgba(212, 175, 55, 0.2)"
+            }
+        };
         css += `/* === GLOBAL === */\n`;
         css += `
 ::selection {
@@ -215,8 +232,8 @@ body {
         }
         css += '\n';
 
-        // 4. Сцена - ПОЛНОСТЬЮ
-        const s = theme.scene;
+        // 4. Сцена
+        const s = theme.scene || DEFAULT_THEME_CONFIG.scene;
         css += `/* === SCENE === */\n`;
         css += `
 #sceneArea {
@@ -281,7 +298,7 @@ body {
 }
 \n`;
 
-        // 5. Game Items - ПОЛНОСТЬЮ ДЛЯ КАЖДОГО ТИПА
+        // 5. Game Items
         css += `/* === GAME ITEMS === */\n`;
         const containerMap = {
             personality: 'personalityBlockContainer',
@@ -297,9 +314,10 @@ body {
             details: 'detailsContainer'
         };
 
-        Object.entries(theme.gameItems).forEach(([type, config]) => {
+        const gameItems = theme.gameItems || DEFAULT_THEME_CONFIG.gameItems;
+        Object.entries(gameItems).forEach(([type, config]) => {
             const id = containerMap[type];
-            if (id) {
+            if (id && config) {
                 css += `
 /* ${type.toUpperCase()} */
 #${id} {
@@ -337,8 +355,8 @@ body {
             }
         });
 
-        // 6. Turn Updates - ПОЛНОСТЬЮ
-        const tu = theme.turnUpdates;
+        // 6. Turn Updates
+        const tu = theme.turnUpdates || DEFAULT_THEME_CONFIG.turnUpdates;
         css += `\n/* === TURN UPDATES === */\n`;
         css += `
 #turnUpdatesContainer > div,
@@ -365,45 +383,488 @@ body {
 }
 \n`;
 
-        // 7. History - ПОЛНОСТЬЮ
-        const h = theme.history;
-        css += `/* === HISTORY === */\n`;
+        // 7. ИСТОРИЯ - с защитой от undefined
+        css += this._generateHistoryCSS(theme.history);
+
+        return css;
+    }
+
+    _generateHistoryCSS(h) {
+        // Если истории нет, используем конфиг по умолчанию
+        const historyConfig = h || DEFAULT_THEME_CONFIG.history;
+        if (!historyConfig) return ''; // на всякий случай
+
+        let css = '\n/* === HISTORY (CLASS-BASED) === */\n';
+
+        // Контейнер истории
         css += `
 #history {
-    background: ${h.container.background} !important;
-    padding: ${h.container.padding} !important;
+    background: ${historyConfig.container?.background || '#050505'} !important;
+    padding: ${historyConfig.container?.padding || '0'} !important;
+    height: ${historyConfig.container?.height || '100%'} !important;
+    overflow-y: ${historyConfig.container?.overflowY || 'auto'} !important;
+    overflow-x: ${historyConfig.container?.overflowX || 'hidden'} !important;
+}
+`;
+
+        // Шапка
+        const header = historyConfig.header || {};
+        css += `
+.history-header {
+    position: ${header.position || 'sticky'} !important;
+    top: ${header.top || '0'} !important;
+    z-index: ${header.zIndex || '10'} !important;
+    background: ${header.background || '#111111'} !important;
+    padding: ${header.padding || '3px 6px'} !important;
+    border-bottom: ${header.borderBottom || '1px solid #e84118'} !important;
+    margin-bottom: ${header.marginBottom || '2px'} !important;
+    display: ${header.display || 'flex'} !important;
+    justify-content: ${header.justifyContent || 'space-between'} !important;
+    align-items: ${header.alignItems || 'center'} !important;
+    font-family: ${header.fontFamily || "'Exo 2', sans-serif"} !important;
+    font-size: ${header.fontSize || '0.75em'} !important;
+    color: ${header.color || '#dddddd'} !important;
+}
+`;
+
+        // Кнопки шапки
+        const headerButtons = historyConfig.headerButtons || {
+            background: "rgba(76,209,55,0.1)",
+            border: "1px solid #4cd137",
+            color: "#4cd137",
+            padding: "1px 3px",
+            borderRadius: "2px",
+            cursor: "pointer",
+            fontSize: "0.6em",
+            minWidth: "20px",
+            transition: "all 0.2s ease",
+            hover: {
+                background: "rgba(76,209,55,0.2)",
+                borderColor: "#4cd137",
+                color: "#4cd137"
+            }
+        };
+        css += `
+.history-header-btn {
+    background: ${headerButtons.background} !important;
+    border: ${headerButtons.border} !important;
+    color: ${headerButtons.color} !important;
+    padding: ${headerButtons.padding} !important;
+    border-radius: ${headerButtons.borderRadius} !important;
+    cursor: ${headerButtons.cursor} !important;
+    font-size: ${headerButtons.fontSize} !important;
+    min-width: ${headerButtons.minWidth} !important;
+    transition: ${headerButtons.transition} !important;
 }
 
-#history > div:first-child {
-    background: ${h.header.background} !important;
-    border-bottom: ${h.header.borderBottom} !important;
-    color: ${h.header.color} !important;
-    font-family: ${h.header.fontFamily} !important;
-    font-size: ${h.header.fontSize} !important;
+.history-header-btn:hover {
+    background: ${headerButtons.hover?.background || 'rgba(76,209,55,0.2)'} !important;
+    border-color: ${headerButtons.hover?.borderColor || '#4cd137'} !important;
+    color: ${headerButtons.hover?.color || '#4cd137'} !important;
 }
+`;
 
+        // Контейнер ходов
+        const turnsContainer = historyConfig.turnsContainer || {
+            padding: "2px 0",
+            display: "flex",
+            flexDirection: "column",
+            gap: "1px"
+        };
+        css += `
+#historyTurnsContainer {
+    padding: ${turnsContainer.padding} !important;
+    display: ${turnsContainer.display} !important;
+    flex-direction: ${turnsContainer.flexDirection} !important;
+    gap: ${turnsContainer.gap} !important;
+}
+`;
+
+        // Элемент хода (details)
+        const turn = historyConfig.turn || {
+            background: "#0a0a0a",
+            border: "0.5px solid rgba(255,255,255,0.05)",
+            borderLeftWidth: "2px",
+            margin: "0 2px 1px 2px",
+            fontSize: "0.7em",
+            overflow: "hidden",
+            borderRadius: "2px"
+        };
+        const accentColors = historyConfig.accentColors || {
+            success: "#4cd137",
+            failure: "#e84118",
+            mixed: "#fbc531",
+            neutral: "#555"
+        };
+        css += `
 .history-turn {
-    background: ${h.turn.background} !important;
-    border: ${h.turn.border} !important;
-    border-left: ${h.turn.borderLeft} !important;
-    border-radius: ${h.turn.borderRadius} !important;
-    margin-bottom: ${h.turn.marginBottom} !important;
+    background: ${turn.background} !important;
+    border: ${turn.border} !important;
+    border-left-width: ${turn.borderLeftWidth} !important;
+    margin: ${turn.margin} !important;
+    font-size: ${turn.fontSize} !important;
+    overflow: ${turn.overflow} !important;
+    border-radius: ${turn.borderRadius} !important;
+    border-left-color: var(--turn-accent-color, ${accentColors.neutral}) !important;
 }
+`;
 
+        // Заголовок хода (summary)
+        const turnSummary = historyConfig.turnSummary || {
+            padding: "2px 4px",
+            cursor: "pointer",
+            userSelect: "none",
+            listStyle: "none",
+            background: "rgba(0,0,0,0.3)",
+            lineHeight: "1.2",
+            fontFamily: "'Nunito Sans', sans-serif",
+            fontSize: "0.8em",
+            numberColor: "#e84118",
+            summaryColor: "#aaa",
+            actionCountColor: "#666",
+            timestampColor: "#555",
+            chevronColor: "#e84118"
+        };
+        css += `
 .history-turn summary {
-    background: ${h.turnSummary.background} !important;
-    color: ${h.turnSummary.color} !important;
-    font-family: ${h.turnSummary.fontFamily} !important;
-    font-size: ${h.turnSummary.fontSize} !important;
+    padding: ${turnSummary.padding} !important;
+    cursor: ${turnSummary.cursor} !important;
+    user-select: ${turnSummary.userSelect} !important;
+    list-style: ${turnSummary.listStyle} !important;
+    background: ${turnSummary.background} !important;
+    line-height: ${turnSummary.lineHeight} !important;
+    font-family: ${turnSummary.fontFamily} !important;
+    font-size: ${turnSummary.fontSize} !important;
 }
 
-.history-turn > div {
-    background: ${h.turnContent.background} !important;
-    color: ${h.turnContent.color} !important;
-    font-size: ${h.turnContent.fontSize} !important;
-    font-family: ${h.turnContent.fontFamily} !important;
+.turn-summary-number {
+    color: var(--turn-accent-color, ${turnSummary.numberColor}) !important;
+    font-weight: bold;
+    font-size: 0.8em;
 }
-\n`;
+
+.turn-summary-text {
+    color: ${turnSummary.summaryColor} !important;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.turn-summary-count {
+    color: ${turnSummary.actionCountColor} !important;
+    margin-left: 4px;
+    white-space: nowrap;
+}
+
+.turn-summary-time {
+    color: ${turnSummary.timestampColor} !important;
+    text-align: right;
+    font-size: 0.6em;
+    margin-top: 1px;
+}
+
+.turn-chevron {
+    color: var(--turn-accent-color, ${turnSummary.chevronColor}) !important;
+    transition: transform 0.2s;
+    font-size: 0.5em;
+    width: 6px;
+}
+`;
+
+        // Содержимое хода
+        const turnContent = historyConfig.turnContent || {
+            padding: "3px",
+            borderTop: "0.5px solid rgba(255,255,255,0.05)",
+            background: "rgba(0,0,0,0.2)",
+            fontSize: "0.75em",
+            whiteSpace: "normal",
+            wordWrap: "break-word",
+            overflowWrap: "break-word",
+            fontFamily: "'Nunito Sans', sans-serif",
+            color: "#cccccc"
+        };
+        css += `
+.history-turn-content {
+    padding: ${turnContent.padding} !important;
+    border-top: ${turnContent.borderTop} !important;
+    background: ${turnContent.background} !important;
+    font-size: ${turnContent.fontSize} !important;
+    white-space: ${turnContent.whiteSpace} !important;
+    word-wrap: ${turnContent.wordWrap} !important;
+    overflow-wrap: ${turnContent.overflowWrap} !important;
+    font-family: ${turnContent.fontFamily} !important;
+    color: ${turnContent.color} !important;
+}
+`;
+
+        // Общий блок содержимого
+        const contentBlock = historyConfig.contentBlock || {
+            padding: "2px",
+            marginBottom: "2px",
+            borderLeftWidth: "1px",
+            borderLeftStyle: "solid",
+            borderRadius: "0",
+            titleFontSize: "0.7em",
+            titleFontFamily: "'Exo 2', sans-serif",
+            titleMarginBottom: "1px",
+            contentFontSize: "0.75em",
+            contentFontFamily: "'Nunito Sans', sans-serif",
+            contentLineHeight: "1.2"
+        };
+        css += `
+.history-block {
+    padding: ${contentBlock.padding} !important;
+    margin-bottom: ${contentBlock.marginBottom} !important;
+    border-left-width: ${contentBlock.borderLeftWidth} !important;
+    border-left-style: ${contentBlock.borderLeftStyle} !important;
+    border-radius: ${contentBlock.borderRadius} !important;
+}
+
+.history-block-title {
+    font-size: ${contentBlock.titleFontSize} !important;
+    font-family: ${contentBlock.titleFontFamily} !important;
+    margin-bottom: ${contentBlock.titleMarginBottom} !important;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.history-block-content {
+    font-size: ${contentBlock.contentFontSize} !important;
+    font-family: ${contentBlock.contentFontFamily} !important;
+    line-height: ${contentBlock.contentLineHeight} !important;
+}
+.history-block-content.italic {
+    font-style: italic;
+}
+`;
+
+        // Специфические блоки
+        const blocks = historyConfig.contentBlocks || DEFAULT_THEME_CONFIG.history.contentBlocks;
+        css += `
+/* Заметки дизайнера */
+.history-block-design-notes {
+    background: ${blocks.designNotes?.background || 'rgba(102,102,102,0.03)'} !important;
+    border-left-color: ${blocks.designNotes?.borderLeftColor || '#666'} !important;
+}
+.history-block-design-notes .history-block-title {
+    color: ${blocks.designNotes?.titleColor || '#666'} !important;
+}
+.history-block-design-notes .history-block-content {
+    color: ${blocks.designNotes?.contentColor || '#ccc'} !important;
+}
+${blocks.designNotes?.italic ? '.history-block-design-notes .history-block-content { font-style: italic; }' : ''}
+
+/* Память ГМ */
+.history-block-ai-memory {
+    background: ${blocks.aiMemory?.background || 'rgba(251,197,49,0.03)'} !important;
+    border-left-color: ${blocks.aiMemory?.borderLeftColor || '#fbc531'} !important;
+}
+.history-block-ai-memory .history-block-title {
+    color: ${blocks.aiMemory?.titleColor || '#fbc531'} !important;
+}
+.memory-key {
+    color: ${blocks.aiMemory?.keyColor || '#fbc531'} !important;
+}
+.memory-value {
+    color: ${blocks.aiMemory?.valueColor || '#ccc'} !important;
+}
+.memory-value.boolean-true {
+    color: ${blocks.aiMemory?.booleanTrueColor || '#4cd137'} !important;
+}
+.memory-value.boolean-false {
+    color: ${blocks.aiMemory?.booleanFalseColor || '#e84118'} !important;
+}
+.memory-value.number {
+    color: ${blocks.aiMemory?.numberColor || '#fbc531'} !important;
+}
+.memory-value.array {
+    color: ${blocks.aiMemory?.arrayColor || '#9c88ff'} !important;
+}
+.memory-value.string {
+    color: ${blocks.aiMemory?.stringColor || '#ccc'} !important;
+}
+.memory-value.object {
+    color: ${blocks.aiMemory?.objectColor || '#48dbfb'} !important;
+}
+
+/* Сводка */
+.history-block-summary {
+    background: ${blocks.summary?.background || 'rgba(72,219,251,0.03)'} !important;
+    border-left-color: ${blocks.summary?.borderLeftColor || '#48dbfb'} !important;
+}
+.history-block-summary .history-block-title {
+    color: ${blocks.summary?.titleColor || '#48dbfb'} !important;
+}
+.history-block-summary .history-block-content {
+    color: ${blocks.summary?.contentColor || '#ccc'} !important;
+}
+
+/* Текст сцены */
+.history-block-scene {
+    background: ${blocks.sceneText?.background || 'rgba(232,65,24,0.03)'} !important;
+    border-left-color: ${blocks.sceneText?.borderLeftColor || '#e84118'} !important;
+}
+.history-block-scene .history-block-title {
+    color: ${blocks.sceneText?.titleColor || '#e84118'} !important;
+}
+.history-block-scene .history-block-content {
+    color: ${blocks.sceneText?.contentColor || '#ccc'} !important;
+}
+
+/* Рефлексия */
+.history-block-reflection {
+    background: ${blocks.reflection?.background || 'rgba(72,219,251,0.03)'} !important;
+    border-left-color: ${blocks.reflection?.borderLeftColor || '#48dbfb'} !important;
+}
+.history-block-reflection .history-block-title {
+    color: ${blocks.reflection?.titleColor || '#48dbfb'} !important;
+}
+.history-block-reflection .history-block-content {
+    color: ${blocks.reflection?.contentColor || '#ccc'} !important;
+}
+${blocks.reflection?.italic ? '.history-block-reflection .history-block-content { font-style: italic; }' : ''}
+
+/* Личность */
+.history-block-personality {
+    background: ${blocks.personality?.background || 'rgba(76,209,55,0.03)'} !important;
+    border-left-color: ${blocks.personality?.borderLeftColor || '#4cd137'} !important;
+}
+.history-block-personality .history-block-title {
+    color: ${blocks.personality?.titleColor || '#4cd137'} !important;
+}
+.history-block-personality .history-block-content {
+    color: ${blocks.personality?.contentColor || '#ccc'} !important;
+}
+
+/* Типология */
+.history-block-typology {
+    background: ${blocks.typology?.background || 'rgba(156,136,255,0.03)'} !important;
+    border-left-color: ${blocks.typology?.borderLeftColor || '#9c88ff'} !important;
+}
+.history-block-typology .history-block-title {
+    color: ${blocks.typology?.titleColor || '#9c88ff'} !important;
+}
+.history-block-typology .history-block-content {
+    color: ${blocks.typology?.contentColor || '#ccc'} !important;
+}
+
+/* Действия */
+.history-block-actions {
+    background: ${blocks.actions?.background || 'rgba(156,136,255,0.03)'} !important;
+    border-left-color: ${blocks.actions?.borderLeftColor || '#9c88ff'} !important;
+}
+.history-block-actions .history-block-title {
+    color: ${blocks.actions?.titleColor || '#9c88ff'} !important;
+}
+.action-item {
+    padding: 1px 2px;
+    border-radius: 1px;
+    font-size: ${blocks.actions?.fontSize || '0.75em'} !important;
+}
+.action-success {
+    background: ${blocks.actions?.successBg || 'rgba(76,209,55,0.1)'} !important;
+    border-left: 2px solid ${blocks.actions?.successColor || '#4cd137'} !important;
+    color: ${blocks.actions?.successColor || '#4cd137'} !important;
+}
+.action-partial {
+    background: ${blocks.actions?.partialBg || 'rgba(251,197,49,0.1)'} !important;
+    border-left: 2px solid ${blocks.actions?.partialColor || '#fbc531'} !important;
+    color: ${blocks.actions?.partialColor || '#fbc531'} !important;
+}
+.action-failure {
+    background: ${blocks.actions?.failureBg || 'rgba(232,65,24,0.1)'} !important;
+    border-left: 2px solid ${blocks.actions?.failureColor || '#e84118'} !important;
+    color: ${blocks.actions?.failureColor || '#e84118'} !important;
+}
+
+/* Изменения */
+.history-block-changes {
+    background: ${blocks.changes?.background || 'rgba(76,209,55,0.03)'} !important;
+    border-left-color: ${blocks.changes?.borderLeftColor || '#4cd137'} !important;
+}
+.history-block-changes .history-block-title {
+    color: ${blocks.changes?.titleColor || '#4cd137'} !important;
+}
+.history-block-changes .history-block-content {
+    color: ${blocks.changes?.contentColor || '#ccc'} !important;
+}
+`;
+
+        // Акцентные цвета (CSS-переменные)
+        css += `
+:root {
+    --history-accent-success: ${accentColors.success};
+    --history-accent-failure: ${accentColors.failure};
+    --history-accent-mixed: ${accentColors.mixed};
+    --history-accent-neutral: ${accentColors.neutral};
+}
+`;
+
+        // Индикатор футера
+        const footerIndicator = historyConfig.footerIndicator || {
+            background: "rgba(232,65,24,0.05)",
+            borderLeft: "1px solid #e84118",
+            borderRadius: "1px",
+            fontSize: "0.65em",
+            color: "#888",
+            textAlign: "center",
+            padding: "2px 4px",
+            margin: "1px 2px"
+        };
+        css += `
+.history-footer-indicator {
+    background: ${footerIndicator.background} !important;
+    border-left: ${footerIndicator.borderLeft} !important;
+    border-radius: ${footerIndicator.borderRadius} !important;
+    font-size: ${footerIndicator.fontSize} !important;
+    color: ${footerIndicator.color} !important;
+    text-align: ${footerIndicator.textAlign} !important;
+    padding: ${footerIndicator.padding} !important;
+    margin: ${footerIndicator.margin} !important;
+}
+`;
+
+        // Пустое состояние
+        const emptyState = historyConfig.emptyState || {
+            padding: "10px",
+            textAlign: "center",
+            color: "#555",
+            fontSize: "0.75em",
+            fontStyle: "italic",
+            iconSize: "1.5em",
+            iconOpacity: "0.3"
+        };
+        css += `
+.history-empty {
+    padding: ${emptyState.padding} !important;
+    text-align: ${emptyState.textAlign} !important;
+    color: ${emptyState.color} !important;
+    font-size: ${emptyState.fontSize} !important;
+    font-style: ${emptyState.fontStyle} !important;
+}
+.history-empty i {
+    font-size: ${emptyState.iconSize} !important;
+    opacity: ${emptyState.iconOpacity} !important;
+    display: block;
+    margin-bottom: 5px;
+}
+`;
+
+        // Стиль для параграфов
+        css += `
+.text-paragraph {
+    margin: 0;
+    padding: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+.text-paragraph + .text-paragraph {
+    margin-top: 2px;
+}
+`;
 
         return css;
     }

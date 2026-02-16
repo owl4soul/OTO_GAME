@@ -1,4 +1,3 @@
-// js/theme-config-pro.js
 'use strict';
 
 /**
@@ -7,6 +6,8 @@
  * ═══════════════════════════════════════════════════════════════════════════
  * Полная конфигурация с расширенным набором шрифтов, пресетов и настроек
  */
+
+import { HISTORY_VISUAL_CONFIG } from './history-config.js';
 
 // 1. РАСШИРЕННАЯ БИБЛИОТЕКА ШРИФТОВ (Google Fonts)
 export const FONT_LIBRARY = {
@@ -316,39 +317,8 @@ export const TURN_UPDATES_CONFIG = {
     }
 };
 
-// 9. ИСТОРИЯ
-export const HISTORY_CONFIG = {
-    container: {
-        background: "#050505",
-        padding: "0"
-    },
-    header: {
-        background: "#111111",
-        borderBottom: "1px solid #e84118",
-        color: "#dddddd",
-        fontFamily: "'Exo 2', sans-serif",
-        fontSize: "0.75em"
-    },
-    turn: {
-        background: "#0a0a0a",
-        border: "1px solid rgba(255,255,255,0.05)",
-        borderLeft: "2px solid #555",
-        borderRadius: "2px",
-        marginBottom: "2px"
-    },
-    turnSummary: {
-        background: "rgba(255,255,255,0.02)",
-        color: "#dddddd",
-        fontFamily: "'Nunito Sans', sans-serif",
-        fontSize: "0.8em"
-    },
-    turnContent: {
-        background: "rgba(0,0,0,0.2)",
-        color: "#cccccc",
-        fontSize: "0.75em",
-        fontFamily: "'Nunito Sans', sans-serif"
-    }
-};
+// 9. ИСТОРИЯ (используем импортированный конфиг)
+export const HISTORY_CONFIG = HISTORY_VISUAL_CONFIG;
 
 // 10. БАЗОВАЯ ТЕМА
 export const DEFAULT_THEME_CONFIG = {
@@ -359,11 +329,12 @@ export const DEFAULT_THEME_CONFIG = {
     scene: SCENE_CONFIG,
     gameItems: GAME_ITEMS_CONFIG,
     turnUpdates: TURN_UPDATES_CONFIG,
-    history: HISTORY_CONFIG,
+    history: HISTORY_CONFIG,   // <-- теперь история включена
     icons: ICON_MAPPINGS
 };
 
 // 11. РАСШИРЕННЫЕ ПРЕСЕТЫ
+// 11. РАСШИРЕННЫЕ ПРЕСЕТЫ (исправленные для тёмной темы и читаемости)
 export const PRESET_THEMES = {
     default: {
         name: "Dark Industrial",
@@ -374,13 +345,13 @@ export const PRESET_THEMES = {
     
     forest: {
         name: "Elven Forest",
-        description: "Природные тона, эльфийская эстетика",
-        preview: "linear-gradient(135deg, #1e3c23 0%, #0f1f10 100%)",
+        description: "Глубокий тёмный лес с изумрудными акцентами",
+        preview: "linear-gradient(135deg, #0a1f0a 0%, #1a2a1a 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
             name: "Elven Forest",
             global: {
-                icons: { set: 'fa', emojiFilter: 'hue-rotate(90deg)' },
+                icons: { set: 'fa', emojiFilter: 'hue-rotate(90deg) brightness(1.2)' },
                 layout: {
                     scrollbarColor: "#2ecc71",
                     scrollbarBg: "#0a1a0a",
@@ -399,7 +370,8 @@ export const PRESET_THEMES = {
                     fontFamily: "'Lora', serif",
                     fontWeight: "400",
                     fontSize: "16px",
-                    lineHeight: "1.7"
+                    lineHeight: "1.7",
+                    color: "#d0e0d0" // добавлен цвет для тела
                 },
                 ui: {
                     fontFamily: "'Lora', serif",
@@ -415,36 +387,36 @@ export const PRESET_THEMES = {
             scene: {
                 container: { padding: "0px", background: "transparent" },
                 textBlock: {
-                    background: "rgba(10, 20, 10, 0.85)",
+                    background: "rgba(10, 25, 10, 0.9)",
                     border: "2px solid #2ecc71",
                     borderRadius: "12px",
                     padding: "18px",
-                    color: "#e0ffe0",
+                    color: "#e0f0e0",
                     fontFamily: "'Lora', serif",
                     fontSize: "1.05em",
-                    boxShadow: "0 4px 12px rgba(46, 204, 113, 0.2)"
+                    boxShadow: "0 4px 12px rgba(46, 204, 113, 0.3)"
                 },
                 aiMemory: {
-                    background: "rgba(46, 204, 113, 0.08)",
+                    background: "rgba(46, 204, 113, 0.1)",
                     borderLeft: "4px solid #2ecc71",
                     borderRadius: "8px",
                     padding: "12px",
                     titleColor: "#2ecc71",
                     contentColor: "#c0e0c0",
                     keyColor: "#2ecc71",
-                    valueColor: "#d0f0d0"
+                    valueColor: "#e0f0e0"
                 },
                 choices: {
                     containerMargin: "20px 0 0 0",
                     btn: {
-                        background: "linear-gradient(180deg, #1e3c23 0%, #0f1f10 100%)",
+                        background: "linear-gradient(180deg, #1a2a1a 0%, #0a1a0a 100%)",
                         border: "2px solid #2ecc71",
-                        color: "#d0f0d0",
+                        color: "#e0f0e0",
                         borderRadius: "10px",
                         padding: "14px 18px",
                         fontFamily: "'Cinzel', serif",
                         fontSize: "1em",
-                        hoverBg: "linear-gradient(180deg, #2a4d2f 0%, #15291a 100%)",
+                        hoverBg: "linear-gradient(180deg, #2a4d2f 0%, #1a2f1a 100%)",
                         hoverBorder: "#3edd81",
                         selectedBg: "rgba(46, 204, 113, 0.3)",
                         selectedBorder: "#3edd81",
@@ -464,22 +436,67 @@ export const PRESET_THEMES = {
                 buff_debuff: createGameItemConfig("#16a085", "#0a2520", "#051512"),
                 inventory: createGameItemConfig("#e67e22", "#2a1505", "#1a0a00"),
                 details: createGameItemConfig("#2ecc71", "#0a2a0a", "#051a05")
+            },
+            history: {
+                ...HISTORY_CONFIG,
+                container: { background: "#0a1a0a", padding: "0" },
+                header: {
+                    ...HISTORY_CONFIG.header,
+                    background: "#1a2a1a",
+                    borderBottom: "2px solid #2ecc71",
+                    color: "#e0f0e0"
+                },
+                headerButtons: {
+                    ...HISTORY_CONFIG.headerButtons,
+                    background: "rgba(46,204,113,0.15)",
+                    border: "1px solid #2ecc71",
+                    color: "#2ecc71",
+                    hover: {
+                        background: "rgba(46,204,113,0.3)",
+                        borderColor: "#2ecc71",
+                        color: "#ffffff"
+                    }
+                },
+                turn: {
+                    ...HISTORY_CONFIG.turn,
+                    background: "#0f1f0f",
+                    border: "0.5px solid rgba(46,204,113,0.2)",
+                },
+                turnSummary: {
+                    ...HISTORY_CONFIG.turnSummary,
+                    background: "rgba(0,0,0,0.2)",
+                    color: "#e0f0e0",
+                    summaryColor: "#c0e0c0",
+                    actionCountColor: "#a0c0a0",
+                    timestampColor: "#80a080",
+                },
+                turnContent: {
+                    ...HISTORY_CONFIG.turnContent,
+                    background: "rgba(0,0,0,0.15)",
+                    color: "#d0e0d0",
+                },
+                accentColors: {
+                    success: "#2ecc71",
+                    failure: "#e74c3c",
+                    mixed: "#f1c40f",
+                    neutral: "#7f8c8d"
+                }
             }
         }
     },
     
     cyber: {
         name: "Cyberpunk Neon",
-        description: "Высокий контраст, неоновые акценты, терминал",
-        preview: "linear-gradient(135deg, #000000 0%, #1a001a 100%)",
+        description: "Тёмный киберпанк с неоновыми акцентами",
+        preview: "linear-gradient(135deg, #0a0a0a 0%, #1a0033 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
             name: "Cyberpunk Neon",
             global: {
-                icons: { set: 'emoji', emojiFilter: 'drop-shadow(0 0 3px rgba(0,255,255,0.8))' },
+                icons: { set: 'emoji', emojiFilter: 'drop-shadow(0 0 2px rgba(0,255,255,0.8))' },
                 layout: {
                     scrollbarColor: "#00ffff",
-                    scrollbarBg: "#000000",
+                    scrollbarBg: "#0a0a0a",
                     selectionColor: "#ff00ff",
                     selectionBg: "rgba(255, 0, 255, 0.2)"
                 }
@@ -495,7 +512,8 @@ export const PRESET_THEMES = {
                     fontFamily: "'Roboto Mono', monospace",
                     fontWeight: "400",
                     fontSize: "15px",
-                    lineHeight: "1.5"
+                    lineHeight: "1.5",
+                    color: "#e0e0e0"
                 },
                 ui: {
                     fontFamily: "'Orbitron', sans-serif",
@@ -511,17 +529,17 @@ export const PRESET_THEMES = {
             scene: {
                 container: { padding: "0px", background: "transparent" },
                 textBlock: {
-                    background: "#000000",
-                    border: "2px solid #00ff00",
+                    background: "#111111",
+                    border: "2px solid #00ffff",
                     borderRadius: "0px",
                     padding: "15px",
-                    color: "#00ff00",
+                    color: "#e0e0e0",
                     fontFamily: "'Roboto Mono', monospace",
                     fontSize: "1em",
-                    boxShadow: "0 0 20px rgba(0,255,0,0.3), inset 0 0 10px rgba(0,255,0,0.05)"
+                    boxShadow: "0 0 20px rgba(0,255,255,0.3), inset 0 0 10px rgba(0,255,255,0.05)"
                 },
                 aiMemory: {
-                    background: "rgba(255, 0, 255, 0.05)",
+                    background: "rgba(255, 0, 255, 0.1)",
                     borderLeft: "4px solid #ff00ff",
                     borderRadius: "0px",
                     padding: "12px",
@@ -533,7 +551,7 @@ export const PRESET_THEMES = {
                 choices: {
                     containerMargin: "25px 0 0 0",
                     btn: {
-                        background: "#000000",
+                        background: "#111111",
                         border: "2px solid #ff00ff",
                         color: "#ff00ff",
                         borderRadius: "0px",
@@ -560,24 +578,69 @@ export const PRESET_THEMES = {
                 buff_debuff: createGameItemConfig("#ffff00", "#2a2a00", "#1a1a00"),
                 inventory: createGameItemConfig("#ff9900", "#2a1a00", "#1a1000"),
                 details: createGameItemConfig("#00ffff", "#002a2a", "#001a1a")
+            },
+            history: {
+                ...HISTORY_CONFIG,
+                container: { background: "#0a0a0a", padding: "0" },
+                header: {
+                    ...HISTORY_CONFIG.header,
+                    background: "#111111",
+                    borderBottom: "2px solid #ff00ff",
+                    color: "#00ffff"
+                },
+                headerButtons: {
+                    ...HISTORY_CONFIG.headerButtons,
+                    background: "rgba(255,0,255,0.15)",
+                    border: "1px solid #ff00ff",
+                    color: "#ff00ff",
+                    hover: {
+                        background: "rgba(255,0,255,0.3)",
+                        borderColor: "#ff00ff",
+                        color: "#ffffff"
+                    }
+                },
+                turn: {
+                    ...HISTORY_CONFIG.turn,
+                    background: "#151515",
+                    border: "0.5px solid rgba(255,0,255,0.2)",
+                },
+                turnSummary: {
+                    ...HISTORY_CONFIG.turnSummary,
+                    background: "rgba(0,0,0,0.4)",
+                    color: "#e0e0e0",
+                    summaryColor: "#cccccc",
+                    actionCountColor: "#aaaaaa",
+                    timestampColor: "#888888",
+                },
+                turnContent: {
+                    ...HISTORY_CONFIG.turnContent,
+                    background: "rgba(0,0,0,0.3)",
+                    color: "#dddddd",
+                },
+                accentColors: {
+                    success: "#00ff00",
+                    failure: "#ff0000",
+                    mixed: "#ffff00",
+                    neutral: "#00ffff"
+                }
             }
         }
     },
     
     paper: {
-        name: "Old Paper",
-        description: "Светлая тема, имитация старой бумаги и пергамента",
-        preview: "linear-gradient(135deg, #f4e4bc 0%, #e8dcc5 100%)",
+        name: "Old Paper (Dark)",
+        description: "Тёмная тема с имитацией старого пергамента",
+        preview: "linear-gradient(135deg, #2a241a 0%, #3a2e22 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
-            name: "Old Paper",
+            name: "Old Paper Dark",
             global: {
-                icons: { set: 'emoji', emojiFilter: 'sepia(100%)' },
+                icons: { set: 'emoji', emojiFilter: 'sepia(50%) brightness(1.2)' },
                 layout: {
-                    scrollbarColor: "#8b4513",
-                    scrollbarBg: "#f4e4bc",
-                    selectionColor: "#3e2723",
-                    selectionBg: "rgba(139, 69, 19, 0.2)"
+                    scrollbarColor: "#b89b7b",
+                    scrollbarBg: "#2a241a",
+                    selectionColor: "#d4af37",
+                    selectionBg: "rgba(180, 130, 80, 0.2)"
                 }
             },
             typography: {
@@ -591,7 +654,8 @@ export const PRESET_THEMES = {
                     fontFamily: "'Lora', serif",
                     fontWeight: "400",
                     fontSize: "17px",
-                    lineHeight: "1.8"
+                    lineHeight: "1.8",
+                    color: "#e8d8c0"
                 },
                 ui: {
                     fontFamily: "'Playfair Display', serif",
@@ -605,85 +669,101 @@ export const PRESET_THEMES = {
                 }
             },
             scene: {
-                container: { padding: "10px", background: "#f4e4bc" },
+                container: { padding: "0px", background: "transparent" },
                 textBlock: {
-                    background: "linear-gradient(to bottom, #fefaf0 0%, #f8f0e0 100%)",
-                    border: "2px solid #d4c4a4",
-                    borderRadius: "4px",
+                    background: "linear-gradient(135deg, #2a241a 0%, #3a2e22 100%)",
+                    border: "2px solid #b89b7b",
+                    borderRadius: "8px",
                     padding: "18px",
-                    color: "#2c2416",
+                    color: "#f0e0d0",
                     fontFamily: "'Lora', serif",
                     fontSize: "1.05em",
-                    boxShadow: "0 2px 8px rgba(139, 69, 19, 0.15), inset 0 0 20px rgba(255, 243, 224, 0.5)"
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.5), inset 0 0 20px rgba(200,150,100,0.1)"
                 },
                 aiMemory: {
-                    background: "rgba(139, 69, 19, 0.08)",
-                    borderLeft: "4px solid #8b4513",
-                    borderRadius: "4px",
+                    background: "rgba(180, 130, 80, 0.15)",
+                    borderLeft: "4px solid #b89b7b",
+                    borderRadius: "6px",
                     padding: "12px",
-                    titleColor: "#8b4513",
-                    contentColor: "#5a3a1a",
-                    keyColor: "#8b4513",
-                    valueColor: "#6a4a2a"
+                    titleColor: "#e0c0a0",
+                    contentColor: "#d0c0b0",
+                    keyColor: "#e0c0a0",
+                    valueColor: "#f0e0d0"
                 },
                 choices: {
                     containerMargin: "20px 0 0 0",
                     btn: {
-                        background: "linear-gradient(180deg, #f0e0c8 0%, #e0d0b8 100%)",
-                        border: "2px solid #8b4513",
-                        color: "#3e2723",
-                        borderRadius: "6px",
-                        padding: "12px 18px",
+                        background: "linear-gradient(180deg, #3a2e22 0%, #2a241a 100%)",
+                        border: "2px solid #b89b7b",
+                        color: "#f0e0d0",
+                        borderRadius: "8px",
+                        padding: "14px 18px",
                         fontFamily: "'Playfair Display', serif",
                         fontSize: "1em",
-                        hoverBg: "linear-gradient(180deg, #e8d8c0 0%, #d8c8b0 100%)",
-                        hoverBorder: "#6a3913",
-                        selectedBg: "#3e2723",
-                        selectedBorder: "#3e2723",
-                        selectedColor: "#f4e4bc"
+                        hoverBg: "linear-gradient(180deg, #4a3e32 0%, #3a2e22 100%)",
+                        hoverBorder: "#d4af37",
+                        selectedBg: "rgba(180, 130, 80, 0.3)",
+                        selectedBorder: "#d4af37",
+                        selectedColor: "#ffffff"
                     }
                 }
             },
             gameItems: {
-                personality: createGameItemConfig("#8b4513", "#f8f0e0", "#f0e8d8"),
-                typology: createGameItemConfig("#556b2f", "#f4f8e8", "#ecf0e0"),
-                organization: createGameItemConfig("#a0522d", "#faf0e8", "#f2e8e0"),
-                relations: createGameItemConfig("#cd5c5c", "#faf0f0", "#f2e8e8"),
-                skill: createGameItemConfig("#483d8b", "#f0f0fa", "#e8e8f2"),
-                stat_buffs: createGameItemConfig("#4682b4", "#f0f4fa", "#e8ecf2"),
-                bless: createGameItemConfig("#696969", "#f8f8f8", "#f0f0f0"),
-                curse: createGameItemConfig("#8b0000", "#fae8e8", "#f2e0e0"),
-                buff_debuff: createGameItemConfig("#20b2aa", "#e8faf8", "#e0f2f0"),
-                inventory: createGameItemConfig("#a0522d", "#faf0e8", "#f2e8e0"),
-                details: createGameItemConfig("#4682b4", "#f0f4fa", "#e8ecf2")
+                personality: createGameItemConfig("#b89b7b", "#3a2e22", "#2a241a"),
+                typology: createGameItemConfig("#8b6b4f", "#3a2e22", "#2a241a"),
+                organization: createGameItemConfig("#a0522d", "#3a2e22", "#2a241a"),
+                relations: createGameItemConfig("#cd5c5c", "#3a2e22", "#2a241a"),
+                skill: createGameItemConfig("#d4af37", "#3a2e22", "#2a241a"),
+                stat_buffs: createGameItemConfig("#4682b4", "#2a3a4a", "#1a2a3a"),
+                bless: createGameItemConfig("#b0a090", "#3a3a3a", "#2a2a2a"),
+                curse: createGameItemConfig("#8b0000", "#3a1a1a", "#2a0f0f"),
+                buff_debuff: createGameItemConfig("#20b2aa", "#1a3a3a", "#0f2a2a"),
+                inventory: createGameItemConfig("#a0522d", "#3a2e22", "#2a241a"),
+                details: createGameItemConfig("#b89b7b", "#3a2e22", "#2a241a")
             },
             history: {
-                container: { background: "#f4e4bc", padding: "0" },
+                ...HISTORY_CONFIG,
+                container: { background: "#1e1a14", padding: "0" },
                 header: {
-                    background: "#e8dcc5",
-                    borderBottom: "2px solid #8b4513",
-                    color: "#3e2723",
-                    fontFamily: "'Playfair Display', serif",
-                    fontSize: "0.8em"
+                    ...HISTORY_CONFIG.header,
+                    background: "#2a241a",
+                    borderBottom: "2px solid #b89b7b",
+                    color: "#f0e0d0"
+                },
+                headerButtons: {
+                    ...HISTORY_CONFIG.headerButtons,
+                    background: "rgba(180,130,80,0.15)",
+                    border: "1px solid #b89b7b",
+                    color: "#b89b7b",
+                    hover: {
+                        background: "rgba(180,130,80,0.3)",
+                        borderColor: "#d4af37",
+                        color: "#f0e0d0"
+                    }
                 },
                 turn: {
-                    background: "rgba(255,255,255,0.5)",
-                    border: "1px solid #d4c4a4",
-                    borderLeft: "3px solid #8b4513",
-                    borderRadius: "4px",
-                    marginBottom: "4px"
+                    ...HISTORY_CONFIG.turn,
+                    background: "#2a241a",
+                    border: "0.5px solid rgba(180,130,80,0.3)",
                 },
                 turnSummary: {
-                    background: "rgba(255,255,255,0.3)",
-                    color: "#3e2723",
-                    fontFamily: "'Playfair Display', serif",
-                    fontSize: "0.85em"
+                    ...HISTORY_CONFIG.turnSummary,
+                    background: "rgba(0,0,0,0.2)",
+                    color: "#f0e0d0",
+                    summaryColor: "#d0c0b0",
+                    actionCountColor: "#b0a090",
+                    timestampColor: "#908070",
                 },
                 turnContent: {
-                    background: "transparent",
-                    color: "#5a3a1a",
-                    fontSize: "0.8em",
-                    fontFamily: "'Lora', serif"
+                    ...HISTORY_CONFIG.turnContent,
+                    background: "rgba(0,0,0,0.15)",
+                    color: "#e0d0c0",
+                },
+                accentColors: {
+                    success: "#6b8e23",
+                    failure: "#b22222",
+                    mixed: "#daa520",
+                    neutral: "#b89b7b"
                 }
             }
         }
@@ -691,18 +771,18 @@ export const PRESET_THEMES = {
     
     vampire: {
         name: "Vampire Gothic",
-        description: "Готическая темная тема с кровавыми акцентами",
-        preview: "linear-gradient(135deg, #1a0000 0%, #2a0a0a 100%)",
+        description: "Готическая тема с кровавыми акцентами",
+        preview: "linear-gradient(135deg, #1a0a0a 0%, #2a0f0f 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
             name: "Vampire Gothic",
             global: {
-                icons: { set: 'fa', emojiFilter: 'hue-rotate(0deg) brightness(0.8)' },
+                icons: { set: 'fa', emojiFilter: 'brightness(0.9) contrast(1.2)' },
                 layout: {
-                    scrollbarColor: "#8b0000",
-                    scrollbarBg: "#1a0000",
+                    scrollbarColor: "#b22222",
+                    scrollbarBg: "#1a0a0a",
                     selectionColor: "#ff6b6b",
-                    selectionBg: "rgba(139, 0, 0, 0.3)"
+                    selectionBg: "rgba(178, 34, 34, 0.3)"
                 }
             },
             typography: {
@@ -716,7 +796,8 @@ export const PRESET_THEMES = {
                     fontFamily: "'Cormorant', serif",
                     fontWeight: "400",
                     fontSize: "17px",
-                    lineHeight: "1.7"
+                    lineHeight: "1.7",
+                    color: "#e0d0d0"
                 },
                 ui: {
                     fontFamily: "'Cinzel', serif",
@@ -732,45 +813,45 @@ export const PRESET_THEMES = {
             scene: {
                 container: { padding: "0px", background: "transparent" },
                 textBlock: {
-                    background: "linear-gradient(135deg, rgba(26, 0, 0, 0.9) 0%, rgba(42, 10, 10, 0.9) 100%)",
-                    border: "2px solid #8b0000",
+                    background: "linear-gradient(135deg, #1a0a0a 0%, #2a0f0f 100%)",
+                    border: "2px solid #b22222",
                     borderRadius: "8px",
                     padding: "18px",
-                    color: "#e8d5d5",
+                    color: "#f0e0e0",
                     fontFamily: "'Cormorant', serif",
                     fontSize: "1.1em",
-                    boxShadow: "0 4px 16px rgba(139, 0, 0, 0.4), inset 0 0 30px rgba(139, 0, 0, 0.1)"
+                    boxShadow: "0 4px 16px rgba(178,34,34,0.4), inset 0 0 20px rgba(178,34,34,0.1)"
                 },
                 aiMemory: {
-                    background: "rgba(139, 0, 0, 0.1)",
-                    borderLeft: "4px solid #8b0000",
+                    background: "rgba(178,34,34,0.15)",
+                    borderLeft: "4px solid #b22222",
                     borderRadius: "6px",
                     padding: "12px",
-                    titleColor: "#ff6b6b",
-                    contentColor: "#d8c5c5",
-                    keyColor: "#ff6b6b",
-                    valueColor: "#e8d5d5"
+                    titleColor: "#ff8a8a",
+                    contentColor: "#d0b0b0",
+                    keyColor: "#ff8a8a",
+                    valueColor: "#f0d0d0"
                 },
                 choices: {
                     containerMargin: "20px 0 0 0",
                     btn: {
-                        background: "linear-gradient(180deg, rgba(26, 0, 0, 0.8) 0%, rgba(42, 10, 10, 0.8) 100%)",
-                        border: "2px solid #8b0000",
-                        color: "#e8d5d5",
+                        background: "linear-gradient(180deg, #2a0f0f 0%, #1a0a0a 100%)",
+                        border: "2px solid #b22222",
+                        color: "#f0e0e0",
                         borderRadius: "8px",
                         padding: "14px 20px",
                         fontFamily: "'Cinzel', serif",
                         fontSize: "1em",
-                        hoverBg: "linear-gradient(180deg, rgba(42, 0, 0, 0.9) 0%, rgba(62, 15, 15, 0.9) 100%)",
-                        hoverBorder: "#aa0000",
-                        selectedBg: "rgba(139, 0, 0, 0.3)",
+                        hoverBg: "linear-gradient(180deg, #3a1a1a 0%, #2a0f0f 100%)",
+                        hoverBorder: "#ff6b6b",
+                        selectedBg: "rgba(178,34,34,0.3)",
                         selectedBorder: "#ff6b6b",
                         selectedColor: "#ffffff"
                     }
                 }
             },
             gameItems: {
-                personality: createGameItemConfig("#8b0000", "#2a0000", "#1a0000"),
+                personality: createGameItemConfig("#b22222", "#2a0a0a", "#1a0505"),
                 typology: createGameItemConfig("#cd5c5c", "#2a0a0a", "#1a0505"),
                 organization: createGameItemConfig("#8b0000", "#2a0000", "#1a0000"),
                 relations: createGameItemConfig("#dc143c", "#2a0510", "#1a0208"),
@@ -781,24 +862,69 @@ export const PRESET_THEMES = {
                 buff_debuff: createGameItemConfig("#a52a2a", "#2a0a05", "#1a0502"),
                 inventory: createGameItemConfig("#8b4513", "#2a1a0a", "#1a0d05"),
                 details: createGameItemConfig("#cd5c5c", "#2a0a0a", "#1a0505")
+            },
+            history: {
+                ...HISTORY_CONFIG,
+                container: { background: "#150808", padding: "0" },
+                header: {
+                    ...HISTORY_CONFIG.header,
+                    background: "#1a0a0a",
+                    borderBottom: "2px solid #b22222",
+                    color: "#f0e0e0"
+                },
+                headerButtons: {
+                    ...HISTORY_CONFIG.headerButtons,
+                    background: "rgba(178,34,34,0.15)",
+                    border: "1px solid #b22222",
+                    color: "#ff8a8a",
+                    hover: {
+                        background: "rgba(178,34,34,0.3)",
+                        borderColor: "#ff6b6b",
+                        color: "#ffffff"
+                    }
+                },
+                turn: {
+                    ...HISTORY_CONFIG.turn,
+                    background: "#1a0a0a",
+                    border: "0.5px solid rgba(178,34,34,0.3)",
+                },
+                turnSummary: {
+                    ...HISTORY_CONFIG.turnSummary,
+                    background: "rgba(0,0,0,0.3)",
+                    color: "#f0e0e0",
+                    summaryColor: "#d0b0b0",
+                    actionCountColor: "#b09090",
+                    timestampColor: "#907070",
+                },
+                turnContent: {
+                    ...HISTORY_CONFIG.turnContent,
+                    background: "rgba(0,0,0,0.2)",
+                    color: "#e0d0d0",
+                },
+                accentColors: {
+                    success: "#4cd137",
+                    failure: "#e84118",
+                    mixed: "#fbc531",
+                    neutral: "#b22222"
+                }
             }
         }
     },
     
     retro: {
         name: "Retro Console",
-        description: "Ретро-стиль игровой консоли 8-бит",
-        preview: "linear-gradient(135deg, #2a1a5a 0%, #1a0a3a 100%)",
+        description: "Ретро-стиль игровой консоли 8-бит на тёмном фоне",
+        preview: "linear-gradient(135deg, #1a103a 0%, #2a1a4a 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
             name: "Retro Console",
             global: {
                 icons: { set: 'emoji', emojiFilter: 'none' },
                 layout: {
-                    scrollbarColor: "#ff6b9d",
-                    scrollbarBg: "#1a0a3a",
+                    scrollbarColor: "#ff9f00",
+                    scrollbarBg: "#1a103a",
                     selectionColor: "#ffeb3b",
-                    selectionBg: "rgba(255, 107, 157, 0.3)"
+                    selectionBg: "rgba(255, 159, 0, 0.3)"
                 }
             },
             typography: {
@@ -811,8 +937,9 @@ export const PRESET_THEMES = {
                 body: {
                     fontFamily: "'VT323', monospace",
                     fontWeight: "400",
-                    fontSize: "19px",
-                    lineHeight: "1.5"
+                    fontSize: "20px",
+                    lineHeight: "1.4",
+                    color: "#e0e0a0"
                 },
                 ui: {
                     fontFamily: "'Press Start 2P', cursive",
@@ -822,69 +949,114 @@ export const PRESET_THEMES = {
                 },
                 monospace: {
                     fontFamily: "'VT323', monospace",
-                    fontSize: "16px"
+                    fontSize: "18px"
                 }
             },
             scene: {
                 container: { padding: "0px", background: "transparent" },
                 textBlock: {
-                    background: "#1a0a3a",
-                    border: "4px solid #ff6b9d",
+                    background: "#1a103a",
+                    border: "4px solid #ff9f00",
                     borderRadius: "0px",
                     padding: "16px",
-                    color: "#ffeb3b",
+                    color: "#ffffb0",
                     fontFamily: "'VT323', monospace",
-                    fontSize: "1.2em",
-                    boxShadow: "0 0 20px rgba(255, 107, 157, 0.5), inset 0 0 40px rgba(255, 107, 157, 0.05)"
+                    fontSize: "1.3em",
+                    boxShadow: "0 0 20px rgba(255,159,0,0.5), inset 0 0 20px rgba(255,159,0,0.1)"
                 },
                 aiMemory: {
-                    background: "rgba(255, 107, 157, 0.1)",
-                    borderLeft: "6px solid #ff6b9d",
+                    background: "rgba(255, 159, 0, 0.15)",
+                    borderLeft: "6px solid #ff9f00",
                     borderRadius: "0px",
                     padding: "12px",
-                    titleColor: "#ff6b9d",
-                    contentColor: "#b0ff57",
-                    keyColor: "#ff6b9d",
-                    valueColor: "#b0ff57"
+                    titleColor: "#ff9f00",
+                    contentColor: "#c0ff80",
+                    keyColor: "#ff9f00",
+                    valueColor: "#c0ff80"
                 },
                 choices: {
                     containerMargin: "20px 0 0 0",
                     btn: {
-                        background: "#1a0a3a",
-                        border: "3px solid #b0ff57",
-                        color: "#b0ff57",
+                        background: "#1a103a",
+                        border: "3px solid #c0ff80",
+                        color: "#c0ff80",
                         borderRadius: "0px",
                         padding: "12px 16px",
                         fontFamily: "'Press Start 2P', cursive",
-                        fontSize: "0.8em",
-                        hoverBg: "rgba(176, 255, 87, 0.2)",
-                        hoverBorder: "#b0ff57",
-                        selectedBg: "#b0ff57",
-                        selectedBorder: "#b0ff57",
-                        selectedColor: "#1a0a3a"
+                        fontSize: "0.9em",
+                        hoverBg: "rgba(192,255,128,0.2)",
+                        hoverBorder: "#c0ff80",
+                        selectedBg: "#c0ff80",
+                        selectedBorder: "#c0ff80",
+                        selectedColor: "#1a103a"
                     }
                 }
             },
             gameItems: {
-                personality: createGameItemConfig("#ff6b9d", "#2a0a1a", "#1a050d"),
-                typology: createGameItemConfig("#b0ff57", "#1a2a0a", "#0d1505"),
-                organization: createGameItemConfig("#00e5ff", "#0a1a2a", "#050d15"),
-                relations: createGameItemConfig("#ff80ff", "#2a0a2a", "#150515"),
-                skill: createGameItemConfig("#ffeb3b", "#2a2a0a", "#151505"),
-                stat_buffs: createGameItemConfig("#00e5ff", "#0a1a2a", "#050d15"),
-                bless: createGameItemConfig("#ffffff", "#2a2a2a", "#151515"),
-                curse: createGameItemConfig("#ff1744", "#2a0005", "#150002"),
-                buff_debuff: createGameItemConfig("#00e676", "#0a2a15", "#05150a"),
-                inventory: createGameItemConfig("#ff9100", "#2a1a00", "#150d00"),
-                details: createGameItemConfig("#00e5ff", "#0a1a2a", "#050d15")
+                personality: createGameItemConfig("#ff9f00", "#2a1a4a", "#1a103a"),
+                typology: createGameItemConfig("#c0ff80", "#1a3a1a", "#0f2a0f"),
+                organization: createGameItemConfig("#80ffff", "#103a3a", "#0a2a2a"),
+                relations: createGameItemConfig("#ff80ff", "#3a103a", "#2a0a2a"),
+                skill: createGameItemConfig("#ffff80", "#3a3a10", "#2a2a0a"),
+                stat_buffs: createGameItemConfig("#80c0ff", "#102a3a", "#0a1a2a"),
+                bless: createGameItemConfig("#ffffff", "#2a2a2a", "#1a1a1a"),
+                curse: createGameItemConfig("#ff4040", "#3a1010", "#2a0a0a"),
+                buff_debuff: createGameItemConfig("#80ffc0", "#103a2a", "#0a2a1a"),
+                inventory: createGameItemConfig("#ffb080", "#3a2a10", "#2a1a0a"),
+                details: createGameItemConfig("#80c0ff", "#102a3a", "#0a1a2a")
+            },
+            history: {
+                ...HISTORY_CONFIG,
+                container: { background: "#120a2a", padding: "0" },
+                header: {
+                    ...HISTORY_CONFIG.header,
+                    background: "#1a103a",
+                    borderBottom: "4px solid #ff9f00",
+                    color: "#ffffb0"
+                },
+                headerButtons: {
+                    ...HISTORY_CONFIG.headerButtons,
+                    background: "rgba(255,159,0,0.15)",
+                    border: "2px solid #ff9f00",
+                    color: "#ff9f00",
+                    hover: {
+                        background: "rgba(255,159,0,0.3)",
+                        borderColor: "#ff9f00",
+                        color: "#ffffff"
+                    }
+                },
+                turn: {
+                    ...HISTORY_CONFIG.turn,
+                    background: "#1a103a",
+                    border: "2px solid rgba(255,159,0,0.3)",
+                },
+                turnSummary: {
+                    ...HISTORY_CONFIG.turnSummary,
+                    background: "rgba(0,0,0,0.3)",
+                    color: "#ffffb0",
+                    summaryColor: "#e0e0a0",
+                    actionCountColor: "#c0c080",
+                    timestampColor: "#a0a060",
+                },
+                turnContent: {
+                    ...HISTORY_CONFIG.turnContent,
+                    background: "rgba(0,0,0,0.2)",
+                    color: "#f0f0c0",
+                },
+                accentColors: {
+                    success: "#c0ff80",
+                    failure: "#ff4040",
+                    mixed: "#ffff80",
+                    neutral: "#ff9f00"
+                }
             }
         }
     },
     
     ocean: {
         name: "Deep Ocean",
-        description: "Морская тема с голубыми и бирюзовыми тонами",
-        preview: "linear-gradient(135deg, #001f3f 0%, #003459 100%)",
+        description: "Глубоководная тема с бирюзовыми акцентами",
+        preview: "linear-gradient(135deg, #001a2a 0%, #002b3a 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
             name: "Deep Ocean",
@@ -892,9 +1064,9 @@ export const PRESET_THEMES = {
                 icons: { set: 'emoji', emojiFilter: 'hue-rotate(180deg) brightness(1.1)' },
                 layout: {
                     scrollbarColor: "#00b8d4",
-                    scrollbarBg: "#001f3f",
+                    scrollbarBg: "#001a2a",
                     selectionColor: "#00e5ff",
-                    selectionBg: "rgba(0, 229, 255, 0.2)"
+                    selectionBg: "rgba(0, 184, 212, 0.2)"
                 }
             },
             typography: {
@@ -908,7 +1080,8 @@ export const PRESET_THEMES = {
                     fontFamily: "'Inter', sans-serif",
                     fontWeight: "400",
                     fontSize: "16px",
-                    lineHeight: "1.6"
+                    lineHeight: "1.6",
+                    color: "#d0eef0"
                 },
                 ui: {
                     fontFamily: "'Montserrat', sans-serif",
@@ -924,36 +1097,36 @@ export const PRESET_THEMES = {
             scene: {
                 container: { padding: "0px", background: "transparent" },
                 textBlock: {
-                    background: "linear-gradient(135deg, rgba(0, 31, 63, 0.9) 0%, rgba(0, 52, 89, 0.9) 100%)",
+                    background: "linear-gradient(135deg, #001f2f 0%, #002b3f 100%)",
                     border: "2px solid #00b8d4",
                     borderRadius: "12px",
                     padding: "18px",
                     color: "#e0f7fa",
                     fontFamily: "'Inter', sans-serif",
                     fontSize: "1.05em",
-                    boxShadow: "0 4px 16px rgba(0, 184, 212, 0.3), inset 0 0 30px rgba(0, 184, 212, 0.05)"
+                    boxShadow: "0 4px 16px rgba(0, 184, 212, 0.3), inset 0 0 20px rgba(0,184,212,0.05)"
                 },
                 aiMemory: {
-                    background: "rgba(0, 184, 212, 0.08)",
+                    background: "rgba(0, 184, 212, 0.1)",
                     borderLeft: "4px solid #00b8d4",
                     borderRadius: "8px",
                     padding: "12px",
                     titleColor: "#00e5ff",
-                    contentColor: "#b0d8e0",
+                    contentColor: "#b0e0e0",
                     keyColor: "#00e5ff",
-                    valueColor: "#c0e8f0"
+                    valueColor: "#d0f0f0"
                 },
                 choices: {
                     containerMargin: "20px 0 0 0",
                     btn: {
-                        background: "linear-gradient(180deg, rgba(0, 52, 89, 0.8) 0%, rgba(0, 31, 63, 0.8) 100%)",
+                        background: "linear-gradient(180deg, #002b3f 0%, #001f2f 100%)",
                         border: "2px solid #00b8d4",
                         color: "#e0f7fa",
                         borderRadius: "10px",
                         padding: "14px 18px",
                         fontFamily: "'Montserrat', sans-serif",
                         fontSize: "1em",
-                        hoverBg: "linear-gradient(180deg, rgba(0, 72, 119, 0.9) 0%, rgba(0, 51, 89, 0.9) 100%)",
+                        hoverBg: "linear-gradient(180deg, #003f5f 0%, #002b3f 100%)",
                         hoverBorder: "#00d8ff",
                         selectedBg: "rgba(0, 184, 212, 0.3)",
                         selectedBorder: "#00e5ff",
@@ -973,6 +1146,51 @@ export const PRESET_THEMES = {
                 buff_debuff: createGameItemConfig("#00bcd4", "#001a2a", "#000d15"),
                 inventory: createGameItemConfig("#455a64", "#1a1a2a", "#0d0d15"),
                 details: createGameItemConfig("#00b8d4", "#001a2a", "#000d15")
+            },
+            history: {
+                ...HISTORY_CONFIG,
+                container: { background: "#00121f", padding: "0" },
+                header: {
+                    ...HISTORY_CONFIG.header,
+                    background: "#001f2f",
+                    borderBottom: "2px solid #00b8d4",
+                    color: "#e0f7fa"
+                },
+                headerButtons: {
+                    ...HISTORY_CONFIG.headerButtons,
+                    background: "rgba(0,184,212,0.15)",
+                    border: "1px solid #00b8d4",
+                    color: "#00b8d4",
+                    hover: {
+                        background: "rgba(0,184,212,0.3)",
+                        borderColor: "#00e5ff",
+                        color: "#ffffff"
+                    }
+                },
+                turn: {
+                    ...HISTORY_CONFIG.turn,
+                    background: "#001a2a",
+                    border: "0.5px solid rgba(0,184,212,0.2)",
+                },
+                turnSummary: {
+                    ...HISTORY_CONFIG.turnSummary,
+                    background: "rgba(0,0,0,0.2)",
+                    color: "#e0f7fa",
+                    summaryColor: "#b0e0e0",
+                    actionCountColor: "#90c0c0",
+                    timestampColor: "#70a0a0",
+                },
+                turnContent: {
+                    ...HISTORY_CONFIG.turnContent,
+                    background: "rgba(0,0,0,0.15)",
+                    color: "#d0f0f0",
+                },
+                accentColors: {
+                    success: "#00e676",
+                    failure: "#ff1744",
+                    mixed: "#ffea00",
+                    neutral: "#00b8d4"
+                }
             }
         }
     }
