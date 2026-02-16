@@ -26,7 +26,7 @@ class ThemeManagerPro {
         const savedTheme = this._loadTheme();
         this.currentTheme = savedTheme || this._deepClone(DEFAULT_THEME_CONFIG);
         
-        // 3. Гарантируем целостность структуры (на случай обновлений)
+        // 3. Гарантируем целостность структуры
         if (!this.currentTheme.icons) this.currentTheme.icons = ICON_MAPPINGS;
         
         // 4. Применяем тему
@@ -62,6 +62,12 @@ class ThemeManagerPro {
         this._generateAndApplyCSS(this.editingTheme);
     }
 
+    setEditingTheme(theme) {
+        if (!this.isEditing) return;
+        this.editingTheme = this._deepClone(theme);
+        this._generateAndApplyCSS(this.editingTheme);
+    }
+
     saveChanges() {
         if (!this.isEditing) return;
         this.currentTheme = this._deepClone(this.editingTheme);
@@ -72,7 +78,7 @@ class ThemeManagerPro {
     cancelChanges() {
         if (!this.isEditing) return;
         this.editingTheme = null;
-        this._generateAndApplyCSS(this.currentTheme); // Возвращаем старый CSS
+        this._generateAndApplyCSS(this.currentTheme);
         this.endEditing();
     }
 
@@ -109,7 +115,6 @@ class ThemeManagerPro {
     importTheme(json) {
         try {
             const theme = JSON.parse(json);
-            // Простейшая валидация
             if (!theme.global || !theme.scene) throw new Error("Invalid theme format");
             
             this.currentTheme = theme;
@@ -130,7 +135,7 @@ class ThemeManagerPro {
         this._saveTheme(theme);
     }
 
-    // --- ГЕНЕРАТОР CSS (CORE) ---
+    // --- ГЕНЕРАТОР CSS (ПОЛНАЯ ВЕРСИЯ) ---
 
     _generateAndApplyCSS(theme) {
         const css = this._generateCSS(theme);
@@ -138,15 +143,13 @@ class ThemeManagerPro {
     }
 
     _generateCSS(theme) {
-        let css = '/* --- THEME PRO GENERATED CSS --- */\n';
+        let css = '/* === THEME PRO GENERATED CSS === */\n\n';
         
         // 1. Импорт шрифтов
-        // Собираем все используемые шрифты из конфига и генерируем @import
         const usedFonts = new Set();
         const traverseForFonts = (obj) => {
             for (const key in obj) {
                 if (key === 'fontFamily' && typeof obj[key] === 'string') {
-                    // Извлекаем имя шрифта из строки типа "'Unbounded', sans-serif"
                     const match = obj[key].match(/['"]([^'"]+)['"]/);
                     if (match) usedFonts.add(match[1]);
                 } else if (typeof obj[key] === 'object' && obj[key] !== null) {
@@ -161,89 +164,125 @@ class ThemeManagerPro {
                 css += `@import url('${FONT_LIBRARY[fontName]}');\n`;
             }
         });
+        css += '\n';
 
         // 2. Глобальные настройки
         const g = theme.global;
+        css += `/* === GLOBAL === */\n`;
         css += `
-            ::selection { background: ${g.layout.selectionBg} !important; color: ${g.layout.selectionColor} !important; }
-            ::-webkit-scrollbar { width: 8px !important; height: 8px !important; }
-            ::-webkit-scrollbar-track { background: ${g.layout.scrollbarBg} !important; }
-            ::-webkit-scrollbar-thumb { background: ${g.layout.scrollbarColor} !important; border-radius: 4px !important; }
-            body { scrollbar-color: ${g.layout.scrollbarColor} ${g.layout.scrollbarBg} !important; }
-        `;
+::selection {
+    background: ${g.layout.selectionBg} !important;
+    color: ${g.layout.selectionColor} !important;
+}
 
-        // 3. Иконки (Logic Switch)
+::-webkit-scrollbar {
+    width: 8px !important;
+    height: 8px !important;
+}
+
+::-webkit-scrollbar-track {
+    background: ${g.layout.scrollbarBg} !important;
+}
+
+::-webkit-scrollbar-thumb {
+    background: ${g.layout.scrollbarColor} !important;
+    border-radius: 4px !important;
+}
+
+body {
+    scrollbar-color: ${g.layout.scrollbarColor} ${g.layout.scrollbarBg} !important;
+}
+\n`;
+
+        // 3. Иконки
+        css += `/* === ICONS === */\n`;
         if (g.icons.set === 'emoji') {
             const filter = g.icons.emojiFilter || 'none';
-            // Перекрываем FontAwesome
             css += `
-                .fas::before, .fa::before, .far::before {
-                    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
-                    font-weight: normal !important;
-                    font-style: normal !important;
-                    filter: ${filter} !important;
-                    display: inline-block !important;
-                    width: auto !important;
-                }
-            `;
-            // Генерируем content: "..." для каждой иконки
+.fas::before, .fa::before, .far::before {
+    font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    filter: ${filter} !important;
+    display: inline-block !important;
+    width: auto !important;
+}
+`;
             const mappings = theme.icons || ICON_MAPPINGS;
             Object.entries(mappings).forEach(([cls, emoji]) => {
                 css += `.${cls}::before { content: "${emoji}" !important; }\n`;
             });
         }
+        css += '\n';
 
-        // 4. Типографика
-        const t = theme.typography;
-        // Мы не меняем классы в UI, но мы можем таргетировать теги, если они есть, или специфичные классы
-        // В текущей реализации UI использует инлайн стили, поэтому мы таргетируем блоки через ID и классы компонентов
-        
-        // 5. Scene Area
+        // 4. Сцена - ПОЛНОСТЬЮ
         const s = theme.scene;
+        css += `/* === SCENE === */\n`;
         css += `
-            #sceneArea { padding: ${s.container.padding} !important; background: ${s.container.background} !important; }
-            
-            #sceneText, .scene-text-block {
-                background: ${s.textBlock.background} !important;
-                border: ${s.textBlock.border} !important;
-                border-radius: ${s.textBlock.borderRadius} !important;
-                padding: ${s.textBlock.padding} !important;
-                color: ${s.textBlock.color} !important;
-                font-family: ${s.textBlock.fontFamily} !important;
-                font-size: ${s.textBlock.fontSize} !important;
-                box-shadow: ${s.textBlock.boxShadow} !important;
-            }
-            
-            .ai-memory-block {
-                background: ${s.aiMemory.background} !important;
-                border-left: ${s.aiMemory.borderLeft} !important;
-                border-radius: ${s.aiMemory.borderRadius} !important;
-                padding: ${s.aiMemory.padding} !important;
-            }
-            .ai-memory-block div:first-child { color: ${s.aiMemory.titleColor} !important; }
-            
-            .choice-btn {
-                background: ${s.choices.btn.background} !important;
-                border: ${s.choices.btn.border} !important;
-                border-radius: ${s.choices.btn.borderRadius} !important;
-                color: ${s.choices.btn.color} !important;
-                padding: ${s.choices.btn.padding} !important;
-                font-family: ${s.choices.btn.fontFamily} !important;
-                font-size: ${s.choices.btn.fontSize} !important;
-            }
-            .choice-btn:hover {
-                background: ${s.choices.btn.hoverBg} !important;
-                border-color: ${s.choices.btn.hoverBorder} !important;
-            }
-            .choice-btn.selected {
-                background: ${s.choices.btn.selectedBg} !important;
-                border-color: ${s.choices.btn.selectedBorder} !important;
-                color: ${s.choices.btn.selectedColor} !important;
-            }
-        `;
+#sceneArea {
+    padding: ${s.container.padding} !important;
+    background: ${s.container.background} !important;
+}
 
-        // 6. Game Items (Iterate dynamic config)
-        // Маппинг ID контейнеров из gameitem-ui.js
+#sceneText,
+.scene-text-block {
+    background: ${s.textBlock.background} !important;
+    border: ${s.textBlock.border} !important;
+    border-radius: ${s.textBlock.borderRadius} !important;
+    padding: ${s.textBlock.padding} !important;
+    color: ${s.textBlock.color} !important;
+    font-family: ${s.textBlock.fontFamily} !important;
+    font-size: ${s.textBlock.fontSize} !important;
+    box-shadow: ${s.textBlock.boxShadow} !important;
+}
+
+.ai-memory-block {
+    background: ${s.aiMemory.background} !important;
+    border-left: ${s.aiMemory.borderLeft} !important;
+    border-radius: ${s.aiMemory.borderRadius} !important;
+    padding: ${s.aiMemory.padding} !important;
+}
+
+.ai-memory-block div:first-child {
+    color: ${s.aiMemory.titleColor} !important;
+}
+
+.ai-memory-block .memory-item {
+    color: ${s.aiMemory.contentColor} !important;
+}
+
+.ai-memory-block .memory-key {
+    color: ${s.aiMemory.keyColor} !important;
+}
+
+.ai-memory-block .memory-value {
+    color: ${s.aiMemory.valueColor} !important;
+}
+
+.choice-btn {
+    background: ${s.choices.btn.background} !important;
+    border: ${s.choices.btn.border} !important;
+    border-radius: ${s.choices.btn.borderRadius} !important;
+    color: ${s.choices.btn.color} !important;
+    padding: ${s.choices.btn.padding} !important;
+    font-family: ${s.choices.btn.fontFamily} !important;
+    font-size: ${s.choices.btn.fontSize} !important;
+}
+
+.choice-btn:hover {
+    background: ${s.choices.btn.hoverBg} !important;
+    border-color: ${s.choices.btn.hoverBorder} !important;
+}
+
+.choice-btn.selected {
+    background: ${s.choices.btn.selectedBg} !important;
+    border-color: ${s.choices.btn.selectedBorder} !important;
+    color: ${s.choices.btn.selectedColor} !important;
+}
+\n`;
+
+        // 5. Game Items - ПОЛНОСТЬЮ ДЛЯ КАЖДОГО ТИПА
+        css += `/* === GAME ITEMS === */\n`;
         const containerMap = {
             personality: 'personalityBlockContainer',
             typology: 'typologyContainer',
@@ -262,98 +301,109 @@ class ThemeManagerPro {
             const id = containerMap[type];
             if (id) {
                 css += `
-                    #${id} {
-                        background: ${config.container.background} !important;
-                        border: ${config.container.border} !important;
-                        border-radius: ${config.container.borderRadius} !important;
-                        padding: ${config.container.padding} !important;
-                        margin-bottom: ${config.container.marginBottom} !important;
-                    }
-                    #${id} .section-header {
-                        color: ${config.header.color} !important;
-                        border-bottom: ${config.header.borderBottom} !important;
-                        font-family: ${config.header.fontFamily} !important;
-                        font-size: ${config.header.fontSize} !important;
-                        padding: ${config.header.padding} !important;
-                    }
-                    #${id} .game-item-badge {
-                        background: ${config.badge.background} !important;
-                        border: ${config.badge.border} !important;
-                        border-left: ${config.badge.borderLeft} !important;
-                        border-radius: ${config.badge.borderRadius} !important;
-                        color: ${config.badge.color} !important;
-                        padding: ${config.badge.padding} !important;
-                        font-family: ${config.badge.fontFamily} !important;
-                        font-size: ${config.badge.fontSize} !important;
-                    }
-                    #${id} .game-item-badge:hover {
-                        transform: ${config.badge.hoverTransform} !important;
-                        box-shadow: ${config.badge.hoverShadow} !important;
-                    }
-                `;
+/* ${type.toUpperCase()} */
+#${id} {
+    background: ${config.container.background} !important;
+    border: ${config.container.border} !important;
+    border-radius: ${config.container.borderRadius} !important;
+    padding: ${config.container.padding} !important;
+    margin-bottom: ${config.container.marginBottom} !important;
+}
+
+#${id} .section-header {
+    color: ${config.header.color} !important;
+    border-bottom: ${config.header.borderBottom} !important;
+    font-family: ${config.header.fontFamily} !important;
+    font-size: ${config.header.fontSize} !important;
+    padding: ${config.header.padding} !important;
+}
+
+#${id} .game-item-badge {
+    background: ${config.badge.background} !important;
+    border: ${config.badge.border} !important;
+    border-left: ${config.badge.borderLeft} !important;
+    border-radius: ${config.badge.borderRadius} !important;
+    color: ${config.badge.color} !important;
+    padding: ${config.badge.padding} !important;
+    font-family: ${config.badge.fontFamily} !important;
+    font-size: ${config.badge.fontSize} !important;
+}
+
+#${id} .game-item-badge:hover {
+    transform: ${config.badge.hoverTransform} !important;
+    box-shadow: ${config.badge.hoverShadow} !important;
+}
+`;
             }
         });
 
-        // 7. Turn Updates
+        // 6. Turn Updates - ПОЛНОСТЬЮ
         const tu = theme.turnUpdates;
+        css += `\n/* === TURN UPDATES === */\n`;
         css += `
-            #turnUpdatesContainer > div, .turn-updates-container {
-                background: ${tu.container.background} !important;
-                border: ${tu.container.border} !important;
-                border-radius: ${tu.container.borderRadius} !important;
-                padding: ${tu.container.padding} !important;
-                margin-bottom: ${tu.container.marginBottom} !important;
-            }
-            /* Header внутри turn updates - обычно это первый div */
-            #turnUpdatesContainer > div > div:first-child {
-                color: ${tu.header.color} !important;
-                border-bottom: ${tu.header.borderBottom} !important;
-                font-family: ${tu.header.fontFamily} !important;
-                font-size: ${tu.header.fontSize} !important;
-                text-transform: ${tu.header.textTransform} !important;
-            }
-            #turnUpdatesContainer > div > div:last-child {
-                color: ${tu.content.color} !important;
-                font-size: ${tu.content.fontSize} !important;
-                font-family: ${tu.content.fontFamily} !important;
-            }
-        `;
+#turnUpdatesContainer > div,
+.turn-updates-container {
+    background: ${tu.container.background} !important;
+    border: ${tu.container.border} !important;
+    border-radius: ${tu.container.borderRadius} !important;
+    padding: ${tu.container.padding} !important;
+    margin-bottom: ${tu.container.marginBottom} !important;
+}
 
-        // 8. History
+#turnUpdatesContainer > div > div:first-child {
+    color: ${tu.header.color} !important;
+    border-bottom: ${tu.header.borderBottom} !important;
+    font-family: ${tu.header.fontFamily} !important;
+    font-size: ${tu.header.fontSize} !important;
+    text-transform: ${tu.header.textTransform} !important;
+}
+
+#turnUpdatesContainer > div > div:last-child {
+    color: ${tu.content.color} !important;
+    font-size: ${tu.content.fontSize} !important;
+    font-family: ${tu.content.fontFamily} !important;
+}
+\n`;
+
+        // 7. History - ПОЛНОСТЬЮ
         const h = theme.history;
+        css += `/* === HISTORY === */\n`;
         css += `
-            #history { background: ${h.container.background} !important; padding: ${h.container.padding} !important; }
-            
-            #history > div:first-child {
-                background: ${h.header.background} !important;
-                border-bottom: ${h.header.borderBottom} !important;
-                color: ${h.header.color} !important;
-                font-family: ${h.header.fontFamily} !important;
-                font-size: ${h.header.fontSize} !important;
-            }
-            
-            .history-turn {
-                background: ${h.turn.background} !important;
-                border: ${h.turn.border} !important;
-                border-left: ${h.turn.borderLeft} !important;
-                border-radius: ${h.turn.borderRadius} !important;
-                margin-bottom: ${h.turn.marginBottom} !important;
-            }
-            
-            .history-turn summary {
-                background: ${h.turnSummary.background} !important;
-                color: ${h.turnSummary.color} !important;
-                font-family: ${h.turnSummary.fontFamily} !important;
-                font-size: ${h.turnSummary.fontSize} !important;
-            }
-            
-            .history-turn > div {
-                background: ${h.turnContent.background} !important;
-                color: ${h.turnContent.color} !important;
-                font-size: ${h.turnContent.fontSize} !important;
-                font-family: ${h.turnContent.fontFamily} !important;
-            }
-        `;
+#history {
+    background: ${h.container.background} !important;
+    padding: ${h.container.padding} !important;
+}
+
+#history > div:first-child {
+    background: ${h.header.background} !important;
+    border-bottom: ${h.header.borderBottom} !important;
+    color: ${h.header.color} !important;
+    font-family: ${h.header.fontFamily} !important;
+    font-size: ${h.header.fontSize} !important;
+}
+
+.history-turn {
+    background: ${h.turn.background} !important;
+    border: ${h.turn.border} !important;
+    border-left: ${h.turn.borderLeft} !important;
+    border-radius: ${h.turn.borderRadius} !important;
+    margin-bottom: ${h.turn.marginBottom} !important;
+}
+
+.history-turn summary {
+    background: ${h.turnSummary.background} !important;
+    color: ${h.turnSummary.color} !important;
+    font-family: ${h.turnSummary.fontFamily} !important;
+    font-size: ${h.turnSummary.fontSize} !important;
+}
+
+.history-turn > div {
+    background: ${h.turnContent.background} !important;
+    color: ${h.turnContent.color} !important;
+    font-size: ${h.turnContent.fontSize} !important;
+    font-family: ${h.turnContent.fontFamily} !important;
+}
+\n`;
 
         return css;
     }

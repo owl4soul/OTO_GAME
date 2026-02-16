@@ -260,7 +260,7 @@ class HistoryUI {
             );
         }
         
-        // 5. РЕФЛЕКСИЯ <-- ВОССТАНОВЛЕНА
+        // 5. РЕФЛЕКСИЯ
         if (entry.reflection && entry.reflection.trim() !== '') {
             contentHTML += this.createBlock(
                 'Рефлексия',
@@ -271,7 +271,7 @@ class HistoryUI {
             );
         }
         
-        // 6. ЛИЧНОСТЬ <-- ВОССТАНОВЛЕНА
+        // 6. ЛИЧНОСТЬ
         if (entry.personality && entry.personality.trim() !== '') {
             contentHTML += this.createBlock(
                 'Личность',
@@ -281,7 +281,7 @@ class HistoryUI {
             );
         }
         
-        // 7. ТИПОЛОГИЯ <-- ВОССТАНОВЛЕНА
+        // 7. ТИПОЛОГИЯ
         if (entry.typology && entry.typology.trim() !== '') {
             contentHTML += this.createBlock(
                 'Типология',
