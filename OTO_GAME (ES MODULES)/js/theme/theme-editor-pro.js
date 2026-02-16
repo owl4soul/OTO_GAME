@@ -1,4 +1,4 @@
-// js/theme-editor-pro.js
+// js/theme/theme-editor-pro.js
 'use strict';
 
 import { themeManagerPro } from './theme-pro.js';

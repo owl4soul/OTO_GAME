@@ -7,7 +7,7 @@
  * Полная конфигурация с расширенным набором шрифтов, пресетов и настроек
  */
 
-import { HISTORY_VISUAL_CONFIG } from './history-config.js';
+import { HISTORY_VISUAL_CONFIG } from '../history-config.js';
 
 // 1. РАСШИРЕННАЯ БИБЛИОТЕКА ШРИФТОВ (Google Fonts)
 export const FONT_LIBRARY = {

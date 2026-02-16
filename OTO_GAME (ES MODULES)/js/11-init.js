@@ -16,8 +16,8 @@ import { StatsUI } from './stats-ui.js';
 import { TurnUpdatesUI } from './turn-updates-ui.js';
 import { HistoryUI } from './history-ui.js';
 // import { theme } from './theme.js';
-import { themeEditorPro } from './theme-editor-pro.js';
-import { themeManagerPro } from './theme-pro.js';
+import { themeEditorPro } from './theme/theme-editor-pro.js';
+import { themeManagerPro } from './theme/theme-pro.js';
 
 const dom = DOM.getDOM();
 
