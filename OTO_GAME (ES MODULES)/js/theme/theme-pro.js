@@ -23,11 +23,16 @@ class ThemeManagerPro {
         
         // 2. Загружаем тему или берем дефолтную
         const savedTheme = this._loadTheme();
-        this.currentTheme = savedTheme || this._deepClone(DEFAULT_THEME_CONFIG);
+        if (savedTheme) {
+            this.currentTheme = savedTheme;
+            // Дополняем недостающими корневыми и вложенными ключами из DEFAULT
+            this._mergeMissingKeys(this.currentTheme, DEFAULT_THEME_CONFIG);
+        } else {
+            this.currentTheme = this._deepClone(DEFAULT_THEME_CONFIG);
+        }
         
-        // 3. Гарантируем целостность структуры
+        // 3. Гарантируем целостность структуры (на всякий случай, хотя мерж уже должен был добавить)
         if (!this.currentTheme.icons) this.currentTheme.icons = ICON_MAPPINGS;
-        // Если в загруженной теме нет раздела history, добавляем из DEFAULT
         if (!this.currentTheme.history) {
             this.currentTheme.history = this._deepClone(DEFAULT_THEME_CONFIG.history);
         }
@@ -96,6 +101,8 @@ class ThemeManagerPro {
     loadPreset(key) {
         if (PRESET_THEMES[key]) {
             this.currentTheme = this._deepClone(PRESET_THEMES[key].config);
+            // Дополняем недостающими ключами (на случай, если пресет устарел)
+            this._mergeMissingKeys(this.currentTheme, DEFAULT_THEME_CONFIG);
             if (!this.currentTheme.icons) this.currentTheme.icons = ICON_MAPPINGS;
             if (!this.currentTheme.history) {
                 this.currentTheme.history = this._deepClone(DEFAULT_THEME_CONFIG.history);
@@ -124,10 +131,12 @@ class ThemeManagerPro {
             if (!theme.global || !theme.scene) throw new Error("Invalid theme format");
             
             this.currentTheme = theme;
+            // Дополняем недостающими ключами из дефолтной темы
+            this._mergeMissingKeys(this.currentTheme, DEFAULT_THEME_CONFIG);
             if (!this.currentTheme.history) {
                 this.currentTheme.history = this._deepClone(DEFAULT_THEME_CONFIG.history);
             }
-            this.applyTheme(theme);
+            this.applyTheme(this.currentTheme);
             return true;
         } catch (e) {
             console.error('Import failed:', e);
@@ -867,6 +876,28 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
 `;
 
         return css;
+    }
+
+    // --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ---
+
+    /**
+     * Рекурсивно добавляет в target отсутствующие ключи из source (не перезаписывает существующие)
+     * @param {Object} target - целевой объект (будет изменён)
+     * @param {Object} source - объект-источник
+     * @returns {Object} изменённый target
+     */
+    _mergeMissingKeys(target, source) {
+        if (!target || !source) return target;
+        Object.keys(source).forEach(key => {
+            if (!(key in target)) {
+                target[key] = this._deepClone(source[key]);
+            } else if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
+                if (typeof target[key] === 'object' && target[key] !== null && !Array.isArray(target[key])) {
+                    this._mergeMissingKeys(target[key], source[key]);
+                }
+            }
+        });
+        return target;
     }
 
     _saveTheme(theme) {

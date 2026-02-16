@@ -61,7 +61,7 @@ export const GAME_ITEM_UI_CONFIG = {
         BADGE_PADDING: "2px 2px"
     },
 
-    // ОФОРМЛЕНИЕ ТЕКСТОВЫХ БЛОКОВ (ЛИЧНОСТЬ, ТИПОЛОГИЯ)
+    // ОФОРМЛЕНИЕ ТЕКСТОВЫХ БЛОКОВ
     CONTENT: {
         PADDING: "2px",
         PADDING_LEFT: "2px",
