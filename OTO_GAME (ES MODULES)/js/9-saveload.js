@@ -345,7 +345,7 @@ async function downloadAuditLogToFile() {
     try {
         const state = State.getState();
         if (state.auditLog.length === 0) {
-            console.warn('⚠️ Аудит-лог пуст');
+            Utils.showToast('Аудит-лог пуст', 'warning', 3000);
             return {
                 success: false,
                 error: 'Аудит-лог пуст'
@@ -354,7 +354,6 @@ async function downloadAuditLogToFile() {
         
         console.log(`📊 Записей в аудит-логе: ${state.auditLog.length}`);
         
-        // Формируем данные для экспорта
         const auditData = {
             version: '4.1.0',
             gameId: state.gameId,
@@ -371,11 +370,9 @@ async function downloadAuditLogToFile() {
         const fileName = `oto-audit-log-${state.gameId}-${Date.now()}.json`;
         const dataStr = JSON.stringify(auditData, null, 2);
         
-        // Используем функцию с выбором папки
         const result = await Utils.saveFileWithFolderPicker(dataStr, fileName);
         
         if (result.success) {
-            // Добавляем запись в аудит-лог
             const auditEntry = {
                 id: Date.now(),
                 request: 'Скачивание аудит-лога',
@@ -383,9 +380,9 @@ async function downloadAuditLogToFile() {
                 status: 'success',
                 fullResponse: `Аудит-лог скачан в файл: ${result.fileName}\nЗаписей: ${state.auditLog.length}`
             };
-            
             State.addAuditLogEntry(auditEntry);
             
+            Utils.showToast(`Аудит-лог сохранён в файл: ${result.fileName}`, 'success', 3000);
             console.log(`✅ Аудит-лог скачан в файл: ${result.fileName}`);
             return {
                 success: true,
@@ -394,13 +391,14 @@ async function downloadAuditLogToFile() {
             };
         }
         
-        console.error('❌ Не удалось скачать аудит-лог');
+        Utils.showToast('Не удалось сохранить файл', 'error', 3000);
         return {
             success: false,
             error: 'Не удалось скачать аудит-лог'
         };
     } catch (error) {
         console.error('❌ Ошибка при скачивании аудит-лога:', error);
+        Utils.showToast('Ошибка при сохранении файла', 'error', 3000);
         return {
             success: false,
             error: error.message

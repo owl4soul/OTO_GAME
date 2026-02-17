@@ -556,7 +556,7 @@ function updateUIAfterTest(state) {
         Render.updateModelStats();
         Render.renderModelSelectorByProvider();
         Render.updateModelDetails();
-        Render.renderAuditList();
+        Audit.renderAuditList();
     }
 }
 

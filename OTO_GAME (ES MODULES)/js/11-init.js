@@ -606,7 +606,7 @@ function setupSaveLoadEvents() {
                 Render.updateApiKeyFields();
                 Render.renderModelSelectorByProvider();
                 Render.updateModelDetails();
-                Render.renderAuditList();
+                Audit.renderAuditList();
                 UI.init();
                 
                 // ✅ Принудительно устанавливаем текст в поле свободного ввода
@@ -678,26 +678,22 @@ function setupSaveLoadEvents() {
 }
 
 /**
- * Настройка обработчиков для аудит-лога
+ * Настройка обработчиков кнопок для аудит-лога
  */
 function setupAuditEvents() {
-    const clearAuditBtn = document.getElementById('clearAuditBtn');
+    const clearAuditBtn = document.getElementById('clearAuditBtn'); // Кнопка "Очистить"
     if (clearAuditBtn) {
         clearAuditBtn.onclick = () => Audit.clearAudit();
     }
     
-    const exportAuditBtn = document.getElementById('exportAuditBtn');
+    const exportAuditBtn = document.getElementById('exportAuditBtn'); // Кнопка "Копировать"
     if (exportAuditBtn) {
-        exportAuditBtn.onclick = () => Audit.exportAuditLog();
+        exportAuditBtn.onclick = () => Audit.copyFullAuditLog();
     }
     
-    const downloadAuditBtn = document.getElementById('downloadAuditBtn');
+    const downloadAuditBtn = document.getElementById('downloadAuditBtn'); // Кнопка "Скачать"
     if (downloadAuditBtn) {
-        downloadAuditBtn.onclick = async () => {
-            const result = await Saveload.downloadAuditLogToFile();
-            if (result.success) Render.showSuccessAlert("Лог скачан", result.fileName);
-            else Render.showErrorAlert("Ошибка скачивания", result.error);
-        };
+        downloadAuditBtn.onclick = () => Audit.exportFullAuditLog();
     }
 }
 
@@ -737,7 +733,7 @@ function openSettingsModal() {
         Render.updateApiKeyFields();
         Render.renderModelSelectorByProvider();
         Render.updateModelDetails();
-        Render.renderAuditList(); // полный рендер при открытии
+        Audit.renderAuditList(); // полный рендер при открытии
     }
 }
 

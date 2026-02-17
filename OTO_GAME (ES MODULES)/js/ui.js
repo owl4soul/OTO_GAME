@@ -6,6 +6,7 @@ import { DOM } from './4-dom.js';
 import { Render } from './5-render.js';
 import { CONFIG } from './1-config.js';
 import { Utils } from './2-utils.js';
+import { Audit } from './8-audit.js';
 
 // === КОНСТАНТЫ И НАСТРОЙКИ ===
 const MIN_PCT = 10.0;
@@ -588,7 +589,7 @@ function openSettingsModal() {
         if (Render.updateApiKeyFields) Render.updateApiKeyFields();
         if (Render.renderModelSelectorByProvider) Render.renderModelSelectorByProvider();
         if (Render.updateModelDetails) Render.updateModelDetails();
-        if (Render.renderAuditList) Render.renderAuditList();
+        if (Audit.renderAuditList) Audit.renderAuditList();
     }
 }
 
