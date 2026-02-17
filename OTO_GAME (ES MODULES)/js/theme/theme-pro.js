@@ -49,7 +49,13 @@ class ThemeManagerPro {
         console.log('💾 Редактирование завершено');
     }
 
-    updateSetting(path, value) {
+    /**
+     * Обновляет конкретную настройку в редактируемой теме.
+     * @param {Array} path - Путь к свойству в объекте темы.
+     * @param {any} value - Новое значение.
+     * @param {boolean} shouldLog - Нужно ли выводить в консоль (для "живого" превью).
+     */
+    updateSetting(path, value, shouldLog = true) {
         if (!this.isEditing) return;
         
         let current = this.editingTheme;
@@ -60,6 +66,7 @@ class ThemeManagerPro {
         current[path[path.length - 1]] = value;
         
         this._generateAndApplyCSS(this.editingTheme);
+        if (shouldLog) console.log(`🎨 Обновлено: ${path.join('.')} -> ${value}`);
     }
 
     setEditingTheme(theme) {
@@ -144,6 +151,30 @@ class ThemeManagerPro {
     _generateAndApplyCSS(theme) {
         const css = this._generateCSS(theme);
         this.styleElement.textContent = css;
+        
+        // Расширенные правила для песочницы превью
+        const previewCss = css
+            .replaceAll('#sceneArea', '#te-preview-container #sceneArea')
+            .replaceAll('#personalityBlockContainer', '#te-preview-container #personalityBlockContainer')
+            .replaceAll('#inventoryContainer', '#te-preview-container #inventoryContainer')
+            .replaceAll('#turnUpdatesContainer', '#te-preview-container #turnUpdatesContainer')
+            .replaceAll('#history', '#te-preview-container #history');
+            
+        this.styleElement.textContent += '\n\n/* === PREVIEW SANDBOX OVERRIDES === */\n' + previewCss;
+        
+        // Глобальные исправления для редактора, чтобы он сам не ломался от своих настроек
+        this.styleElement.textContent += `
+            #te-overlay, #te-overlay * { 
+                box-sizing: border-box !important; 
+            }
+            #te-overlay button {
+                text-transform: none !important;
+                letter-spacing: normal !important;
+            }
+            #te-sidebar span {
+                font-family: 'Exo 2', sans-serif !important;
+            }
+        `;
     }
 
     _generateCSS(theme) {
