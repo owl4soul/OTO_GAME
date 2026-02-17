@@ -16,33 +16,26 @@ class ThemeManagerPro {
     initialize() {
         console.log('🎨 Инициализация Theme Manager Pro...');
         
-        // 1. Создаем стиль для темы
         this.styleElement = document.createElement('style');
         this.styleElement.id = 'theme-pro-dynamic-styles';
         document.head.appendChild(this.styleElement);
         
-        // 2. Загружаем тему или берем дефолтную
         const savedTheme = this._loadTheme();
         if (savedTheme) {
             this.currentTheme = savedTheme;
-            // Дополняем недостающими корневыми и вложенными ключами из DEFAULT
             this._mergeMissingKeys(this.currentTheme, DEFAULT_THEME_CONFIG);
         } else {
             this.currentTheme = this._deepClone(DEFAULT_THEME_CONFIG);
         }
         
-        // 3. Гарантируем целостность структуры (на всякий случай, хотя мерж уже должен был добавить)
         if (!this.currentTheme.icons) this.currentTheme.icons = ICON_MAPPINGS;
         if (!this.currentTheme.history) {
             this.currentTheme.history = this._deepClone(DEFAULT_THEME_CONFIG.history);
         }
         
-        // 4. Применяем тему
         this.applyTheme(this.currentTheme);
         console.log('✅ Theme Manager Pro готов');
     }
-
-    // --- УПРАВЛЕНИЕ СОСТОЯНИЕМ ---
 
     startEditing() {
         this.isEditing = true;
@@ -66,7 +59,6 @@ class ThemeManagerPro {
         }
         current[path[path.length - 1]] = value;
         
-        // Перерисовываем CSS на лету
         this._generateAndApplyCSS(this.editingTheme);
     }
 
@@ -96,12 +88,9 @@ class ThemeManagerPro {
         console.log('🔄 Сброс к Default Pro');
     }
 
-    // --- ИМПОРТ / ЭКСПОРТ / ПРЕСЕТЫ ---
-
     loadPreset(key) {
         if (PRESET_THEMES[key]) {
             this.currentTheme = this._deepClone(PRESET_THEMES[key].config);
-            // Дополняем недостающими ключами (на случай, если пресет устарел)
             this._mergeMissingKeys(this.currentTheme, DEFAULT_THEME_CONFIG);
             if (!this.currentTheme.icons) this.currentTheme.icons = ICON_MAPPINGS;
             if (!this.currentTheme.history) {
@@ -131,7 +120,6 @@ class ThemeManagerPro {
             if (!theme.global || !theme.scene) throw new Error("Invalid theme format");
             
             this.currentTheme = theme;
-            // Дополняем недостающими ключами из дефолтной темы
             this._mergeMissingKeys(this.currentTheme, DEFAULT_THEME_CONFIG);
             if (!this.currentTheme.history) {
                 this.currentTheme.history = this._deepClone(DEFAULT_THEME_CONFIG.history);
@@ -152,8 +140,6 @@ class ThemeManagerPro {
         this._generateAndApplyCSS(theme);
         this._saveTheme(theme);
     }
-
-    // --- ГЕНЕРАТОР CSS (ПОЛНАЯ ВЕРСИЯ) ---
 
     _generateAndApplyCSS(theme) {
         const css = this._generateCSS(theme);
@@ -191,7 +177,8 @@ class ThemeManagerPro {
                 scrollbarColor: "#d4af37",
                 scrollbarBg: "#1a1a1a",
                 selectionColor: "#d4af37",
-                selectionBg: "rgba(212, 175, 55, 0.2)"
+                selectionBg: "rgba(212, 175, 55, 0.2)",
+                blockMargin: "15px"
             }
         };
         css += `/* === GLOBAL === */\n`;
@@ -242,12 +229,21 @@ body {
         css += '\n';
 
         // 4. Сцена
-        const s = theme.scene || DEFAULT_THEME_CONFIG.scene;
         css += `/* === SCENE === */\n`;
+        const s = theme.scene || DEFAULT_THEME_CONFIG.scene;
+        
         css += `
 #sceneArea {
     padding: ${s.container.padding} !important;
     background: ${s.container.background} !important;
+}
+
+/* Единые отступы между блоками сцены */
+#sceneArea > * {
+    margin-bottom: ${g.layout.blockMargin} !important;
+}
+#sceneArea > *:last-child {
+    margin-bottom: 0 !important;
 }
 
 #sceneText,
@@ -269,19 +265,43 @@ body {
     padding: ${s.aiMemory.padding} !important;
 }
 
-.ai-memory-block div:first-child {
+.ai-memory-header {
     color: ${s.aiMemory.titleColor} !important;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 0.9em;
+    font-weight: bold;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.ai-memory-block .memory-item {
+.ai-memory-stats {
+    font-size: 0.8em;
+    color: #aaa;
+    font-weight: normal;
+    background: rgba(0,0,0,0.2);
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: auto;
+}
+
+.ai-memory-content {
     color: ${s.aiMemory.contentColor} !important;
+    font-size: 0.85em;
+    font-family: 'Courier New', monospace;
+    line-height: 1.4;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 5px;
+    border-radius: 3px;
+    background: rgba(0,0,0,0.1);
 }
 
-.ai-memory-block .memory-key {
+.memory-item .memory-key {
     color: ${s.aiMemory.keyColor} !important;
 }
-
-.ai-memory-block .memory-value {
+.memory-item .memory-value {
     color: ${s.aiMemory.valueColor} !important;
 }
 
@@ -293,6 +313,7 @@ body {
     padding: ${s.choices.btn.padding} !important;
     font-family: ${s.choices.btn.fontFamily} !important;
     font-size: ${s.choices.btn.fontSize} !important;
+    margin-bottom: ${s.choices.btn.marginBottom} !important;
 }
 
 .choice-btn:hover {
@@ -305,7 +326,165 @@ body {
     border-color: ${s.choices.btn.selectedBorder} !important;
     color: ${s.choices.btn.selectedColor} !important;
 }
-\n`;
+`;
+
+        // === НОВЫЕ СЕКЦИИ МЕТА-БЛОКОВ ===
+        if (s.designNotes) {
+            css += `
+.design-notes-block {
+    background: ${s.designNotes.background} !important;
+    border-left: ${s.designNotes.borderLeft} !important;
+    border-radius: ${s.designNotes.borderRadius} !important;
+    padding: ${s.designNotes.padding || '12px'} !important;
+}
+.design-notes-title {
+    color: ${s.designNotes.titleColor} !important;
+    font-size: ${s.designNotes.titleFontSize || '0.85em'} !important;
+    font-family: ${s.designNotes.titleFontFamily || "'Exo 2', sans-serif"} !important;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.design-notes-content {
+    color: ${s.designNotes.contentColor} !important;
+    font-size: ${s.designNotes.fontSize || '0.9em'} !important;
+    font-family: ${s.designNotes.contentFontFamily || "'Nunito Sans', sans-serif"} !important;
+    line-height: 1.5;
+}
+`;
+        }
+
+        if (s.summary) {
+            css += `
+.summary-block {
+    background: ${s.summary.background} !important;
+    border-left: ${s.summary.borderLeft} !important;
+    border-radius: ${s.summary.borderRadius} !important;
+    padding: ${s.summary.padding || '12px'} !important;
+}
+.summary-title {
+    color: ${s.summary.titleColor} !important;
+    font-size: ${s.summary.titleFontSize || '0.9em'} !important;
+    font-family: ${s.summary.titleFontFamily || "'Exo 2', sans-serif"} !important;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.summary-content {
+    color: ${s.summary.contentColor} !important;
+    font-size: ${s.summary.fontSize || '0.9em'} !important;
+    font-family: ${s.summary.contentFontFamily || "'Nunito Sans', sans-serif"} !important;
+    line-height: 1.5;
+}
+`;
+        }
+
+        if (s.reflection) {
+            css += `
+.reflection-block {
+    background: ${s.reflection.background} !important;
+    border-left: ${s.reflection.borderLeft} !important;
+    border-radius: ${s.reflection.borderRadius} !important;
+    padding: ${s.reflection.padding || '14px'} !important;
+}
+.reflection-title {
+    color: ${s.reflection.titleColor} !important;
+    font-size: ${s.reflection.titleFontSize || '0.95em'} !important;
+    font-family: ${s.reflection.titleFontFamily || "'Exo 2', sans-serif"} !important;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.reflection-content {
+    color: ${s.reflection.contentColor} !important;
+    font-size: ${s.reflection.fontSize || '0.9em'} !important;
+    font-family: ${s.reflection.contentFontFamily || "'Nunito Sans', sans-serif"} !important;
+    line-height: 1.5;
+    font-style: ${s.reflection.italic ? 'italic' : 'normal'};
+}
+`;
+        }
+
+        if (s.personality) {
+            css += `
+.personality-block {
+    background: ${s.personality.background} !important;
+    border-left: ${s.personality.borderLeft} !important;
+    border-radius: ${s.personality.borderRadius} !important;
+    padding: ${s.personality.padding || '14px'} !important;
+}
+.personality-title {
+    color: ${s.personality.titleColor} !important;
+    font-size: ${s.personality.titleFontSize || '0.95em'} !important;
+    font-family: ${s.personality.titleFontFamily || "'Exo 2', sans-serif"} !important;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.personality-content {
+    color: ${s.personality.contentColor} !important;
+    font-size: ${s.personality.fontSize || '0.9em'} !important;
+    font-family: ${s.personality.contentFontFamily || "'Nunito Sans', sans-serif"} !important;
+    line-height: 1.5;
+}
+`;
+        }
+
+        if (s.typology) {
+            css += `
+.typology-block {
+    background: ${s.typology.background} !important;
+    border-left: ${s.typology.borderLeft} !important;
+    border-radius: ${s.typology.borderRadius} !important;
+    padding: ${s.typology.padding || '14px'} !important;
+}
+.typology-title {
+    color: ${s.typology.titleColor} !important;
+    font-size: ${s.typology.titleFontSize || '0.95em'} !important;
+    font-family: ${s.typology.titleFontFamily || "'Exo 2', sans-serif"} !important;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.typology-content {
+    color: ${s.typology.contentColor} !important;
+    font-size: ${s.typology.fontSize || '0.9em'} !important;
+    font-family: ${s.typology.contentFontFamily || "'Nunito Sans', sans-serif"} !important;
+    line-height: 1.5;
+}
+`;
+        }
+
+        if (s.additionalField) {
+            css += `
+.additional-field-block {
+    background: ${s.additionalField.background} !important;
+    border-left: ${s.additionalField.borderLeft} !important;
+    border-radius: ${s.additionalField.borderRadius} !important;
+    padding: ${s.additionalField.padding || '10px'} !important;
+}
+.additional-field-title {
+    color: ${s.additionalField.titleColor} !important;
+    font-size: ${s.additionalField.titleFontSize || '0.85em'} !important;
+    font-family: ${s.additionalField.titleFontFamily || "'Exo 2', sans-serif"} !important;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.additional-field-content {
+    color: ${s.additionalField.contentColor} !important;
+    font-size: ${s.additionalField.fontSize || '0.85em'} !important;
+    font-family: ${s.additionalField.contentFontFamily || "'Nunito Sans', sans-serif"} !important;
+    line-height: 1.4;
+}
+`;
+        }
 
         // 5. Game Items
         css += `/* === GAME ITEMS === */\n`;
@@ -374,7 +553,6 @@ body {
     border: ${tu.container.border} !important;
     border-radius: ${tu.container.borderRadius} !important;
     padding: ${tu.container.padding} !important;
-    margin-bottom: ${tu.container.marginBottom} !important;
 }
 
 #turnUpdatesContainer > div > div:first-child {
@@ -392,20 +570,18 @@ body {
 }
 \n`;
 
-        // 7. ИСТОРИЯ - с защитой от undefined
+        // 7. История
         css += this._generateHistoryCSS(theme.history);
 
         return css;
     }
 
     _generateHistoryCSS(h) {
-        // Если истории нет, используем конфиг по умолчанию
         const historyConfig = h || DEFAULT_THEME_CONFIG.history;
-        if (!historyConfig) return ''; // на всякий случай
+        if (!historyConfig) return '';
 
         let css = '\n/* === HISTORY (CLASS-BASED) === */\n';
 
-        // Контейнер истории
         css += `
 #history {
     background: ${historyConfig.container?.background || '#050505'} !important;
@@ -416,7 +592,6 @@ body {
 }
 `;
 
-        // Шапка
         const header = historyConfig.header || {};
         css += `
 .history-header {
@@ -436,7 +611,6 @@ body {
 }
 `;
 
-        // Кнопки шапки
         const headerButtons = historyConfig.headerButtons || {
             background: "rgba(76,209,55,0.1)",
             border: "1px solid #4cd137",
@@ -473,7 +647,6 @@ body {
 }
 `;
 
-        // Контейнер ходов
         const turnsContainer = historyConfig.turnsContainer || {
             padding: "2px 0",
             display: "flex",
@@ -489,7 +662,6 @@ body {
 }
 `;
 
-        // Элемент хода (details)
         const turn = historyConfig.turn || {
             background: "#0a0a0a",
             border: "0.5px solid rgba(255,255,255,0.05)",
@@ -518,7 +690,6 @@ body {
 }
 `;
 
-        // Заголовок хода (summary)
         const turnSummary = historyConfig.turnSummary || {
             padding: "2px 4px",
             cursor: "pointer",
@@ -581,7 +752,6 @@ body {
 }
 `;
 
-        // Содержимое хода
         const turnContent = historyConfig.turnContent || {
             padding: "3px",
             borderTop: "0.5px solid rgba(255,255,255,0.05)",
@@ -607,7 +777,6 @@ body {
 }
 `;
 
-        // Общий блок содержимого
         const contentBlock = historyConfig.contentBlock || {
             padding: "2px",
             marginBottom: "2px",
@@ -649,7 +818,6 @@ body {
 }
 `;
 
-        // Специфические блоки
         const blocks = historyConfig.contentBlocks || DEFAULT_THEME_CONFIG.history.contentBlocks;
         css += `
 /* Заметки дизайнера */
@@ -801,7 +969,6 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
 }
 `;
 
-        // Акцентные цвета (CSS-переменные)
         css += `
 :root {
     --history-accent-success: ${accentColors.success};
@@ -811,7 +978,6 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
 }
 `;
 
-        // Индикатор футера
         const footerIndicator = historyConfig.footerIndicator || {
             background: "rgba(232,65,24,0.05)",
             borderLeft: "1px solid #e84118",
@@ -835,7 +1001,6 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
 }
 `;
 
-        // Пустое состояние
         const emptyState = historyConfig.emptyState || {
             padding: "10px",
             textAlign: "center",
@@ -861,7 +1026,6 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
 }
 `;
 
-        // Стиль для параграфов
         css += `
 .text-paragraph {
     margin: 0;
@@ -878,14 +1042,6 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
         return css;
     }
 
-    // --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ---
-
-    /**
-     * Рекурсивно добавляет в target отсутствующие ключи из source (не перезаписывает существующие)
-     * @param {Object} target - целевой объект (будет изменён)
-     * @param {Object} source - объект-источник
-     * @returns {Object} изменённый target
-     */
     _mergeMissingKeys(target, source) {
         if (!target || !source) return target;
         Object.keys(source).forEach(key => {
