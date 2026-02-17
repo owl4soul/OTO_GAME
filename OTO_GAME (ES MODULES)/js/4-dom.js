@@ -54,6 +54,9 @@ const dom = {
         sanity: document.getElementById('valSanity')
     },
     
+    // Анимация ожидания ответа от ИИ: глаз
+    waitingEye: document.getElementById('waitingEye'),
+    
     // Внутренние элементы низа
     tube: document.getElementById('progressTube'),
     pers: document.getElementById('personalityDisplay'),

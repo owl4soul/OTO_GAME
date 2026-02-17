@@ -2376,3 +2376,72 @@ input:checked+.slider:before {
 .color-inventory {
   color: #8b4513;
 }
+
+/* ===== ГЛАЗ ОЖИДАНИЯ ===== */
+.waiting-eye {
+    position: fixed;
+    width: 80px;
+    height: auto;
+    z-index: 1001;
+    pointer-events: auto;
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.5s ease, transform 0.2s ease; /* плавное появление и масштабирование */
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+    will-change: left, top, transform, filter;
+}
+
+.waiting-eye.visible {
+    opacity: 1;
+}
+
+/* Состояние перетаскивания (без transition для отзывчивости) */
+.waiting-eye.dragging {
+    transition: none;
+    transform: scale(1.1);
+    cursor: grabbing;
+    z-index: 1002;
+}
+
+/* Анимация вспышки при тапе */
+.waiting-eye.tapped {
+    animation: eyePulse 0.3s ease-out forwards;
+}
+
+@keyframes eyePulse {
+    0% { transform: scale(1); filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)) hue-rotate(0deg); }
+    50% { transform: scale(1.3); filter: drop-shadow(0 0 20px #ffaa00) hue-rotate(30deg) brightness(1.5); }
+    100% { transform: scale(1); filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3)) hue-rotate(0deg); }
+}
+
+/* Бесконечное плавное переливание при удержании */
+.waiting-eye.holding {
+    animation: holdingGlowInfinite 4s infinite;
+}
+
+@keyframes holdingGlowInfinite {
+    0% {
+        filter: drop-shadow(0 6px 10px #ff6464) brightness(1.1) hue-rotate(0deg);
+    }
+    20% {
+        filter: drop-shadow(0 12px 18px #ffaa30) brightness(1.3) hue-rotate(72deg);
+    }
+    40% {
+        filter: drop-shadow(0 16px 24px #aaff60) brightness(1.5) hue-rotate(144deg);
+    }
+    60% {
+        filter: drop-shadow(0 16px 24px #60ffaa) brightness(1.5) hue-rotate(216deg);
+    }
+    80% {
+        filter: drop-shadow(0 12px 18px #aa60ff) brightness(1.3) hue-rotate(288deg);
+    }
+    100% {
+        filter: drop-shadow(0 6px 10px #ff6464) brightness(1.1) hue-rotate(360deg);
+    }
+}
+
+/* Комбинация перетаскивания и удержания */
+.waiting-eye.dragging.holding {
+    transform: scale(1.1); /* масштаб от перетаскивания */
+    /* анимация holding продолжается */
+}

@@ -7,6 +7,7 @@ import { DOM } from './4-dom.js';
 import { Utils } from './2-utils.js';
 import { GameItemUI } from './gameitem-ui.js';
 import { Game } from './6-game.js';
+import { showEye, hideEye } from './eye.js';
 
 // Импортируем функции рендеринга секций сцены
 import {
@@ -1485,6 +1486,7 @@ function startThoughtsOfHeroDisplay() {
     }
     
     showThoughtsOfHeroLayout();
+    showEye();
     
     thoughtsOfHeroInterval = setInterval(() => {
         let phrase = null;
@@ -1528,6 +1530,7 @@ function stopThoughtsOfHeroDisplay() {
     }
     
     hideThoughtsOfHeroLayout();
+    hideEye();
 }
 
 function showThoughtsOfHeroLayout() {
