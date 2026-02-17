@@ -120,6 +120,9 @@ function init() {
             Render.setupStateObservers();
         }
         
+        // Обновляем состояние четырёх иконок проверки моделей в настройках
+        Render.updateModelStats();
+        
         Logger.success('SYSTEM', "✅ Система полностью инициализирована и готова");
     } catch (error) {
         Logger.error('FATAL', "Критическая ошибка инициализации", error);

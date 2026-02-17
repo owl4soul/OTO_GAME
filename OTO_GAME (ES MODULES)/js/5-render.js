@@ -790,30 +790,15 @@ function updateModelDetails() {
  */
 function updateModelStats() {
     const stats = State.getModelStats();
-    const statsContainer = document.getElementById('modelStats');
+    const totalEl = document.getElementById('modelTotal');
+    const successEl = document.getElementById('modelSuccess');
+    const errorEl = document.getElementById('modelError');
+    const untestedEl = document.getElementById('modelUntested');
     
-    if (!statsContainer) return;
-    
-    statsContainer.innerHTML = `
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; font-size: 0.8em;">
-            <div style="flex: 1; min-width: 100px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; text-align: center;">
-                <div style="font-size: 1.5em; font-weight: bold; color: #fbc531;">${stats.total}</div>
-                <div style="color: #aaa;">Всего</div>
-            </div>
-            <div style="flex: 1; min-width: 100px; padding: 8px; background: rgba(76, 209, 55, 0.1); border-radius: 4px; text-align: center;">
-                <div style="font-size: 1.5em; font-weight: bold; color: #4cd137;">${stats.success}</div>
-                <div style="color: #aaa;">Рабочие</div>
-            </div>
-            <div style="flex: 1; min-width: 100px; padding: 8px; background: rgba(232, 65, 24, 0.1); border-radius: 4px; text-align: center;">
-                <div style="font-size: 1.5em; font-weight: bold; color: #e84118;">${stats.error}</div>
-                <div style="color: #aaa;">Ошибки</div>
-            </div>
-            <div style="flex: 1; min-width: 100px; padding: 8px; background: rgba(251, 197, 49, 0.1); border-radius: 4px; text-align: center;">
-                <div style="font-size: 1.5em; font-weight: bold; color: #fbc531;">${stats.untested}</div>
-                <div style="color: #aaa;">Не тест.</div>
-            </div>
-        </div>
-    `;
+    if (totalEl) totalEl.textContent = stats.total;
+    if (successEl) successEl.textContent = stats.success;
+    if (errorEl) errorEl.textContent = stats.error;
+    if (untestedEl) untestedEl.textContent = stats.untested;
 }
 
 // ====================================================================
