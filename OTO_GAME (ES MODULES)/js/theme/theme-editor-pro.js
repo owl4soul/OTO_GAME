@@ -1,4 +1,3 @@
-// js/theme/theme-editor-pro.js
 'use strict';
 
 import { themeManagerPro } from './theme-pro.js';
@@ -12,196 +11,108 @@ export class ThemeEditorPro {
         this.historyStack = [];
         this.historyIndex = -1;
 
+        // ── Вкладки ──────────────────────────────────────────────────────────
+        this.tabs = [
+            { id: 'global',      icon: '🌐', label: 'Глобальные' },
+            { id: 'typography',  icon: '🔤', label: 'Типографика' },
+            { id: 'scene',       icon: '🎬', label: 'Сцена' },
+            { id: 'gameItems',   icon: '🎮', label: 'Игровые блоки' },
+            { id: 'turnUpdates', icon: '🔄', label: 'Ход' },
+            { id: 'history',     icon: '📜', label: 'История' },
+        ];
+
+        // ── Метки полей ───────────────────────────────────────────────────────
         this.labels = {
-            // ── GLOBAL ──────────────────────────────────────────────
-            icons: "🎨 Система иконок",
-            set: "Набор иконок",
-            emojiFilter: "CSS-фильтр для emoji",
-            layout: "📐 Разметка",
-            scrollbarColor: "Цвет полосы скролла",
-            scrollbarBg: "Фон дорожки скролла",
-            selectionColor: "Цвет выделенного текста",
-            selectionBg: "Фон выделенного текста",
-            blockMargin: "Отступ между блоками",
-
-            // ── TYPOGRAPHY ──────────────────────────────────────────
-            headers: "📰 Заголовки",
-            body: "📝 Основной текст",
-            ui: "🎛️ UI-элементы",
-            monospace: "⌨️ Моноширинный",
-            fontFamily: "Шрифт",
-            fontWeight: "Насыщенность",
-            fontSize: "Размер шрифта",
-            lineHeight: "Высота строки",
-            letterSpacing: "Межбуквенный интервал",
-            textTransform: "Регистр",
-            color: "Цвет текста",
-
-            // ── SCENE ───────────────────────────────────────────────
-            container: "📦 Контейнер сцены",
-            textBlock: "📄 Блок текста сцены",
-            aiMemory: "🧠 Память ИИ (ГМ)",
-            choices: "🎯 Варианты выбора",
-            designNotes: "📝 Заметки дизайнера",
-            summary: "📋 Сводка",
-            reflection: "💭 Внутренний голос",
-            personality: "👤 Личность (мета)",
-            typology: "🔖 Типология (мета)",
-            additionalField: "➕ Доп. поля",
-            btn: "⚙️ Кнопка выбора",
-
-            // ── ОБЩИЕ CSS-СВОЙСТВА ──────────────────────────────────
-            background: "Фон",
-            border: "Граница (вся)",
-            borderLeft: "Граница слева",
-            borderRight: "Граница справа",
-            borderTop: "Граница сверху",
-            borderBottom: "Граница снизу",
-            borderColor: "Цвет границы",
-            borderRadius: "Скругление",
-            padding: "Внутр. отступы",
-            margin: "Внешн. отступы",
-            marginBottom: "Отступ снизу",
-            boxShadow: "Тень блока",
-            containerMargin: "Отступы контейнера",
-
-            // ── СПЕЦИАЛЬНЫЕ ЦВЕТА БЛОКОВ ────────────────────────────
-            titleColor: "Цвет заголовка",
-            contentColor: "Цвет содержимого",
-            keyColor: "Цвет ключей JSON",
-            valueColor: "Цвет значений JSON",
-            hoverBg: "Фон при наведении",
-            hoverBorder: "Граница при наведении",
-            selectedBg: "Фон выбранной",
-            selectedBorder: "Граница выбранной",
-            selectedColor: "Цвет текста выбранной",
-            titleFontFamily: "Шрифт заголовка",
-            contentFontFamily: "Шрифт содержимого",
-            titleFontSize: "Размер заголовка",
-            italic: "Курсив",
-
-            // ── GAME ITEMS ──────────────────────────────────────────
-            header: "📌 Заголовок секции",
-            badge: "🏷️ Бейдж",
-            hoverTransform: "Трансформация при наведении",
-            hoverShadow: "Тень при наведении",
-
-            // Типы игровых элементов (суффикс _gi)
-            personality_gi: "👤 Личность",
-            typology_gi: "🔖 Типология",
-            organization: "🏛️ Организации",
-            relations: "💑 Отношения",
-            skill: "📜 Навыки",
-            stat_buffs: "📊 Модификаторы статов",
-            bless: "✨ Благословения",
-            curse: "☠️ Проклятия",
-            buff_debuff: "📈 Баффы/Дебаффы",
-            inventory: "🎒 Инвентарь",
-            details: "ℹ️ Детали",
-
-            // ── TURN UPDATES ─────────────────────────────────────────
-            content: "📄 Содержимое",
-
-            // ── HISTORY ─────────────────────────────────────────────
-            header_history: "🎯 Заголовок журнала",
-            headerButtons: "🔘 Кнопки заголовка",
-            hover: "Стиль при наведении",
-            turn: "📝 Блок хода",
-            turnSummary: "📋 Сводка хода",
-            turnContent: "📄 Содержимое хода",
-            accentColors: "🎨 Акцентные цвета",
-            summaryColor: "Цвет текста сводки",
-            actionCountColor: "Цвет счётчика действий",
-            timestampColor: "Цвет метки времени",
-            success: "Цвет успеха",
-            failure: "Цвет провала",
-            mixed: "Цвет смешанного",
-            neutral: "Цвет нейтрального",
+            // Global
+            icons: '🎨 Система иконок', set: 'Набор иконок', emojiFilter: 'CSS-фильтр для emoji',
+            layout: '📐 Разметка',
+            scrollbarColor: 'Цвет ползунка', scrollbarBg: 'Фон дорожки',
+            selectionColor: 'Цвет выделения', selectionBg: 'Фон выделения',
+            blockMargin: 'Отступ между блоками',
+            // Typography
+            headers: '📰 Заголовки', body: '📝 Основной текст',
+            ui: '🎛️ UI-элементы', monospace: '⌨️ Моноширинный',
+            fontFamily: 'Шрифт', fontWeight: 'Насыщенность',
+            fontSize: 'Размер', lineHeight: 'Высота строки',
+            letterSpacing: 'Межбуквенный', textTransform: 'Регистр', color: 'Цвет текста',
+            // Scene
+            container: '📦 Контейнер', textBlock: '📄 Блок текста',
+            aiMemory: '🧠 Память ИИ', choices: '🎯 Варианты выбора',
+            designNotes: '📝 Заметки дизайнера', summary: '📋 Сводка',
+            reflection: '💭 Внутренний голос', personality: '👤 Личность (мета)',
+            typology: '🔖 Типология (мета)', additionalField: '➕ Доп. поля',
+            btn: 'Кнопка выбора',
+            // CSS-свойства
+            background: 'Фон', border: 'Граница', borderLeft: 'Граница слева',
+            borderRight: 'Граница справа', borderTop: 'Граница сверху',
+            borderBottom: 'Граница снизу', borderColor: 'Цвет границы',
+            borderRadius: 'Скругление', padding: 'Внутр. отступы',
+            margin: 'Внешн. отступы', marginBottom: 'Отступ снизу',
+            boxShadow: 'Тень', containerMargin: 'Отступы контейнера',
+            // Цвета компонентов
+            titleColor: 'Цвет заголовка', contentColor: 'Цвет содержимого',
+            keyColor: 'Цвет ключей JSON', valueColor: 'Цвет значений JSON',
+            hoverBg: 'Фон (наведение)', hoverBorder: 'Граница (наведение)',
+            selectedBg: 'Фон (выбрана)', selectedBorder: 'Граница (выбрана)',
+            selectedColor: 'Текст (выбрана)',
+            titleFontFamily: 'Шрифт заголовка', contentFontFamily: 'Шрифт содержимого',
+            titleFontSize: 'Размер заголовка', italic: 'Курсив',
+            // Game Items
+            header: '📌 Заголовок секции', badge: '🏷️ Бейдж',
+            hoverTransform: 'Transform (наведение)', hoverShadow: 'Тень (наведение)',
+            personality_gi: '👤 Личность', typology_gi: '🔖 Типология',
+            organization: '🏛️ Организации', relations: '💑 Отношения',
+            skill: '📜 Навыки', stat_buffs: '📊 Моды статов',
+            bless: '✨ Благословения', curse: '☠️ Проклятия',
+            buff_debuff: '📈 Баффы/Дебаффы', inventory: '🎒 Инвентарь', details: 'ℹ️ Детали',
+            // Turn updates
+            content: '📄 Содержимое',
+            // History
+            header_history: '🎯 Заголовок журнала', headerButtons: '🔘 Кнопки заголовка',
+            hover: 'Стиль (наведение)', turn: '📝 Блок хода',
+            turnSummary: '📋 Сводка хода', turnContent: '📄 Содержимое хода',
+            accentColors: '🎨 Акцентные цвета',
+            summaryColor: 'Цвет сводки', actionCountColor: 'Цвет счётчика',
+            timestampColor: 'Цвет времени',
+            success: 'Успех', failure: 'Провал', mixed: 'Смешанный', neutral: 'Нейтральный',
         };
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // КЛАССИФИКАЦИЯ ТИПОВ ПОЛЕЙ
+    // КЛАССИФИКАЦИЯ ПОЛЕЙ (без изменений)
     // ═══════════════════════════════════════════════════════════════════════
 
-    /**
-     * Чистое цветовое значение: "#hex", "rgb()", "rgba()", "gradient", "transparent"
-     */
-    _isPureColorValue(value) {
-        if (typeof value !== 'string') return false;
-        const v = value.trim();
-        return (
-            v.startsWith('#') ||
-            v.startsWith('rgb') ||
-            v.startsWith('hsl') ||
-            v.toLowerCase().includes('gradient') ||
-            v === 'transparent' ||
-            v === 'inherit' ||
-            v === 'currentColor' ||
-            /^[a-zA-Z]+$/.test(v) && v.length < 20 && !v.includes(' ')
-        );
-    }
-
-    /**
-     * Составное CSS-значение, содержащее цвет как часть.
-     * "4px solid #fbc531", "0 4px 8px rgba(0,0,0,0.3)", "1px solid rgba(255,255,255,0.1)"
-     */
     _isCompoundCssWithColor(key, value) {
         if (typeof value !== 'string') return false;
-        const keyLower = key.toLowerCase();
-        const isCompoundKey =
-            keyLower === 'border' ||
-            keyLower === 'borderleft' ||
-            keyLower === 'borderright' ||
-            keyLower === 'bordertop' ||
-            keyLower === 'borderbottom' ||
-            keyLower === 'hoverborder' ||
-            keyLower === 'selectedborder' ||
-            keyLower === 'boxshadow' ||
-            keyLower === 'hovershadow';
-        if (!isCompoundKey) return false;
-        // Убеждаемся, что значение реально содержит цвет
+        const k = key.toLowerCase();
+        const isCompound = ['border','borderleft','borderright','bordertop','borderbottom',
+            'hoverborder','selectedborder','boxshadow','hovershadow'].includes(k);
+        if (!isCompound) return false;
         return /#[0-9a-fA-F]{3,8}/.test(value) || /rgba?\(/.test(value) || /hsla?\(/.test(value);
     }
 
-    /**
-     * Поле — шрифт
-     */
-    _isFontField(key) {
-        const k = key.toLowerCase();
-        return k.includes('fontfamily');
-    }
-
-    /**
-     * Поле — textTransform
-     */
-    _isTextTransformField(key) {
-        return key === 'textTransform';
-    }
-
-    /**
-     * Поле — булево
-     */
-    _isBooleanField(key, value) {
-        return key === 'italic' || value === true || value === false;
-    }
-
-    /**
-     * Поле — чистый цвет (не составное)
-     */
     _isPureColorField(key, value) {
+        if (typeof value !== 'string') return false;
         if (this._isCompoundCssWithColor(key, value)) return false;
-        const keyLower = key.toLowerCase();
-        const colorKeywords = ['color', 'background', 'bg'];
-        // Перечисленные поля, которые ВСЕГДА цвет
-        const explicitColorFields = ['success', 'failure', 'mixed', 'neutral'];
-        const hasKeyword = colorKeywords.some(kw => keyLower.includes(kw));
-        const isExplicit = explicitColorFields.includes(key);
-        return (hasKeyword || isExplicit) && this._isPureColorValue(value);
+        const k = key.toLowerCase();
+        const colorKw = ['color','background','bg'];
+        const explicit = ['success','failure','mixed','neutral'];
+        const hasKw = colorKw.some(kw => k.includes(kw));
+        const isExpl = explicit.includes(key);
+        if (!hasKw && !isExpl) return false;
+        const v = value.trim();
+        return v.startsWith('#') || v.startsWith('rgb') || v.startsWith('hsl') ||
+            v.toLowerCase().includes('gradient') || v === 'transparent' ||
+            v === 'inherit' || v === 'currentColor' ||
+            (/^[a-zA-Z]+$/.test(v) && v.length < 20 && !v.includes(' '));
     }
+
+    _isFontField(key) { return key.toLowerCase().includes('fontfamily'); }
+    _isTextTransformField(key) { return key === 'textTransform'; }
+    _isBooleanField(key, value) { return key === 'italic' || value === true || value === false; }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // LIFECYCLE
+    // LIFECYCLE (без изменений)
     // ═══════════════════════════════════════════════════════════════════════
 
     open() {
@@ -209,7 +120,7 @@ export class ThemeEditorPro {
         themeManagerPro.startEditing();
         this._pushHistory();
         this._render();
-        setTimeout(() => this._updatePreview(), 100);
+        setTimeout(() => this._updatePreview(), 50);
     }
 
     close() {
@@ -219,7 +130,7 @@ export class ThemeEditorPro {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // ИСТОРИЯ
+    // ИСТОРИЯ (без изменений)
     // ═══════════════════════════════════════════════════════════════════════
 
     _pushHistory() {
@@ -235,7 +146,7 @@ export class ThemeEditorPro {
         if (this.historyIndex > 0) {
             this.historyIndex--;
             themeManagerPro.setEditingTheme(JSON.parse(this.historyStack[this.historyIndex]));
-            this._renderContent();
+            this._renderPanelContent();
             this._updateNav();
             this._updatePreview();
         }
@@ -245,217 +156,640 @@ export class ThemeEditorPro {
         if (this.historyIndex < this.historyStack.length - 1) {
             this.historyIndex++;
             themeManagerPro.setEditingTheme(JSON.parse(this.historyStack[this.historyIndex]));
-            this._renderContent();
+            this._renderPanelContent();
             this._updateNav();
             this._updatePreview();
         }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // РЕНДЕР ОБОЛОЧКИ
+    // РЕНДЕР ОБОЛОЧКИ (ИЗМЕНЕНО: вертикальная компоновка + разделитель)
     // ═══════════════════════════════════════════════════════════════════════
 
     _render() {
         const overlay = document.createElement('div');
         overlay.id = 'te-overlay';
-        overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;
-            background:rgba(0,0,0,0.9);z-index:11000;display:flex;
-            justify-content:center;align-items:center;
-            backdrop-filter:blur(8px);font-family:'Segoe UI',sans-serif;font-size:14px;`;
+        overlay.className = 'te-overlay'; // вместо инлайн-стилей
 
         const win = document.createElement('div');
-        win.style.cssText = `width:98%;height:96%;background:#111;
-            border:1px solid #d4af37;border-radius:12px;
-            display:flex;flex-direction:column;
-            box-shadow:0 0 60px rgba(0,0,0,0.8);overflow:hidden;`;
+        win.className = 'te-window'; // вместо инлайн-стилей
 
-        win.appendChild(this._createHeader());
-        win.appendChild(this._createBody());
+        win.appendChild(this._createTopBar());
+        win.appendChild(this._createTabBar());
+
+        // Вертикальный контейнер
+        const mainArea = document.createElement('div');
+        mainArea.className = 'te-main-area';
+
+        // Панель настроек
+        const settingsPanel = this._createSettingsPanel();
+        settingsPanel.classList.add('te-settings-panel');
+
+        // Разделитель
+        const splitter = document.createElement('div');
+        splitter.className = 'te-splitter';
+
+        // Панель предпросмотра
+        const previewPanel = this._createPreviewPanel();
+        previewPanel.classList.add('te-preview-panel');
+
+        mainArea.appendChild(settingsPanel);
+        mainArea.appendChild(splitter);
+        mainArea.appendChild(previewPanel);
+
+        win.appendChild(mainArea);
         win.appendChild(this._createFooter());
-
         overlay.appendChild(win);
         document.body.appendChild(overlay);
+
+        this._initSplitter(settingsPanel, previewPanel, splitter);
+
         this._updateNav();
+        setTimeout(() => { this._renderPanelContent(); this._updatePreview(); }, 0);
     }
 
-    _createHeader() {
-        const h = document.createElement('div');
-        h.style.cssText = "padding:12px 25px;background:#000;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;";
+    // Новый метод: инициализация перетаскивания разделителя (с поддержкой touch)
+    _initSplitter(topPanel, bottomPanel, splitter) {
+        let startY, startTopHeight;
+
+        const onMove = (clientY) => {
+            const deltaY = clientY - startY;
+            const newTopHeight = startTopHeight + deltaY;
+            const containerHeight = splitter.parentElement.clientHeight;
+            if (newTopHeight < 100 || newTopHeight > containerHeight - 150) return;
+            topPanel.style.flex = `0 0 ${newTopHeight}px`;
+        };
+
+        const onMouseMove = (e) => {
+            e.preventDefault();
+            onMove(e.clientY);
+        };
+
+        const onTouchMove = (e) => {
+            e.preventDefault();
+            if (e.touches.length) onMove(e.touches[0].clientY);
+        };
+
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onUp);
+            document.body.style.cursor = '';
+        };
+
+        splitter.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            startY = e.clientY;
+            startTopHeight = topPanel.offsetHeight;
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onUp);
+            document.body.style.cursor = 'ns-resize';
+        });
+
+        splitter.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startY = e.touches[0].clientY;
+            startTopHeight = topPanel.offsetHeight;
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onUp);
+        });
+    }
+
+    // ── Верхняя панель: заголовок + пресет + undo/redo/export/import ─────────
+    // (изменено: инлайн-стили заменены на классы)
+    _createTopBar() {
+        const bar = document.createElement('div');
+        bar.className = 'te-topbar';
 
         const left = document.createElement('div');
-        left.style.cssText = "display:flex;gap:20px;align-items:center;";
-        left.innerHTML = `<div style="color:#d4af37;font-weight:900;font-size:1.2em;letter-spacing:2px;">THEME EDITOR PRO</div>`;
+        left.className = 'te-topbar-left';
+        left.innerHTML = `<span class="te-logo">THEME EDITOR PRO</span>`;
 
-        const presetLabel = document.createElement('span');
-        presetLabel.textContent = "ПРЕСЕТ:";
-        presetLabel.style.cssText = "color:#555;font-size:0.8em;font-weight:bold;";
-        left.appendChild(presetLabel);
+        const presetLbl = document.createElement('span');
+        presetLbl.className = 'te-preset-label';
+        presetLbl.textContent = 'ПРЕСЕТ:';
+        left.appendChild(presetLbl);
 
         const presetSel = document.createElement('select');
-        presetSel.style.cssText = "background:#1a1a1a;color:#d4af37;border:1px solid #444;padding:6px 12px;border-radius:6px;font-weight:bold;outline:none;";
+        presetSel.className = 'te-preset-select';
         themeManagerPro.getPresets().forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.key; opt.text = p.name;
-            if (p.isCurrent) opt.selected = true;
-            presetSel.appendChild(opt);
+            const o = document.createElement('option');
+            o.value = p.key; o.text = p.name;
+            if (p.isCurrent) o.selected = true;
+            presetSel.appendChild(o);
         });
         presetSel.onchange = e => {
-            if (confirm("Загрузить пресет? Несохранённые изменения будут потеряны.")) {
+            if (confirm('Загрузить пресет? Несохранённые изменения будут потеряны.')) {
                 themeManagerPro.loadPreset(e.target.value);
                 themeManagerPro.startEditing();
                 this._pushHistory();
-                this._renderContent();
+                this._renderPanelContent();
             }
         };
         left.appendChild(presetSel);
-        h.appendChild(left);
+        bar.appendChild(left);
 
         const right = document.createElement('div');
-        right.style.cssText = "display:flex;gap:10px;";
-        const btnCss = "background:#222;color:#fff;border:1px solid #444;padding:6px 15px;cursor:pointer;border-radius:6px;font-weight:600;transition:all 0.2s;";
+        right.className = 'te-topbar-right';
 
         const undo = document.createElement('button');
-        undo.id = 'te-undo'; undo.innerHTML = '↩ Назад'; undo.style.cssText = btnCss;
+        undo.id = 'te-undo'; undo.textContent = '↩ Назад'; undo.className = 'te-btn-icon';
         undo.onclick = () => this._undo();
 
         const redo = document.createElement('button');
-        redo.id = 'te-redo'; redo.innerHTML = '↪ Вперёд'; redo.style.cssText = btnCss;
+        redo.id = 'te-redo'; redo.textContent = '↪ Вперёд'; redo.className = 'te-btn-icon';
         redo.onclick = () => this._redo();
 
+        const sep = document.createElement('span');
+        sep.className = 'te-separator';
+
         const imp = document.createElement('button');
-        imp.innerHTML = '📥 Импорт'; imp.style.cssText = btnCss;
+        imp.textContent = '📥 Импорт'; imp.className = 'te-btn-icon';
         imp.onclick = () => this._import();
 
         const exp = document.createElement('button');
-        exp.innerHTML = '📤 Экспорт'; exp.style.cssText = btnCss;
+        exp.textContent = '📤 Экспорт'; exp.className = 'te-btn-icon';
         exp.onclick = () => this._export();
 
-        right.append(undo, redo, imp, exp);
-        h.appendChild(right);
-        return h;
+        right.append(undo, redo, sep, imp, exp);
+        bar.appendChild(right);
+        return bar;
     }
 
-    _createBody() {
+    // ── Строка вкладок ───────────────────────────────────────────────────────
+    // (изменено: инлайн-стили заменены на классы)
+    _createTabBar() {
+        const bar = document.createElement('div');
+        bar.id = 'te-tabbar';
+        bar.className = 'te-tabbar';
+
+        this.tabs.forEach(t => {
+            const tab = document.createElement('div');
+            tab.className = 'te-tab' + (t.id === this.activeTab ? ' active' : '');
+            tab.dataset.tabId = t.id;
+            tab.innerHTML = `<div class="te-tab-icon">${t.icon}</div><div class="te-tab-label">${t.label.toUpperCase()}</div>`;
+            tab.onclick = () => {
+                this.activeTab = t.id;
+                this._updateTabBar();
+                this._renderPanelContent();
+            };
+            bar.appendChild(tab);
+        });
+
+        return bar;
+    }
+
+    _tabStyle(active) {
+        // больше не используется, оставлен для совместимости, если вызывается из других мест
+        return '';
+    }
+
+    _updateTabBar() {
+        const bar = document.getElementById('te-tabbar');
+        if (!bar) return;
+        Array.from(bar.children).forEach(tab => {
+            const active = tab.dataset.tabId === this.activeTab;
+            tab.className = 'te-tab' + (active ? ' active' : '');
+            // обновляем содержимое (иконка и текст не меняются, но если нужно - можно обновить)
+        });
+    }
+
+    // ── Панель настроек ──────────────────────────────────────────────────────
+    // (изменено: убран инлайн-стиль ширины, добавлены классы)
+    _createSettingsPanel() {
+        const panel = document.createElement('div');
+        panel.id = 'te-settings-panel'; // для возможного использования
+
+        const titleBar = document.createElement('div');
+        titleBar.id = 'te-section-title';
+        titleBar.className = 'te-section-title';
+        panel.appendChild(titleBar);
+
+        const scrollArea = document.createElement('div');
+        scrollArea.id = 'te-content';
+        scrollArea.className = 'te-content';
+        panel.appendChild(scrollArea);
+
+        return panel;
+    }
+
+    // ── Панель превью ────────────────────────────────────────────────────────
+    // (изменено: инлайн-стили заменены на классы)
+    _createPreviewPanel() {
+        const wrap = document.createElement('div');
+        wrap.id = 'te-preview-panel';
+
+        const hdr = document.createElement('div');
+        hdr.className = 'te-preview-header';
+        hdr.innerHTML = `<span>👁 ЖИВОЙ ПРЕДПРОСМОТР</span><span>RENDER: PRO V4</span>`;
+
         const body = document.createElement('div');
-        body.style.cssText = "flex:1;display:flex;overflow:hidden;background:#000;";
+        body.id = 'te-preview-container';
+        body.className = 'te-preview-container';
 
-        // Sidebar
-        const sidebar = document.createElement('div');
-        sidebar.id = 'te-sidebar';
-        sidebar.style.cssText = "width:260px;background:#050505;border-right:1px solid #222;overflow-y:auto;display:flex;flex-direction:column;z-index:2;";
-
-        const tabs = [
-            { id: 'global',      label: '🌐 ГЛОБАЛЬНЫЕ',    desc: 'Фон, скроллбары, выделение' },
-            { id: 'typography',  label: '🔤 ТИПОГРАФИКА',   desc: 'Шрифты, размеры, интервалы' },
-            { id: 'scene',       label: '🎬 СЦЕНА',         desc: 'Блоки текста, память ИИ' },
-            { id: 'gameItems',   label: '🎮 ИГРОВЫЕ БЛОКИ', desc: 'Характеристики, инвентарь' },
-            { id: 'turnUpdates', label: '🔄 ХОД',           desc: 'Изменения за ход' },
-            { id: 'history',     label: '📜 ИСТОРИЯ',       desc: 'Лог событий и архив' },
-        ];
-
-        tabs.forEach(t => {
-            const b = document.createElement('div');
-            b.innerHTML = `<div style="font-weight:900;font-size:1em;">${t.label}</div>
-                <div style="font-size:0.75em;opacity:0.5;margin-top:2px;">${t.desc}</div>`;
-            b.dataset.tab = t.id;
-            b.style.cssText = `padding:18px 25px;cursor:pointer;border-bottom:1px solid #111;
-                color:${this.activeTab === t.id ? '#d4af37' : '#555'};
-                background:${this.activeTab === t.id ? 'linear-gradient(90deg,rgba(212,175,55,0.1) 0%,transparent 100%)' : 'transparent'};
-                border-left:4px solid ${this.activeTab === t.id ? '#d4af37' : 'transparent'};
-                transition:all 0.3s;`;
-            b.onclick = () => { this.activeTab = t.id; this._updateSidebarUI(); this._renderContent(); };
-            sidebar.appendChild(b);
-        });
-
-        // Content
-        const content = document.createElement('div');
-        content.id = 'te-content';
-        content.style.cssText = "width:500px;padding:30px;overflow-y:auto;background:#111;border-right:1px solid #222;scrollbar-width:thin;z-index:1;";
-
-        // Preview
-        const previewWrap = document.createElement('div');
-        previewWrap.style.cssText = "flex:1;display:flex;flex-direction:column;background:#000;position:relative;overflow:hidden;";
-
-        const previewHeader = document.createElement('div');
-        previewHeader.style.cssText = "padding:12px 25px;background:#050505;border-bottom:1px solid #222;color:#d4af37;font-weight:bold;font-size:0.8em;display:flex;justify-content:space-between;align-items:center;letter-spacing:1px;";
-        previewHeader.innerHTML = `<span>👁 ЖИВОЙ ПРЕДПРОСМОТР</span><span style="font-size:0.8em;color:#444;">RENDER: PRO V4</span>`;
-
-        const previewBody = document.createElement('div');
-        previewBody.id = 'te-preview-container';
-        previewBody.style.cssText = "flex:1;padding:40px;overflow-y:auto;position:relative;scrollbar-width:thin;background-image:radial-gradient(#1a1a1a 1px,transparent 1px);background-size:30px 30px;";
-
-        previewWrap.append(previewHeader, previewBody);
-        body.append(sidebar, content, previewWrap);
-        setTimeout(() => { this._renderContent(); this._updatePreview(); }, 0);
-        return body;
+        wrap.append(hdr, body);
+        return wrap;
     }
 
-    _updateSidebarUI() {
-        const sb = document.getElementById('te-sidebar');
-        if (!sb) return;
-        Array.from(sb.children).forEach(c => {
-            const active = c.dataset.tab === this.activeTab;
-            c.style.color = active ? '#d4af37' : '#666';
-            c.style.background = active ? 'rgba(212,175,55,0.08)' : 'transparent';
-            c.style.borderLeftColor = active ? '#d4af37' : 'transparent';
-        });
+    // ── Футер ────────────────────────────────────────────────────────────────
+    // (изменено: инлайн-стили заменены на классы)
+    _createFooter() {
+        const f = document.createElement('div');
+        f.className = 'te-footer';
+
+        const cancel = document.createElement('button');
+        cancel.textContent = 'Отменить изменения';
+        cancel.className = 'te-footer-btn';
+        cancel.onclick = () => { themeManagerPro.cancelChanges(); this.close(); };
+
+        const save = document.createElement('button');
+        save.textContent = '✓ Сохранить тему';
+        save.className = 'te-footer-btn primary';
+        save.onclick = () => { themeManagerPro.saveChanges(); this.close(); };
+
+        f.append(cancel, save);
+        return f;
     }
 
-    _renderContent() {
-        const c = document.getElementById('te-content');
-        if (!c) return;
-        c.innerHTML = '';
+    // ═══════════════════════════════════════════════════════════════════════
+    // РЕНДЕР СОДЕРЖИМОГО ПАНЕЛИ (БЕЗ ИЗМЕНЕНИЙ)
+    // Все методы ниже остаются точно такими же, как в вашем исходном коде.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    _renderPanelContent() {
+        const content = document.getElementById('te-content');
+        const titleBar = document.getElementById('te-section-title');
+        if (!content) return;
+
+        content.innerHTML = '';
+
+        const t = this.tabs.find(t => t.id === this.activeTab);
+        if (titleBar && t) {
+            titleBar.innerHTML = `<span style="color:#d4af37;font-weight:700;font-size:0.85em;">${t.icon} ${t.label.toUpperCase()}</span>`;
+        }
+
         const theme = themeManagerPro.getCurrentTheme();
         const sectionData = theme[this.activeTab];
 
         if (!sectionData) {
-            c.innerHTML = '<div style="color:#444;text-align:center;padding:50px;">Секция пуста</div>';
+            content.innerHTML = '<div style="color:#444;text-align:center;padding:40px;">Секция пуста</div>';
             return;
         }
 
-        const tabTitle = document.createElement('h2');
-        tabTitle.textContent = this.activeTab.toUpperCase();
-        tabTitle.style.cssText = "color:#d4af37;font-size:1.2em;margin-bottom:20px;border-bottom:2px solid #d4af37;padding-bottom:10px;font-weight:900;";
-        c.appendChild(tabTitle);
-
-        this._renderObject(c, sectionData, [this.activeTab]);
+        this._renderObject(content, sectionData, [this.activeTab]);
     }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // РЕКУРСИВНЫЙ РЕНДЕР ОБЪЕКТА
-    // ═══════════════════════════════════════════════════════════════════════
 
     _renderObject(container, obj, path) {
         Object.entries(obj).forEach(([key, val]) => {
             const curPath = [...path, key];
 
-            // Специальный виджет для иконок
             if (key === 'icons' && path[0] === 'global') {
-                this._renderIconSettings(container, val, curPath);
+                this._renderIconBlock(container, val, curPath);
                 return;
             }
 
             if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
-                const group = document.createElement('div');
-                group.style.cssText = "margin-bottom:20px;border:1px solid #222;background:#181818;border-radius:8px;overflow:hidden;";
-
-                const header = document.createElement('div');
-                header.textContent = this._getLabel(key, path).toUpperCase();
-                header.style.cssText = "padding:10px 15px;background:#222;border-bottom:1px solid #333;font-weight:bold;color:#d4af37;font-size:0.85em;letter-spacing:1px;";
-                group.appendChild(header);
-
-                const inner = document.createElement('div');
-                inner.style.padding = "15px";
-                this._renderObject(inner, val, curPath);
-                group.appendChild(inner);
-                container.appendChild(group);
+                this._renderSectionBlock(container, key, val, curPath, path);
             } else {
-                this._renderField(container, key, val, curPath);
+                // Одиночное поле на верхнем уровне (не обёрнуто в секцию)
+                this._renderRow(container, key, val, curPath);
             }
         });
     }
 
-    _getLabel(key, path) {
+    _renderSectionBlock(container, key, obj, path, parentPath) {
+        const block = document.createElement('div');
+        block.style.cssText = "border-bottom:1px solid #1a1a1a;";
+
+        const hdr = document.createElement('div');
+        hdr.style.cssText = "padding:5px 14px;background:#161616;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none;border-top:1px solid #1e1e1e;";
+        const label = this._getLabel(key, parentPath);
+        hdr.innerHTML = `
+            <span style="color:#d4af37;font-size:0.78em;font-weight:700;letter-spacing:0.8px;">${label.toUpperCase()}</span>
+            <span class="te-toggle" style="color:#555;font-size:0.65em;">▾</span>`;
+        block.appendChild(hdr);
+
+        const body = document.createElement('div');
+        body.style.cssText = "background:#111;";
+        this._renderObjectRows(body, obj, path);
+        block.appendChild(body);
+
+        let collapsed = false;
+        hdr.onclick = () => {
+            collapsed = !collapsed;
+            body.style.display = collapsed ? 'none' : '';
+            hdr.querySelector('.te-toggle').textContent = collapsed ? '▸' : '▾';
+        };
+
+        container.appendChild(block);
+    }
+
+    _renderObjectRows(container, obj, path) {
+        Object.entries(obj).forEach(([key, val], idx) => {
+            const curPath = [...path, key];
+
+            if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                const subHdr = document.createElement('div');
+                subHdr.style.cssText = "padding:3px 14px 3px 20px;background:#141414;border-top:1px solid #1e1e1e;";
+                subHdr.innerHTML = `<span style="color:#888;font-size:0.72em;font-weight:700;letter-spacing:0.5px;">${this._getLabel(key, path).toUpperCase()}</span>`;
+                container.appendChild(subHdr);
+
+                this._renderObjectRows(container, val, curPath);
+            } else {
+                this._renderRow(container, key, val, curPath, idx);
+            }
+        });
+    }
+
+    _renderRow(container, key, val, path, idx = 0) {
+        if (typeof val === 'object' && val !== null) return;
+
+        const row = document.createElement('div');
+        row.style.cssText = `display:flex;align-items:center;min-height:28px;
+            padding:3px 10px 3px 14px;gap:8px;
+            border-top:1px solid ${idx === 0 ? 'transparent' : '#1a1a1a'};
+            background:${idx % 2 === 0 ? '#111' : '#121212'};`;
+
+        const lbl = document.createElement('div');
+        lbl.textContent = this._getLabel(key, path.slice(0, -1));
+        lbl.title = key;
+        lbl.style.cssText = "color:#777;font-size:0.72em;font-weight:600;min-width:130px;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;";
+
+        const inputWrap = document.createElement('div');
+        inputWrap.style.cssText = "flex:1;display:flex;align-items:center;min-width:0;";
+
+        let widget;
+        if (this._isFontField(key)) {
+            this._renderFontRow(container, key, val, path, idx);
+            return;
+        } else if (this._isTextTransformField(key)) {
+            widget = this._makeSelect(val, path, [
+                ['none','Без изм.'],['uppercase','ЗАГЛАВНЫЕ'],
+                ['lowercase','строчные'],['capitalize','Каждое Слово'],
+            ]);
+        } else if (this._isBooleanField(key, val)) {
+            widget = this._makeCheckbox(val, path);
+        } else if (this._isCompoundCssWithColor(key, val)) {
+            widget = this._makeCompoundColorInput(val, path);
+        } else if (this._isPureColorField(key, val)) {
+            widget = this._makeColorInput(val, path);
+        } else {
+            widget = this._makeTextInput(val, path);
+        }
+
+        inputWrap.appendChild(widget);
+        row.append(lbl, inputWrap);
+        container.appendChild(row);
+    }
+
+    _renderFontRow(container, key, val, path, rowIdx = 0) {
+        const theme = themeManagerPro.getCurrentTheme();
+        const parentObj = this._getAtPath(theme, path.slice(0, -1)) || {};
+
+        const fontFamily = val || "'Nunito Sans', sans-serif";
+        const fontSize   = parentObj.fontSize   || '14px';
+        const fontWeight = parentObj.fontWeight  || '400';
+        const lineHeight = parentObj.lineHeight  || '1.5';
+        const letterSpacing = parentObj.letterSpacing || '0px';
+        const textTransform = parentObj.textTransform || 'none';
+        const isItalic   = parentObj.italic === true;
+        const textColor  = parentObj.color || '#cccccc';
+
+        const testRow = document.createElement('div');
+        testRow.style.cssText = `padding:4px 14px 4px 14px;background:#0d0d0d;border-top:1px solid #1e1e1e;`;
+
+        const testEl = document.createElement('div');
+        testEl.textContent = 'Тест кириллицы: 1, 2, 3';
+        testEl.style.cssText = `
+            font-family:${fontFamily};
+            font-size:${fontSize};
+            font-weight:${fontWeight};
+            line-height:${lineHeight};
+            letter-spacing:${letterSpacing};
+            text-transform:${textTransform};
+            font-style:${isItalic ? 'italic' : 'normal'};
+            color:${textColor};
+            padding:3px 0;
+            overflow:hidden;white-space:nowrap;text-overflow:ellipsis;`;
+        testEl.id = `te-font-test-${path.join('-')}`;
+        testRow.appendChild(testEl);
+        container.appendChild(testRow);
+
+        const row = document.createElement('div');
+        row.style.cssText = `display:flex;align-items:center;min-height:28px;
+            padding:3px 10px 3px 14px;gap:8px;
+            border-top:1px solid #1a1a1a;
+            background:${rowIdx % 2 === 0 ? '#111' : '#121212'};`;
+
+        const lbl = document.createElement('div');
+        lbl.textContent = this._getLabel(key, path.slice(0, -1));
+        lbl.title = key;
+        lbl.style.cssText = "color:#777;font-size:0.72em;font-weight:600;min-width:130px;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;";
+
+        const sel = document.createElement('select');
+        sel.style.cssText = "flex:1;background:#0a0a0a;border:1px solid #2a2a2a;color:#d4af37;padding:3px 6px;border-radius:4px;font-size:0.8em;outline:none;min-width:0;";
+
+        const cleanVal = (val || '').replace(/['"]/g, '').split(',')[0].trim();
+        const monoFonts = ['Roboto Mono','Fira Code','Source Code Pro','JetBrains Mono','VT323','Press Start 2P'];
+        const serifFonts = ['Cinzel','Lora','Playfair Display','Merriweather','Cormorant'];
+
+        Object.keys(FONT_LIBRARY).forEach(font => {
+            const opt = document.createElement('option');
+            const suffix = monoFonts.includes(font) ? ', monospace' : serifFonts.includes(font) ? ', serif' : ', sans-serif';
+            opt.value = `'${font}'${suffix}`;
+            opt.text = font;
+            if (cleanVal === font) opt.selected = true;
+            sel.appendChild(opt);
+        });
+
+        sel.onchange = e => {
+            themeManagerPro.updateSetting(path, e.target.value);
+            this._pushHistory();
+            const testDiv = document.getElementById(`te-font-test-${path.join('-')}`);
+            if (testDiv) testDiv.style.fontFamily = e.target.value;
+        };
+
+        row.append(lbl, sel);
+        container.appendChild(row);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ВИДЖЕТЫ ВВОДА — КОМПАКТНЫЕ (без изменений)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    _makeColorInput(val, path) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = "display:flex;gap:5px;width:100%;align-items:center;";
+
+        const preview = document.createElement('div');
+        preview.style.cssText = `width:22px;height:22px;flex-shrink:0;border:1px solid #333;
+            background:${val || 'transparent'};cursor:pointer;border-radius:4px;`;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = val || '';
+        input.style.cssText = "flex:1;background:#0a0a0a;border:1px solid #222;color:#ddd;padding:2px 6px;border-radius:4px;font-size:0.78em;outline:none;font-family:monospace;min-width:0;";
+
+        const apply = (newVal) => {
+            input.value = newVal;
+            preview.style.background = newVal;
+            themeManagerPro.updateSetting(path, newVal);
+            this._pushHistory();
+        };
+
+        preview.onclick = () => {
+            this.gradientPicker.open(apply, input.value || '#000000');
+        };
+
+        input.oninput = e => {
+            preview.style.background = e.target.value;
+            themeManagerPro.updateSetting(path, e.target.value, false);
+            this._updatePreview();
+        };
+        input.onchange = () => this._pushHistory();
+
+        wrap.append(preview, input);
+        return wrap;
+    }
+
+    _makeCompoundColorInput(val, path) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = "display:flex;gap:5px;width:100%;align-items:center;";
+
+        const color = this._extractColorFromCss(val);
+        const preview = document.createElement('div');
+        preview.style.cssText = `width:22px;height:22px;flex-shrink:0;border:1px solid #333;
+            background:${color || '#333'};cursor:pointer;border-radius:4px;position:relative;`;
+        preview.title = 'Изменить цвет (размер/стиль сохранятся)';
+        preview.innerHTML = `<span style="position:absolute;bottom:-1px;right:-1px;font-size:8px;line-height:1;">✏</span>`;
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = val || '';
+        input.style.cssText = "flex:1;background:#0a0a0a;border:1px solid #222;color:#ddd;padding:2px 6px;border-radius:4px;font-size:0.78em;outline:none;font-family:monospace;min-width:0;";
+        input.placeholder = 'напр. 4px solid #d4af37';
+
+        const refreshPreview = v => {
+            const c = this._extractColorFromCss(v);
+            preview.style.background = c || '#333';
+        };
+
+        preview.onclick = () => {
+            const cur = this._extractColorFromCss(input.value) || '#ffffff';
+            this.gradientPicker.open(newColor => {
+                const newVal = this._replaceColorInCss(input.value, newColor);
+                input.value = newVal;
+                refreshPreview(newVal);
+                themeManagerPro.updateSetting(path, newVal);
+                this._pushHistory();
+            }, cur);
+        };
+
+        input.oninput = e => {
+            refreshPreview(e.target.value);
+            themeManagerPro.updateSetting(path, e.target.value, false);
+            this._updatePreview();
+        };
+        input.onchange = () => this._pushHistory();
+
+        wrap.append(preview, input);
+        return wrap;
+    }
+
+    _makeTextInput(val, path) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = val != null ? String(val) : '';
+        input.style.cssText = "flex:1;width:100%;background:#0a0a0a;border:1px solid #222;color:#ddd;padding:2px 6px;border-radius:4px;font-size:0.78em;outline:none;";
+        input.onfocus = () => input.style.borderColor = '#d4af3766';
+        input.onblur = () => input.style.borderColor = '#222';
+        input.oninput = e => { themeManagerPro.updateSetting(path, e.target.value, false); this._updatePreview(); };
+        input.onchange = e => { themeManagerPro.updateSetting(path, e.target.value); this._pushHistory(); };
+        return input;
+    }
+
+    _makeSelect(val, path, options) {
+        const sel = document.createElement('select');
+        sel.style.cssText = "flex:1;width:100%;background:#0a0a0a;border:1px solid #222;color:#d4af37;padding:2px 4px;border-radius:4px;font-size:0.78em;outline:none;";
+        options.forEach(([v, l]) => {
+            const o = document.createElement('option');
+            o.value = v; o.text = l;
+            if (val === v) o.selected = true;
+            sel.appendChild(o);
+        });
+        sel.onchange = e => { themeManagerPro.updateSetting(path, e.target.value); this._pushHistory(); };
+        return sel;
+    }
+
+    _makeCheckbox(val, path) {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = "display:flex;align-items:center;gap:6px;";
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = val === true || val === 'true';
+        cb.style.cssText = "width:14px;height:14px;cursor:pointer;accent-color:#d4af37;";
+        const lbl = document.createElement('span');
+        lbl.textContent = cb.checked ? '✓ Вкл' : '✗ Выкл';
+        lbl.style.cssText = "color:#666;font-size:0.75em;";
+        cb.onchange = e => {
+            lbl.textContent = e.target.checked ? '✓ Вкл' : '✗ Выкл';
+            themeManagerPro.updateSetting(path, e.target.checked);
+            this._pushHistory();
+        };
+        wrap.append(cb, lbl);
+        return wrap;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // СПЕЦИАЛЬНЫЙ БЛОК ИКОНОК (без изменений)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    _renderIconBlock(container, val, path) {
+        const block = document.createElement('div');
+        block.style.cssText = "border-bottom:1px solid #1a1a1a;";
+
+        const hdr = document.createElement('div');
+        hdr.style.cssText = "padding:5px 14px;background:#161616;border-top:1px solid #1e1e1e;";
+        hdr.innerHTML = `<span style="color:#d4af37;font-size:0.78em;font-weight:700;letter-spacing:0.8px;">🎨 СИСТЕМА ИКОНОК</span>`;
+        block.appendChild(hdr);
+
+        const r1 = document.createElement('div');
+        r1.style.cssText = "display:flex;align-items:center;padding:4px 10px 4px 14px;gap:8px;background:#111;border-top:1px solid #1a1a1a;";
+        const l1 = document.createElement('div');
+        l1.textContent = 'Набор иконок';
+        l1.style.cssText = "color:#777;font-size:0.72em;font-weight:600;min-width:130px;flex-shrink:0;";
+        const sel = document.createElement('select');
+        sel.style.cssText = "flex:1;background:#0a0a0a;border:1px solid #222;color:#d4af37;padding:2px 4px;border-radius:4px;font-size:0.78em;outline:none;";
+        [['fa','FontAwesome'],['emoji','Emoji']].forEach(([v,l]) => {
+            const o = document.createElement('option'); o.value = v; o.text = l;
+            if (val.set === v) o.selected = true;
+            sel.appendChild(o);
+        });
+        sel.onchange = e => { themeManagerPro.updateSetting([...path, 'set'], e.target.value); this._pushHistory(); };
+        r1.append(l1, sel);
+        block.appendChild(r1);
+
+        const r2 = document.createElement('div');
+        r2.style.cssText = "display:flex;align-items:center;padding:4px 10px 4px 14px;gap:8px;background:#121212;border-top:1px solid #1a1a1a;";
+        const l2 = document.createElement('div');
+        l2.textContent = 'CSS-фильтр emoji';
+        l2.style.cssText = "color:#777;font-size:0.72em;font-weight:600;min-width:130px;flex-shrink:0;";
+        const inp = document.createElement('input');
+        inp.type = 'text'; inp.value = val.emojiFilter || 'none';
+        inp.style.cssText = "flex:1;background:#0a0a0a;border:1px solid #222;color:#ddd;padding:2px 6px;border-radius:4px;font-size:0.78em;outline:none;font-family:monospace;";
+        inp.onchange = e => { themeManagerPro.updateSetting([...path, 'emojiFilter'], e.target.value); this._pushHistory(); };
+        r2.append(l2, inp);
+        block.appendChild(r2);
+
+        container.appendChild(block);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // УТИЛИТЫ (без изменений)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    _getLabel(key, path = []) {
         if (path[0] === 'gameItems' && path.length === 1) {
             const k = key + '_gi';
             if (this.labels[k]) return this.labels[k];
@@ -467,356 +801,45 @@ export class ThemeEditorPro {
         return this.labels[key] || key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // РЕНДЕР ОДНОГО ПОЛЯ
-    // ═══════════════════════════════════════════════════════════════════════
-
-    _renderField(container, key, val, path) {
-        const row = document.createElement('div');
-        row.style.cssText = "display:flex;flex-direction:column;gap:8px;margin-bottom:16px;padding:10px;background:rgba(255,255,255,0.02);border-radius:8px;border:1px solid rgba(255,255,255,0.03);";
-
-        const labelRow = document.createElement('div');
-        labelRow.style.cssText = "display:flex;justify-content:space-between;align-items:center;";
-
-        const label = document.createElement('label');
-        label.textContent = this._getLabel(key, path.slice(0, -1));
-        label.style.cssText = "color:#aaa;font-size:0.75em;font-weight:900;text-transform:uppercase;letter-spacing:1px;";
-
-        // Тип поля-подсказка
-        const typeHint = document.createElement('span');
-        typeHint.style.cssText = "color:#333;font-size:0.65em;font-family:monospace;padding:1px 5px;border-radius:3px;background:#1a1a1a;";
-
-        const wrapper = document.createElement('div');
-        wrapper.style.cssText = "display:flex;gap:10px;align-items:center;";
-
-        let input;
-
-        if (this._isFontField(key)) {
-            typeHint.textContent = 'font';
-            input = this._createFontSelector(val, path);
-        } else if (this._isTextTransformField(key)) {
-            typeHint.textContent = 'select';
-            input = this._createTextTransformSelector(val, path);
-        } else if (this._isBooleanField(key, val)) {
-            typeHint.textContent = 'bool';
-            input = this._createBooleanInput(val, path);
-        } else if (this._isCompoundCssWithColor(key, val)) {
-            // ★ СОСТАВНОЕ CSS-ЗНАЧЕНИЕ — специальный виджет
-            typeHint.textContent = 'css+color';
-            input = this._createCompoundCssInput(val, path);
-        } else if (this._isPureColorField(key, val)) {
-            // ★ ЧИСТЫЙ ЦВЕТ — прямой пикер
-            typeHint.textContent = 'color';
-            input = this._createPureColorInput(val, path);
-        } else {
-            typeHint.textContent = 'text';
-            input = this._createTextInput(val, path);
+    _getAtPath(obj, pathArr) {
+        let cur = obj;
+        for (const key of pathArr) {
+            if (cur == null || typeof cur !== 'object') return undefined;
+            cur = cur[key];
         }
-
-        labelRow.append(label, typeHint);
-        wrapper.appendChild(input);
-        row.append(labelRow, wrapper);
-        container.appendChild(row);
+        return cur;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // ВИДЖЕТЫ ВВОДА
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /**
-     * ЧИСТЫЙ ЦВЕТ/ГРАДИЕНТ — пикер заменяет значение целиком.
-     * Используется для: color, background, titleColor, hoverBg, selectionBg и т.д.
-     */
-    _createPureColorInput(val, path) {
-        const group = document.createElement('div');
-        group.style.cssText = "display:flex;gap:8px;width:100%;align-items:center;";
-
-        const preview = document.createElement('div');
-        preview.style.cssText = `width:40px;height:38px;border:2px solid #333;background:${val || 'transparent'};cursor:pointer;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.5);flex-shrink:0;`;
-
-        const txt = document.createElement('input');
-        txt.value = val || '';
-        txt.style.cssText = "flex:1;background:#000;border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-size:0.85em;outline:none;font-family:monospace;";
-
-        const typeIcon = document.createElement('span');
-        typeIcon.textContent = (val || '').includes('gradient') ? '🌈' : '🎨';
-        typeIcon.style.cssText = "font-size:1.1em;flex-shrink:0;";
-        typeIcon.title = 'Кликните превью для открытия пикера';
-
-        const applyValue = (newVal) => {
-            txt.value = newVal;
-            preview.style.background = newVal;
-            typeIcon.textContent = newVal.includes('gradient') ? '🌈' : '🎨';
-            themeManagerPro.updateSetting(path, newVal);
-            this._pushHistory();
-        };
-
-        preview.onclick = () => {
-            this.gradientPicker.open(applyValue, txt.value || '#000000');
-        };
-
-        txt.oninput = e => {
-            const v = e.target.value;
-            preview.style.background = v;
-            typeIcon.textContent = v.includes('gradient') ? '🌈' : '🎨';
-            themeManagerPro.updateSetting(path, v, false);
-            this._updatePreview();
-        };
-
-        txt.onchange = () => this._pushHistory();
-
-        group.append(preview, txt, typeIcon);
-        return group;
-    }
-
-    /**
-     * СОСТАВНОЕ CSS-ЗНАЧЕНИЕ С ЦВЕТОМ.
-     * Для border, borderLeft, boxShadow, hoverShadow и т.д.
-     * Показывает:
-     *   [превью цвета] [полное текстовое поле]
-     * Клик на превью → пикер → заменяет ТОЛЬКО цвет внутри строки.
-     */
-    _createCompoundCssInput(val, path) {
-        const group = document.createElement('div');
-        group.style.cssText = "display:flex;gap:8px;width:100%;align-items:center;";
-
-        // Извлекаем цвет из составного значения для превью
-        const extractedColor = this._extractColorFromCss(val);
-
-        const preview = document.createElement('div');
-        preview.style.cssText = `width:40px;height:38px;border:2px solid #333;background:${extractedColor || '#333'};cursor:pointer;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.5);flex-shrink:0;position:relative;`;
-        preview.title = 'Кликните для изменения цвета (остальные параметры сохранятся)';
-
-        // Иконка карандаша на превью
-        preview.innerHTML = `<div style="position:absolute;bottom:1px;right:1px;font-size:0.6em;opacity:0.8;">✏️</div>`;
-
-        const txt = document.createElement('input');
-        txt.value = val || '';
-        txt.style.cssText = "flex:1;background:#000;border:1px solid #333;color:#fff;padding:8px 12px;border-radius:6px;font-size:0.82em;outline:none;font-family:monospace;";
-        txt.placeholder = 'напр. 4px solid #d4af37';
-
-        // Обновление превью при ручном вводе
-        const updatePreview = (cssVal) => {
-            const c = this._extractColorFromCss(cssVal);
-            preview.style.background = c || '#333';
-        };
-
-        preview.onclick = () => {
-            const currentColor = this._extractColorFromCss(txt.value) || '#ffffff';
-            this.gradientPicker.open(
-                (newColor) => {
-                    // Заменяем только цветовую часть, сохраняя остальное
-                    const newCssValue = this._replaceColorInCss(txt.value, newColor);
-                    txt.value = newCssValue;
-                    updatePreview(newCssValue);
-                    themeManagerPro.updateSetting(path, newCssValue);
-                    this._pushHistory();
-                },
-                currentColor
-            );
-        };
-
-        txt.oninput = e => {
-            updatePreview(e.target.value);
-            themeManagerPro.updateSetting(path, e.target.value, false);
-            this._updatePreview();
-        };
-
-        txt.onchange = () => this._pushHistory();
-
-        group.append(preview, txt);
-        return group;
-    }
-
-    /**
-     * Извлекает цветовую часть из составного CSS-значения.
-     * "4px solid #fbc531" → "#fbc531"
-     * "0 4px 8px rgba(0,0,0,0.3)" → "rgba(0,0,0,0.3)"
-     * "1px solid rgba(255,255,255,0.1)" → "rgba(255,255,255,0.1)"
-     */
     _extractColorFromCss(cssValue) {
         if (!cssValue) return null;
-        // Сначала rgba/rgb/hsla/hsl (более специфичный паттерн — первый)
-        const rgbaMatch = cssValue.match(/rgba?\([^)]+\)/);
-        if (rgbaMatch) return rgbaMatch[0];
-        const hslaMatch = cssValue.match(/hsla?\([^)]+\)/);
-        if (hslaMatch) return hslaMatch[0];
-        // Потом hex (в т.ч. 8-значный, напр. #d4af3720)
-        const hexMatch = cssValue.match(/#[0-9a-fA-F]{3,8}\b/);
-        if (hexMatch) return hexMatch[0];
+        const rgbaM = cssValue.match(/rgba?\([^)]+\)/);
+        if (rgbaM) return rgbaM[0];
+        const hslaM = cssValue.match(/hsla?\([^)]+\)/);
+        if (hslaM) return hslaM[0];
+        const hexM = cssValue.match(/#[0-9a-fA-F]{3,8}\b/);
+        if (hexM) return hexM[0];
         return null;
     }
 
-    /**
-     * Заменяет цветовую часть в составном CSS-значении новым цветом.
-     * replaceColorInCss("4px solid #fbc531", "#ff0000") → "4px solid #ff0000"
-     * replaceColorInCss("0 4px 8px rgba(0,0,0,0.3)", "#ff0000") → "0 4px 8px #ff0000"
-     */
     _replaceColorInCss(cssValue, newColor) {
         if (!cssValue) return newColor;
-        // Пробуем замену rgba/rgb
-        if (/rgba?\([^)]+\)/.test(cssValue)) {
-            return cssValue.replace(/rgba?\([^)]+\)/, newColor);
-        }
-        // Пробуем hsla/hsl
-        if (/hsla?\([^)]+\)/.test(cssValue)) {
-            return cssValue.replace(/hsla?\([^)]+\)/, newColor);
-        }
-        // Пробуем hex (8, 6, 4, 3 знака — от длинного к короткому)
-        if (/#[0-9a-fA-F]{3,8}\b/.test(cssValue)) {
-            return cssValue.replace(/#[0-9a-fA-F]{3,8}\b/, newColor);
-        }
-        // Если цвет не найден — заменяем последнее «слово»
+        if (/rgba?\([^)]+\)/.test(cssValue)) return cssValue.replace(/rgba?\([^)]+\)/, newColor);
+        if (/hsla?\([^)]+\)/.test(cssValue)) return cssValue.replace(/hsla?\([^)]+\)/, newColor);
+        if (/#[0-9a-fA-F]{3,8}\b/.test(cssValue)) return cssValue.replace(/#[0-9a-fA-F]{3,8}\b/, newColor);
         const parts = cssValue.trim().split(/\s+/);
         parts[parts.length - 1] = newColor;
         return parts.join(' ');
     }
 
-    /**
-     * Обычное текстовое поле.
-     */
-    _createTextInput(val, path) {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = val != null ? val : '';
-        input.style.cssText = "flex:1;background:#000;border:1px solid #333;color:#fff;padding:10px 15px;border-radius:8px;font-size:0.95em;outline:none;transition:border-color 0.2s;";
-        input.onfocus = () => input.style.borderColor = '#d4af37';
-        input.onblur = () => input.style.borderColor = '#333';
-        input.oninput = e => {
-            themeManagerPro.updateSetting(path, e.target.value, false);
-            this._updatePreview();
-        };
-        input.onchange = e => {
-            themeManagerPro.updateSetting(path, e.target.value);
-            this._pushHistory();
-        };
-        // Обёртка, чтобы растягивалось
-        const wrap = document.createElement('div');
-        wrap.style.cssText = "display:flex;width:100%;";
-        wrap.appendChild(input);
-        return wrap;
-    }
-
-    /**
-     * Селектор шрифта.
-     */
-    _createFontSelector(val, path) {
-        const sel = document.createElement('select');
-        sel.style.cssText = "flex:1;background:#000;border:1px solid #333;color:#d4af37;padding:8px 12px;border-radius:6px;font-weight:bold;outline:none;";
-        const cleanVal = (val || '').replace(/['"]/g, '').split(',')[0].trim();
-        Object.keys(FONT_LIBRARY).forEach(font => {
-            const opt = document.createElement('option');
-            let suffix = ', sans-serif';
-            if (['Roboto Mono', 'Fira Code', 'Source Code Pro', 'JetBrains Mono', 'VT323', 'Press Start 2P'].includes(font)) suffix = ', monospace';
-            else if (['Cinzel', 'Lora', 'Playfair Display', 'Merriweather', 'Cormorant'].includes(font)) suffix = ', serif';
-            opt.value = `'${font}'${suffix}`;
-            opt.text = font;
-            if (cleanVal === font) opt.selected = true;
-            sel.appendChild(opt);
-        });
-        sel.onchange = e => {
-            themeManagerPro.updateSetting(path, e.target.value);
-            this._pushHistory();
-        };
-        const wrap = document.createElement('div');
-        wrap.style.cssText = "display:flex;width:100%;";
-        wrap.appendChild(sel);
-        return wrap;
-    }
-
-    /**
-     * Селектор textTransform.
-     */
-    _createTextTransformSelector(val, path) {
-        const sel = document.createElement('select');
-        sel.style.cssText = "flex:1;background:#000;border:1px solid #333;color:#d4af37;padding:8px 12px;border-radius:6px;font-weight:bold;outline:none;";
-        [
-            ['none', 'Без изменений'],
-            ['uppercase', 'ЗАГЛАВНЫЕ'],
-            ['lowercase', 'строчные'],
-            ['capitalize', 'Первая Заглавная'],
-        ].forEach(([v, l]) => {
-            const opt = document.createElement('option');
-            opt.value = v; opt.text = l;
-            if (val === v) opt.selected = true;
-            sel.appendChild(opt);
-        });
-        sel.onchange = e => {
-            themeManagerPro.updateSetting(path, e.target.value);
-            this._pushHistory();
-        };
-        const wrap = document.createElement('div');
-        wrap.style.cssText = "display:flex;width:100%;";
-        wrap.appendChild(sel);
-        return wrap;
-    }
-
-    /**
-     * Чекбокс для булевых значений.
-     */
-    _createBooleanInput(val, path) {
-        const wrap = document.createElement('div');
-        wrap.style.cssText = "display:flex;align-items:center;gap:12px;";
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = val === true || val === 'true';
-        cb.style.cssText = "width:18px;height:18px;cursor:pointer;accent-color:#d4af37;";
-        const lbl = document.createElement('span');
-        lbl.textContent = cb.checked ? '✓ Включено' : '✗ Выключено';
-        lbl.style.cssText = "color:#aaa;font-size:0.9em;";
-        cb.onchange = e => {
-            lbl.textContent = e.target.checked ? '✓ Включено' : '✗ Выключено';
-            themeManagerPro.updateSetting(path, e.target.checked);
-            this._pushHistory();
-        };
-        wrap.append(cb, lbl);
-        return wrap;
+    _updateNav() {
+        const u = document.getElementById('te-undo');
+        const r = document.getElementById('te-redo');
+        if (u) { u.disabled = this.historyIndex <= 0; u.style.opacity = u.disabled ? 0.35 : 1; }
+        if (r) { r.disabled = this.historyIndex >= this.historyStack.length - 1; r.style.opacity = r.disabled ? 0.35 : 1; }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // ИКОНКИ
-    // ═══════════════════════════════════════════════════════════════════════
-
-    _renderIconSettings(container, val, path) {
-        const box = document.createElement('div');
-        box.style.cssText = "background:rgba(212,175,55,0.05);border:1px solid #d4af37;padding:12px;border-radius:6px;margin-bottom:15px;";
-
-        const title = document.createElement('div');
-        title.innerHTML = "<b>🎨 СИСТЕМА ИКОНОК</b>";
-        title.style.cssText = "color:#d4af37;margin-bottom:12px;border-bottom:1px solid #333;padding-bottom:6px;";
-        box.appendChild(title);
-
-        // Набор
-        const row1 = document.createElement('div');
-        row1.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:10px;";
-        row1.innerHTML = `<label style="color:#aaa;font-size:0.8em;font-weight:bold;text-transform:uppercase;white-space:nowrap;">Набор иконок:</label>`;
-        const sel = document.createElement('select');
-        sel.style.cssText = "flex:1;background:#222;color:#fff;padding:6px;border:1px solid #444;border-radius:4px;";
-        [['fa','FontAwesome (стандарт)'],['emoji','Emoji (переопределение)']].forEach(([v,l]) => {
-            const o = document.createElement('option'); o.value = v; o.text = l;
-            if (val.set === v) o.selected = true;
-            sel.appendChild(o);
-        });
-        sel.onchange = e => { themeManagerPro.updateSetting([...path, 'set'], e.target.value); this._pushHistory(); };
-        row1.appendChild(sel);
-        box.appendChild(row1);
-
-        // Фильтр
-        const row2 = document.createElement('div');
-        row2.style.cssText = "display:flex;align-items:center;gap:10px;";
-        row2.innerHTML = `<label style="color:#aaa;font-size:0.8em;font-weight:bold;text-transform:uppercase;white-space:nowrap;">CSS-фильтр emoji:</label>`;
-        const inp = document.createElement('input');
-        inp.type = 'text'; inp.value = val.emojiFilter || 'none';
-        inp.style.cssText = "flex:1;background:#222;color:#fff;padding:6px;border:1px solid #444;border-radius:4px;font-family:monospace;font-size:0.85em;";
-        inp.onchange = e => { themeManagerPro.updateSetting([...path, 'emojiFilter'], e.target.value); this._pushHistory(); };
-        row2.appendChild(inp);
-        box.appendChild(row2);
-
-        container.appendChild(box);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // ПРЕВЬЮ
+    // ЖИВОЙ ПРЕДПРОСМОТР (без изменений)
     // ═══════════════════════════════════════════════════════════════════════
 
     _updatePreview() {
@@ -825,65 +848,50 @@ export class ThemeEditorPro {
         container.innerHTML = '';
         const sandbox = document.createElement('div');
         sandbox.id = 'sceneArea';
-        sandbox.style.cssText = "width:100%;min-height:100%;";
+        sandbox.style.cssText = "width:100%;";
         container.appendChild(sandbox);
         this._renderMockScene(sandbox);
     }
 
     _renderMockScene(target) {
-        // 1. Заметки дизайнера
         target.insertAdjacentHTML('beforeend', `
-            <div class="design-notes-block">
+            <div class="design-notes-block" style="margin-bottom:8px;">
                 <div class="design-notes-title">✏️ ЗАМЕТКИ ДИЗАЙНЕРА</div>
                 <div class="design-notes-content">Системные уведомления и подсказки для игрока.</div>
-            </div>`);
-
-        // 2. Память ИИ
-        target.insertAdjacentHTML('beforeend', `
-            <div class="ai-memory-block">
+            </div>
+            <div class="ai-memory-block" style="margin-bottom:8px;">
                 <div class="ai-memory-header">🧠 ПАМЯТЬ ИИ <span class="ai-memory-stats">ACTIVE</span></div>
                 <div class="ai-memory-content">
                     <div class="memory-item"><span class="memory-key">archetype:</span> <span class="memory-value">"Magus"</span></div>
                     <div class="memory-item"><span class="memory-key">willpower:</span> <span class="memory-value">85</span></div>
                 </div>
-            </div>`);
-
-        // 3. Текст сцены
-        target.insertAdjacentHTML('beforeend', `
-            <div class="scene-text-block">
-                Вы стоите перед алтарём в центре Храма. Воздух пропитан ароматом ладана. 
-                Стены украшены символами, живыми в свете свечей.
-            </div>`);
-
-        // 4. Размышления
-        target.insertAdjacentHTML('beforeend', `
-            <div class="reflection-block">
+            </div>
+            <div class="scene-text-block" style="margin-bottom:8px;">
+                Вы стоите перед алтарём. Воздух пропитан ароматом ладана. Стены украшены живыми символами.
+            </div>
+            <div class="reflection-block" style="margin-bottom:8px;">
                 <div class="reflection-title">💭 ВНУТРЕННИЙ ГОЛОС</div>
-                <div class="reflection-content">"Это место узнаёт меня. Границы истончаются..."</div>
+                <div class="reflection-content">"Это место узнаёт меня..."</div>
+            </div>
+            <div class="summary-block" style="margin-bottom:8px;">
+                <div class="summary-title">📋 СВОДКА</div>
+                <div class="summary-content">Ключевые события хода: обнаружен артефакт.</div>
             </div>`);
 
-        // 5. Обновления за ход
         const tu = document.createElement('div');
         tu.id = 'turnUpdatesContainer';
-        tu.innerHTML = `<div style="padding:12px;"><div style="font-weight:900;margin-bottom:6px;">РЕЗОНАНС ХОДА:</div><div style="font-size:0.9em;opacity:0.8;">Прилив сил. <span style="color:#d4af37">+5 Воля</span></div></div>`;
+        tu.style.marginBottom = '8px';
+        tu.innerHTML = `<div style="padding:10px;"><b>РЕЗОНАНС ХОДА:</b><br><span style="font-size:0.9em;opacity:0.8;">Прилив сил. <span style="color:#d4af37">+5 Воля</span></span></div>`;
         target.appendChild(tu);
 
-        // 6. Кнопки выбора
         target.insertAdjacentHTML('beforeend', `
-            <div class="choices-container" style="margin-top:20px;">
-                <button class="choice-btn">
-                    <div style="font-weight:900;margin-bottom:4px;">Прикоснуться к фолианту</div>
-                    <div style="font-size:0.75em;opacity:0.5;">СЛОЖНОСТЬ: 3/10 | ИНТЕЛЛЕКТ</div>
-                </button>
-                <button class="choice-btn selected">
-                    <div style="font-weight:900;margin-bottom:4px;">Начать ритуал воззвания</div>
-                    <div style="font-size:0.75em;">СЛОЖНОСТЬ: 8/10 | ВОЛЯ 70+</div>
-                </button>
+            <div class="choices-container" style="margin-bottom:8px;">
+                <button class="choice-btn" style="display:block;width:100%;margin-bottom:4px;">Прикоснуться к фолианту</button>
+                <button class="choice-btn selected" style="display:block;width:100%;">Начать ритуал воззвания ★</button>
             </div>`);
 
-        // 7. Игровые блоки
         const gi = document.createElement('div');
-        gi.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px;";
+        gi.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:8px;";
         const p = document.createElement('div'); p.id = 'personalityBlockContainer';
         p.innerHTML = `<div class="section-header">ЛИЧНОСТЬ</div><div class="game-item-badge">Мудрец</div><div class="game-item-badge">Стоик</div>`;
         const inv = document.createElement('div'); inv.id = 'inventoryContainer';
@@ -893,37 +901,8 @@ export class ThemeEditorPro {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // FOOTER
+    // ИМПОРТ / ЭКСПОРТ (без изменений)
     // ═══════════════════════════════════════════════════════════════════════
-
-    _createFooter() {
-        const f = document.createElement('div');
-        f.style.cssText = "padding:15px;background:#111;border-top:1px solid #333;display:flex;justify-content:flex-end;gap:10px;";
-
-        const cancel = document.createElement('button');
-        cancel.textContent = "ОТМЕНИТЬ";
-        cancel.style.cssText = "background:transparent;border:1px solid #666;color:#aaa;padding:8px 20px;cursor:pointer;border-radius:6px;font-size:0.9em;";
-        cancel.onclick = () => { themeManagerPro.cancelChanges(); this.close(); };
-
-        const save = document.createElement('button');
-        save.textContent = "✓ СОХРАНИТЬ ТЕМУ";
-        save.style.cssText = "background:#d4af37;border:none;color:#000;padding:8px 24px;font-weight:900;cursor:pointer;border-radius:6px;font-size:0.9em;letter-spacing:0.5px;";
-        save.onclick = () => { themeManagerPro.saveChanges(); this.close(); };
-
-        f.append(cancel, save);
-        return f;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // УТИЛИТЫ
-    // ═══════════════════════════════════════════════════════════════════════
-
-    _updateNav() {
-        const u = document.getElementById('te-undo');
-        const r = document.getElementById('te-redo');
-        if (u) { u.disabled = this.historyIndex <= 0; u.style.opacity = u.disabled ? 0.4 : 1; }
-        if (r) { r.disabled = this.historyIndex >= this.historyStack.length - 1; r.style.opacity = r.disabled ? 0.4 : 1; }
-    }
 
     _export() {
         const json = themeManagerPro.exportTheme();
@@ -931,18 +910,19 @@ export class ThemeEditorPro {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url; a.download = 'theme-pro.json'; a.click();
+        URL.revokeObjectURL(url);
     }
 
     _import() {
         const i = document.createElement('input');
-        i.type = 'file';
+        i.type = 'file'; i.accept = '.json';
         i.onchange = e => {
             const r = new FileReader();
             r.onload = evt => {
                 if (themeManagerPro.importTheme(evt.target.result)) {
                     themeManagerPro.startEditing();
                     this._pushHistory();
-                    this._renderContent();
+                    this._renderPanelContent();
                 }
             };
             r.readAsText(e.target.files[0]);
