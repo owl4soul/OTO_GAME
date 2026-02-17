@@ -29,6 +29,16 @@ export class ThemeEditorPro {
             scrollbarColor: 'Цвет ползунка', scrollbarBg: 'Фон дорожки',
             selectionColor: 'Цвет выделения', selectionBg: 'Фон выделения',
             blockMargin: 'Отступ между блоками',
+            // ДОБАВЛЕНО: поля для скроллбара
+            width: 'Толщина',
+            height: 'Высота (гориз.)',
+            trackBg: 'Фон дорожки',
+            trackBorderRadius: 'Скругление дорожки',
+            thumbBg: 'Фон ползунка',
+            thumbBorder: 'Граница ползунка',
+            thumbBorderRadius: 'Скругление ползунка',
+            thumbHoverBg: 'Фон (наведение)',
+            thumbHoverBorder: 'Граница (наведение)',
             // Typography
             headers: '📰 Заголовки', body: '📝 Основной текст',
             ui: '🎛️ UI-элементы', monospace: '⌨️ Моноширинный',
@@ -86,7 +96,8 @@ export class ThemeEditorPro {
         if (typeof value !== 'string') return false;
         const k = key.toLowerCase();
         const isCompound = ['border','borderleft','borderright','bordertop','borderbottom',
-            'hoverborder','selectedborder','boxshadow','hovershadow'].includes(k);
+            'hoverborder','selectedborder','boxshadow','hovershadow',
+            'thumbborder','thumbhoverborder'].includes(k);   // <-- ИЗМЕНЕНО: добавлены новые составные поля
         if (!isCompound) return false;
         return /#[0-9a-fA-F]{3,8}/.test(value) || /rgba?\(/.test(value) || /hsla?\(/.test(value);
     }

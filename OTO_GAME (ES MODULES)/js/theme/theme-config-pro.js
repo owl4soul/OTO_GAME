@@ -130,15 +130,24 @@ export const EMOJI_FILTERS = {
     'drop-shadow(0 0 3px rgba(0,255,255,0.8))': 'Голубое свечение'
 };
 
-// 4. ГЛОБАЛЬНЫЕ НАСТРОЙКИ
+// 4. ГЛОБАЛЬНЫЕ НАСТРОЙКИ (ИЗМЕНЕНО: добавлен объект scrollbar)
 export const GLOBAL_SETTINGS = {
     icons: {
         set: 'fa',
         emojiFilter: 'none'
     },
     layout: {
-        scrollbarColor: "#d4af37",
-        scrollbarBg: "#1a1a1a",
+        scrollbar: {
+            width: '4px',
+            height: '4px',
+            trackBg: '#0a0000',
+            trackBorderRadius: '4px',
+            thumbBg: 'linear-gradient(135deg, #4a0a0a 0%, #2a0000 100%)',
+            thumbBorder: '1px solid #1a0000',
+            thumbBorderRadius: '4px',
+            thumbHoverBg: 'linear-gradient(135deg, #6a0a0a 0%, #3a0000 100%)',
+            thumbHoverBorder: '1px solid #1a0000'
+        },
         selectionColor: "#d4af37",
         selectionBg: "rgba(212, 175, 55, 0.2)",
         blockMargin: "15px"
@@ -244,7 +253,7 @@ export const TURN_UPDATES_CONFIG = {
 // 9. ИСТОРИЯ
 export const HISTORY_CONFIG = HISTORY_VISUAL_CONFIG;
 
-// 10. БАЗОВАЯ ТЕМА
+// 10. БАЗОВАЯ ТЕМА (ИЗМЕНЕНО: используется новый layout.scrollbar)
 export const DEFAULT_THEME_CONFIG = {
     name: "Default Pro",
     description: "Стандартная профессиональная темная тема",
@@ -257,7 +266,7 @@ export const DEFAULT_THEME_CONFIG = {
     icons: ICON_MAPPINGS
 };
 
-// 11. РАСШИРЕННЫЕ ПРЕСЕТЫ
+// 11. РАСШИРЕННЫЕ ПРЕСЕТЫ (ИЗМЕНЕНО: во всех пресетах layout.scrollbar вместо старых полей)
 export const PRESET_THEMES = {
     default: {
         name: "Dark Industrial",
@@ -276,8 +285,11 @@ export const PRESET_THEMES = {
             global: {
                 icons: { set: 'fa', emojiFilter: 'hue-rotate(90deg) brightness(1.2)' },
                 layout: {
-                    scrollbarColor: "#2ecc71",
-                    scrollbarBg: "#0a1a0a",
+                    scrollbar: {
+                        trackBg: '#0a1a0a',
+                        thumbBg: '#2ecc71',
+                        thumbHoverBg: '#3edd81'
+                    },
                     selectionColor: "#2ecc71",
                     selectionBg: "rgba(46, 204, 113, 0.2)",
                     blockMargin: "15px"
@@ -417,8 +429,12 @@ export const PRESET_THEMES = {
             global: {
                 icons: { set: 'emoji', emojiFilter: 'drop-shadow(0 0 2px rgba(0,255,255,0.8))' },
                 layout: {
-                    scrollbarColor: "#00ffff",
-                    scrollbarBg: "#0a0a0a",
+                    scrollbar: {
+                        trackBg: '#0a0a0a',
+                        thumbBg: '#00ffff',
+                        thumbHoverBg: '#33ffff',
+                        thumbBorder: '1px solid #00ffff'
+                    },
                     selectionColor: "#ff00ff",
                     selectionBg: "rgba(255, 0, 255, 0.2)",
                     blockMargin: "15px"
@@ -558,8 +574,11 @@ export const PRESET_THEMES = {
             global: {
                 icons: { set: 'emoji', emojiFilter: 'sepia(50%) brightness(1.2)' },
                 layout: {
-                    scrollbarColor: "#b89b7b",
-                    scrollbarBg: "#2a241a",
+                    scrollbar: {
+                        trackBg: '#2a241a',
+                        thumbBg: '#b89b7b',
+                        thumbHoverBg: '#d4af37'
+                    },
                     selectionColor: "#d4af37",
                     selectionBg: "rgba(180, 130, 80, 0.2)",
                     blockMargin: "15px"
@@ -699,8 +718,12 @@ export const PRESET_THEMES = {
             global: {
                 icons: { set: 'fa', emojiFilter: 'brightness(0.9) contrast(1.2)' },
                 layout: {
-                    scrollbarColor: "#b22222",
-                    scrollbarBg: "#1a0a0a",
+                    scrollbar: {
+                        trackBg: '#1a0a0a',
+                        thumbBg: '#b22222',
+                        thumbHoverBg: '#ff6b6b',
+                        thumbBorder: '1px solid #b22222'
+                    },
                     selectionColor: "#ff6b6b",
                     selectionBg: "rgba(178, 34, 34, 0.3)",
                     blockMargin: "15px"
@@ -840,8 +863,12 @@ export const PRESET_THEMES = {
             global: {
                 icons: { set: 'emoji', emojiFilter: 'none' },
                 layout: {
-                    scrollbarColor: "#ff9f00",
-                    scrollbarBg: "#1a103a",
+                    scrollbar: {
+                        trackBg: '#1a103a',
+                        thumbBg: '#ff9f00',
+                        thumbHoverBg: '#ffbf40',
+                        thumbBorder: '2px solid #c0ff80'
+                    },
                     selectionColor: "#ffeb3b",
                     selectionBg: "rgba(255, 159, 0, 0.3)",
                     blockMargin: "15px"
@@ -981,8 +1008,12 @@ export const PRESET_THEMES = {
             global: {
                 icons: { set: 'emoji', emojiFilter: 'hue-rotate(180deg) brightness(1.1)' },
                 layout: {
-                    scrollbarColor: "#00b8d4",
-                    scrollbarBg: "#001a2a",
+                    scrollbar: {
+                        trackBg: '#001a2a',
+                        thumbBg: '#00b8d4',
+                        thumbHoverBg: '#33ccff',
+                        thumbBorder: '1px solid #00b8d4'
+                    },
                     selectionColor: "#00e5ff",
                     selectionBg: "rgba(0, 184, 212, 0.2)",
                     blockMargin: "15px"

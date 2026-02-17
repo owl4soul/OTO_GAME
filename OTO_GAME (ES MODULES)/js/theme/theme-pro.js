@@ -201,17 +201,38 @@ class ThemeManagerPro {
         });
         css += '\n';
 
-        // 2. Глобальные настройки
+        // 2. Глобальные настройки (ИЗМЕНЕНО: использование scrollbar объекта)
         const g = theme.global || {
             icons: { set: 'fa', emojiFilter: 'none' },
             layout: {
-                scrollbarColor: "#d4af37",
-                scrollbarBg: "#1a1a1a",
+                scrollbar: {
+                    width: '4px',
+                    height: '4px',
+                    trackBg: '#0a0000',
+                    trackBorderRadius: '4px',
+                    thumbBg: 'linear-gradient(135deg, #4a0a0a 0%, #2a0000 100%)',
+                    thumbBorder: '1px solid #1a0000',
+                    thumbBorderRadius: '4px',
+                    thumbHoverBg: 'linear-gradient(135deg, #6a0a0a 0%, #3a0000 100%)',
+                    thumbHoverBorder: '1px solid #1a0000'
+                },
                 selectionColor: "#d4af37",
                 selectionBg: "rgba(212, 175, 55, 0.2)",
                 blockMargin: "15px"
             }
         };
+
+        const sb = g.layout.scrollbar || {};
+        const width = sb.width || '4px';
+        const height = sb.height || '4px';
+        const trackBg = sb.trackBg || '#0a0000';
+        const trackBorderRadius = sb.trackBorderRadius || '4px';
+        const thumbBg = sb.thumbBg || '#d4af37';
+        const thumbBorder = sb.thumbBorder || '1px solid #1a0000';
+        const thumbBorderRadius = sb.thumbBorderRadius || '4px';
+        const thumbHoverBg = sb.thumbHoverBg || thumbBg;
+        const thumbHoverBorder = sb.thumbHoverBorder || thumbBorder;
+
         css += `/* === GLOBAL === */\n`;
         css += `
 ::selection {
@@ -220,21 +241,29 @@ class ThemeManagerPro {
 }
 
 ::-webkit-scrollbar {
-    width: 8px !important;
-    height: 8px !important;
+    width: ${width} !important;
+    height: ${height} !important;
 }
 
 ::-webkit-scrollbar-track {
-    background: ${g.layout.scrollbarBg} !important;
+    background: ${trackBg} !important;
+    border-radius: ${trackBorderRadius} !important;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: ${g.layout.scrollbarColor} !important;
-    border-radius: 4px !important;
+    background: ${thumbBg} !important;
+    border: ${thumbBorder} !important;
+    border-radius: ${thumbBorderRadius} !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: ${thumbHoverBg} !important;
+    border: ${thumbHoverBorder} !important;
 }
 
 body {
-    scrollbar-color: ${g.layout.scrollbarColor} ${g.layout.scrollbarBg} !important;
+    scrollbar-color: ${thumbBg} ${trackBg} !important;
+    scrollbar-width: thin !important;
 }
 \n`;
 
