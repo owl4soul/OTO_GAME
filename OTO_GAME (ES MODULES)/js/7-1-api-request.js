@@ -388,7 +388,7 @@ ${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сг
     ],
     model: state.settings.model,
     temperature: 0.9,
-    max_tokens: 10000
+    max_tokens: 100000
   };
 }
 
