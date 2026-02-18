@@ -227,7 +227,7 @@ export class ThemeEditorPro {
             const deltaY = clientY - startY;
             const newTopHeight = startTopHeight + deltaY;
             const containerHeight = splitter.parentElement.clientHeight;
-            if (newTopHeight < 100 || newTopHeight > containerHeight - 150) return;
+            if (newTopHeight < 100 || newTopHeight > containerHeight - 50) return;
             topPanel.style.flex = `0 0 ${newTopHeight}px`;
         };
 
@@ -269,64 +269,70 @@ export class ThemeEditorPro {
 
     // ── Верхняя панель: заголовок + пресет + undo/redo/export/import ─────────
     // (изменено: инлайн-стили заменены на классы)
-    _createTopBar() {
-        const bar = document.createElement('div');
-        bar.className = 'te-topbar';
+_createTopBar() {
+    const bar = document.createElement('div');
+    bar.className = 'te-topbar';
 
-        const left = document.createElement('div');
-        left.className = 'te-topbar-left';
-        left.innerHTML = `<span class="te-logo">THEME EDITOR PRO</span>`;
+    const left = document.createElement('div');
+    left.className = 'te-topbar-left';
+    left.innerHTML = `<span class="te-logo">THEME EDITOR PRO</span>`;
 
-        const presetLbl = document.createElement('span');
-        presetLbl.className = 'te-preset-label';
-        presetLbl.textContent = 'ПРЕСЕТ:';
-        left.appendChild(presetLbl);
+    const presetSel = document.createElement('select');
+    presetSel.className = 'te-preset-select';
+    themeManagerPro.getPresets().forEach(p => {
+        const o = document.createElement('option');
+        o.value = p.key; o.text = p.name;
+        if (p.isCurrent) o.selected = true;
+        presetSel.appendChild(o);
+    });
+    presetSel.onchange = e => {
+        if (confirm('Загрузить пресет? Несохранённые изменения будут потеряны.')) {
+            themeManagerPro.loadPreset(e.target.value);
+            themeManagerPro.startEditing();
+            this._pushHistory();
+            this._renderPanelContent();
+        }
+    };
+    left.appendChild(presetSel);
+    bar.appendChild(left);
 
-        const presetSel = document.createElement('select');
-        presetSel.className = 'te-preset-select';
-        themeManagerPro.getPresets().forEach(p => {
-            const o = document.createElement('option');
-            o.value = p.key; o.text = p.name;
-            if (p.isCurrent) o.selected = true;
-            presetSel.appendChild(o);
-        });
-        presetSel.onchange = e => {
-            if (confirm('Загрузить пресет? Несохранённые изменения будут потеряны.')) {
-                themeManagerPro.loadPreset(e.target.value);
-                themeManagerPro.startEditing();
-                this._pushHistory();
-                this._renderPanelContent();
-            }
-        };
-        left.appendChild(presetSel);
-        bar.appendChild(left);
+    const right = document.createElement('div');
+    right.className = 'te-topbar-right';
 
-        const right = document.createElement('div');
-        right.className = 'te-topbar-right';
+    // ИЗМЕНЕНО: теперь только иконки и title
+    const undo = document.createElement('button');
+    undo.id = 'te-undo';
+    undo.innerHTML = '↩';                // иконка
+    undo.className = 'te-btn-icon';
+    undo.title = 'Отменить (Ctrl+Z)';    // подсказка
+    undo.onclick = () => this._undo();
 
-        const undo = document.createElement('button');
-        undo.id = 'te-undo'; undo.textContent = '↩ Назад'; undo.className = 'te-btn-icon';
-        undo.onclick = () => this._undo();
+    const redo = document.createElement('button');
+    redo.id = 'te-redo';
+    redo.innerHTML = '↪';                // иконка
+    redo.className = 'te-btn-icon';
+    redo.title = 'Повторить (Ctrl+Y)';
+    redo.onclick = () => this._redo();
 
-        const redo = document.createElement('button');
-        redo.id = 'te-redo'; redo.textContent = '↪ Вперёд'; redo.className = 'te-btn-icon';
-        redo.onclick = () => this._redo();
+    const sep = document.createElement('span');
+    sep.className = 'te-separator';
 
-        const sep = document.createElement('span');
-        sep.className = 'te-separator';
+    const imp = document.createElement('button');
+    imp.innerHTML = '📥';                // можно оставить текст или тоже иконку
+    imp.className = 'te-btn-icon';
+    imp.title = 'Импорт';
+    imp.onclick = () => this._import();
 
-        const imp = document.createElement('button');
-        imp.textContent = '📥 Импорт'; imp.className = 'te-btn-icon';
-        imp.onclick = () => this._import();
+    const exp = document.createElement('button');
+    exp.innerHTML = '📤';
+    exp.className = 'te-btn-icon';
+    exp.title = 'Экспорт';
+    exp.onclick = () => this._export();
 
-        const exp = document.createElement('button');
-        exp.textContent = '📤 Экспорт'; exp.className = 'te-btn-icon';
-        exp.onclick = () => this._export();
-
-        right.append(undo, redo, sep, imp, exp);
-        bar.appendChild(right);
-        return bar;
-    }
+    right.append(undo, redo, sep, imp, exp);
+    bar.appendChild(right);
+    return bar;
+}
 
     // ── Строка вкладок ───────────────────────────────────────────────────────
     // (изменено: инлайн-стили заменены на классы)
