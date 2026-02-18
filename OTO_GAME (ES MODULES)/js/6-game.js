@@ -1,4 +1,7 @@
 // Модуль 6: GAME - Игровая логика (ФОРМАТ 4.1 - УНИФИЦИРОВАННАЯ СИСТЕМА GAME_ITEM)
+// ИСПРАВЛЕННАЯ ВЕРСИЯ: полный отказ от инлайн-стилей в пользу классов для настройки через тему.
+// Все HTML-блоки, создаваемые для отображения изменений за ход, теперь используют классы,
+// что позволяет теме полностью контролировать внешний вид.
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -10,7 +13,7 @@ import { API } from './7-api-facade.js';
 import { Saveload } from './9-saveload.js';
 import { UI } from './ui.js';
 import { OperationsServiceInstance, OPERATIONS } from './operations-service.js';
-import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js'; // ДОБАВЛЕНО
+import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js';
 
 const dom = DOM.getDOM();
 
@@ -24,8 +27,6 @@ let pendingD10 = null;
 // Операции над game_item
 const OPERATION_TYPES = OPERATIONS;
 
-
-
 /**
  * Создает HTML для отображения информации об организациях героя (для сцены)
  */
@@ -37,8 +38,8 @@ function createOrganizationsHTML() {
     }
     
     let html = `
-    <div class="organizations-container" style="margin: 15px 0; padding: 12px; background: rgba(20, 0, 0, 0.8); border: 1px solid #8b0000; border-radius: 6px;">
-      <div style="color: #d4af37; font-weight: bold; font-size: 0.95em; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #d4af37; display: flex; align-items: center; gap: 8px;">
+    <div class="organizations-container">
+      <div class="organizations-header">
         <i class="fas fa-users"></i>
         <span>ВАШИ ОРГАНИЗАЦИИ</span>
       </div>
@@ -46,24 +47,20 @@ function createOrganizationsHTML() {
     
     organizations.forEach(org => {
         html += `
-      <div style="margin-bottom: 10px; padding: 8px; background: rgba(0, 0, 0, 0.4); border-radius: 4px; border-left: 4px solid #8b0000;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-          <span style="color: #fbc531; font-weight: bold; font-size: 0.9em;">${org.id.toUpperCase()}</span>
-          <span style="color: #d4af37; font-weight: bold; background: rgba(139, 0, 0, 0.3); padding: 2px 8px; border-radius: 12px; font-size: 0.85em;">
-            ${org.rankName}
-          </span>
+      <div class="organization-item">
+        <div class="organization-header">
+          <span class="organization-id">${org.id.toUpperCase()}</span>
+          <span class="organization-rank">${org.rankName}</span>
         </div>
-        <div style="color: #ccc; font-size: 0.85em; margin-bottom: 5px;">
-          ${org.description}
-        </div>
+        <div class="organization-description">${org.description}</div>
     `;
         
         // Показываем иерархию организации
         if (org.hierarchy && org.hierarchy.description) {
             html += `
-        <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #444;">
-          <div style="color: #888; font-size: 0.8em; margin-bottom: 5px;">Путь в организации:</div>
-          <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+        <div class="organization-hierarchy">
+          <div class="hierarchy-title">Путь в организации:</div>
+          <div class="hierarchy-ranks">
       `;
             
             org.hierarchy.description.forEach(rank => {
@@ -71,9 +68,7 @@ function createOrganizationsHTML() {
                 const isPast = rank.lvl < org.rank;
                 
                 html += `
-          <div style="padding: 3px 6px; background: ${isCurrent ? '#8b0000' : isPast ? '#444' : '#222'}; 
-                color: ${isCurrent ? '#fff' : isPast ? '#ccc' : '#666'}; 
-                border-radius: 3px; font-size: 0.75em; border: 1px solid ${isCurrent ? '#d4af37' : '#333'};">
+          <div class="hierarchy-rank ${isCurrent ? 'current' : isPast ? 'past' : 'future'}">
             ${rank.rank}
           </div>
         `;
@@ -96,8 +91,8 @@ function createTurnUpdatesHTML(actionResults, events, turnNumber) {
     
     // ВСЕГДА возвращаем блок, даже если нет изменений
     let html = `
-        <div class="turn-updates-container" style="margin: 8px 0; padding: 10px; background: rgba(10, 0, 0, 0.7); border: 1px solid #4a0a0a; border-radius: 4px; font-size: 0.85em;">
-            <div style="color: #d4af37; font-weight: bold; font-size: 0.9em; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #4a0a0a; letter-spacing: 0.5px;">
+        <div class="turn-updates-container">
+            <div class="turn-updates-header">
                 <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД ${turnNumber}
             </div>
     `;
@@ -108,7 +103,7 @@ function createTurnUpdatesHTML(actionResults, events, turnNumber) {
     
     if (!hasActions && !hasEvents) {
         html += `
-            <div style="color: #888; font-style: italic; font-size: 0.85em; text-align: center; padding: 12px;">
+            <div class="turn-updates-empty">
                 Нет изменений за этот ход
             </div>
         `;
@@ -116,43 +111,39 @@ function createTurnUpdatesHTML(actionResults, events, turnNumber) {
         return html;
     }
     
-    let hasActionOperations = false;
     if (actionResults && actionResults.length > 0) {
         html += `
-            <div style="margin-bottom: 12px;">
-                <div style="color: #4cd137; font-size: 0.85em; font-weight: bold; margin-bottom: 6px; padding-bottom: 2px; border-bottom: 1px solid #4cd13740;">
+            <div class="turn-updates-actions-section">
+                <div class="turn-updates-subheader actions-subheader">
                     <i class="fas fa-user-check"></i> По результатам действий
                 </div>
-                <div style="font-size: 0.82em;">
+                <div class="turn-updates-list actions-list">
         `;
         
         actionResults.forEach((result, idx) => {
             const operations = result.operations || [];
             if (operations.length === 0 && !result.reason) return;
             
-            hasActionOperations = true;
-            const successColor = result.success ? '#4cd137' : '#e84118';
-            const successIcon = result.success ? 'fa-check-circle' : 'fa-times-circle';
-            const partialText = result.partial ? ' (частично)' : '';
+            const statusClass = result.success 
+                ? (result.partial ? 'action-partial' : 'action-success')
+                : 'action-failure';
             
             html += `
-                <div style="margin-bottom: 8px; padding: 6px; background: rgba(0, 0, 0, 0.3); border-radius: 3px; border-left: 3px solid ${successColor};">
-                    <div style="color: ${successColor}; font-weight: bold; font-size: 0.85em; display: flex; align-items: center; gap: 5px;">
-                        <i class="fas ${successIcon}" style="font-size: 0.9em;"></i> 
-                        <span>Действие ${idx + 1}${partialText}</span>
+                <div class="turn-update-action ${statusClass}">
+                    <div class="action-header">
+                        <i class="fas ${result.success ? 'fa-check-circle' : 'fa-times-circle'}"></i>
+                        <span class="action-title">Действие ${idx + 1}${result.partial ? ' (частично)' : ''}</span>
                     </div>
-                    <div style="color: #ddd; font-size: 0.85em; margin-top: 4px; padding: 3px; background: rgba(0,0,0,0.2); border-radius: 2px;">
-                        ${result.choice_text || 'Действие'}
-                    </div>
-                    <div style="color: #aaa; font-size: 0.75em; margin-top: 3px; display: flex; gap: 8px;">
-                        <span>🎯 Сложность: ${result.difficulty}</span>
-                        <span>🎲 d10: ${result.d10}</span>
-                        <span>${result.reason || ''}</span>
+                    <div class="action-text">${result.choice_text || 'Действие'}</div>
+                    <div class="action-details">
+                        <span class="action-difficulty">🎯 Сложность: ${result.difficulty}</span>
+                        <span class="action-d10">🎲 d10: ${result.d10}</span>
+                        <span class="action-reason">${result.reason || ''}</span>
                     </div>
             `;
             
             if (operations.length > 0) {
-                html += `<div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid ${successColor}40;">`;
+                html += `<div class="action-operations">`;
                 operations.forEach(op => {
                     html += createCompactOperationHTML(op, 'action');
                 });
@@ -162,27 +153,21 @@ function createTurnUpdatesHTML(actionResults, events, turnNumber) {
             html += `</div>`;
         });
         
-        if (!hasActionOperations) {
-            html += `<div style="color: #888; font-style: italic; font-size: 0.85em; text-align: center; padding: 8px;">Нет операций от действий</div>`;
-        }
-        
         html += `</div></div>`;
     }
     
-    let hasEventOperations = false;
     if (events && events.length > 0) {
         html += `
-            <div style="margin-bottom: 8px;">
-                <div style="color: #00a8ff; font-size: 0.85em; font-weight: bold; margin-bottom: 6px; padding-bottom: 2px; border-bottom: 1px solid #00a8ff40;">
+            <div class="turn-updates-events-section">
+                <div class="turn-updates-subheader events-subheader">
                     <i class="fas fa-bolt"></i> По результатам событий
                 </div>
-                <div style="font-size: 0.82em;">
+                <div class="turn-updates-list events-list">
         `;
         
         events.forEach((event, idx) => {
             const effects = event.effects || [];
             
-            hasEventOperations = true;
             const eventTypeIcons = {
                 discovery: 'fa-search',
                 character_interaction: 'fa-comments',
@@ -195,21 +180,17 @@ function createTurnUpdatesHTML(actionResults, events, turnNumber) {
             const eventDesc = event.description || 'Событие';
             
             html += `
-                <div style="margin-bottom: 8px; padding: 6px; background: rgba(0, 170, 255, 0.08); border-radius: 3px; border-left: 3px solid #00a8ff;">
-                    <div style="color: #00a8ff; font-weight: bold; font-size: 0.85em; display: flex; align-items: center; gap: 5px;">
-                        <i class="fas ${icon}" style="font-size: 0.9em;"></i>
-                        <span>${event.type ? event.type.toUpperCase() : 'СОБЫТИЕ'}</span>
+                <div class="turn-update-event">
+                    <div class="event-header">
+                        <i class="fas ${icon}"></i>
+                        <span class="event-type">${event.type ? event.type.toUpperCase() : 'СОБЫТИЕ'}</span>
                     </div>
-                    <div style="color: #ddd; font-size: 0.85em; margin-top: 4px; padding: 3px; background: rgba(0,170,255,0.05); border-radius: 2px;">
-                        ${eventDesc}
-                    </div>
-                    <div style="color: #aaa; font-size: 0.75em; margin-top: 3px;">
-                        <i class="fas fa-info-circle"></i> ${event.reason || 'Нет описания'}
-                    </div>
+                    <div class="event-description">${eventDesc}</div>
+                    <div class="event-reason">${event.reason || 'Нет описания'}</div>
             `;
             
             if (effects.length > 0) {
-                html += `<div style="margin-top: 6px; padding-left: 8px; border-left: 2px solid #00a8ff40;">`;
+                html += `<div class="event-effects">`;
                 effects.forEach(effect => {
                     html += createCompactOperationHTML(effect, 'event');
                 });
@@ -218,10 +199,6 @@ function createTurnUpdatesHTML(actionResults, events, turnNumber) {
             
             html += `</div>`;
         });
-        
-        if (!hasEventOperations) {
-            html += `<div style="color: #888; font-style: italic; font-size: 0.85em; text-align: center; padding: 8px;">Нет операций от событий</div>`;
-        }
         
         html += `</div></div>`;
     }
@@ -237,13 +214,13 @@ function createCompactOperationHTML(operation, source) {
         return '';
     }
     
-    const sourceColor = source === 'action' ? '#4cd137' : '#00a8ff';
+    const sourceClass = source === 'action' ? 'action-operation' : 'event-operation';
     const [type, name] = operation.id.split(':');
     
     let displayName = name;
-    let icon = 'fas fa-question';
+    let icon = 'fa-question';
+    let colorClass = 'operation-default';
     let valueDisplay = '';
-    let color = '#ccc';
     
     // Используем value для отображения, а не id
     let displayValue = operation.value || '';
@@ -256,63 +233,63 @@ function createCompactOperationHTML(operation, source) {
     
     switch (type) {
         case 'stat':
-            icon = 'fas fa-chart-line';
-            color = '#fbc531';
+            icon = 'fa-chart-line';
+            colorClass = 'operation-stat';
             displayName = Utils.getRussianStatName(name);
             break;
         case 'skill':
-            icon = 'fas fa-scroll';
-            color = '#9c88ff';
+            icon = 'fa-scroll';
+            colorClass = 'operation-skill';
             displayName = displayValue || name;
             break;
         case 'inventory':
-            icon = 'fas fa-box-open';
-            color = '#d4af37';
+            icon = 'fa-box-open';
+            colorClass = 'operation-inventory';
             displayName = displayValue || name;
             break;
         case 'relations':
-            icon = 'fas fa-handshake';
-            color = '#ff9ff3';
+            icon = 'fa-handshake';
+            colorClass = 'operation-relations';
             displayName = name.replace(/_/g, ' ');
             break;
         case 'bless':
-            icon = 'fas fa-star';
-            color = '#fbc531';
+            icon = 'fa-star';
+            colorClass = 'operation-bless';
             displayName = displayValue || name;
             break;
         case 'curse':
-            icon = 'fas fa-skull-crossbones';
-            color = '#c23616';
+            icon = 'fa-skull-crossbones';
+            colorClass = 'operation-curse';
             displayName = displayValue || name;
             break;
         case 'buff':
-            icon = 'fas fa-arrow-up';
-            color = '#4cd137';
+            icon = 'fa-arrow-up';
+            colorClass = 'operation-buff';
             displayName = Utils.getRussianStatName(name);
             break;
         case 'debuff':
-            icon = 'fas fa-arrow-down';
-            color = '#e84118';
+            icon = 'fa-arrow-down';
+            colorClass = 'operation-debuff';
             displayName = Utils.getRussianStatName(name);
             break;
         case 'progress':
-            icon = 'fas fa-chart-line';
-            color = '#00a8ff';
+            icon = 'fa-chart-line';
+            colorClass = 'operation-progress';
             displayName = displayValue || name;
             break;
         case 'personality':
-            icon = 'fas fa-brain';
-            color = '#1dd1a1';
+            icon = 'fa-brain';
+            colorClass = 'operation-personality';
             displayName = displayValue || name;
             break;
         case 'initiation_degree':
-            icon = 'fas fa-graduation-cap';
-            color = '#ff9ff3';
+            icon = 'fa-graduation-cap';
+            colorClass = 'operation-degree';
             displayName = displayValue || name;
             break;
         case 'organization_rank':
-            icon = 'fas fa-users';
-            color = '#d4af37';
+            icon = 'fa-users';
+            colorClass = 'operation-organization';
             displayName = displayValue || name || 'Организация';
             break;
     }
@@ -322,33 +299,33 @@ function createCompactOperationHTML(operation, source) {
         case OPERATIONS.ADD:
             if (type === 'buff' || type === 'debuff') {
                 const sign = operation.value > 0 ? '+' : '';
-                valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                valueDisplay = `<span class="operation-value ${sign > 0 ? 'positive' : 'negative'}">
                     ${displayName} ${sign}${operation.value} ${displayDuration}
                 </span>`;
             } else {
                 const addedValue = displayValue ? `: "${displayValue}"` : '';
-                valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+                valueDisplay = `<span class="operation-add">
                     Добавить ${displayName}${addedValue}
                 </span>`;
             }
             break;
             
         case OPERATIONS.REMOVE:
-            valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+            valueDisplay = `<span class="operation-remove">
                 Удалить: ${displayName}
             </span>`;
             break;
             
         case OPERATIONS.SET:
-            valueDisplay = `<span style="color: ${sourceColor}; font-weight: bold;">
+            valueDisplay = `<span class="operation-set">
                 Установить ${displayName}: "${String(displayValue).substring(0, 50)}"
             </span>`;
             break;
             
         case OPERATIONS.MODIFY:
             const sign = operation.delta > 0 ? '+' : '';
-            const deltaColor = operation.delta > 0 ? '#4cd137' : '#e84118';
-            valueDisplay = `<span style="color: ${deltaColor}; font-weight: bold;">
+            const deltaClass = operation.delta > 0 ? 'positive' : 'negative';
+            valueDisplay = `<span class="operation-modify ${deltaClass}">
                 ${displayName} ${sign}${operation.delta}
             </span>`;
             break;
@@ -357,9 +334,7 @@ function createCompactOperationHTML(operation, source) {
     // Добавляем описание, если есть
     let description = '';
     if (operation.description) {
-        description = `<div style="color: #aaa; font-size: 0.75em; margin-top: 2px; font-style: italic;">
-            ${operation.description}
-        </div>`;
+        description = `<div class="operation-description">${operation.description}</div>`;
     }
     
     // ОТОБРАЖЕНИЕ ВСЕХ НЕПУСТЫХ ПОЛЕЙ
@@ -370,18 +345,16 @@ function createCompactOperationHTML(operation, source) {
         if (!ignoredKeys.includes(key)) {
             const val = operation[key];
             if (val !== undefined && val !== null && val !== '') {
-                extraFields += `<div style="color: #666; font-size: 0.7em;">${key}: ${val}</div>`;
+                extraFields += `<div class="operation-extra">${key}: ${val}</div>`;
             }
         }
     });
     
     return `
-        <div style="display: flex; align-items: flex-start; padding: 5px 0; border-bottom: 1px dotted #333;">
-            <div style="margin-right: 8px; margin-top: 2px;">
-                <i class="${icon}" style="color: ${color}; font-size: 0.8em;"></i>
-            </div>
-            <div style="flex: 1; min-width: 0;">
-                <div style="color: #ddd; font-size: 0.85em; margin-bottom: 1px; word-wrap: break-word;">
+        <div class="operation-item ${sourceClass} ${colorClass}">
+            <div class="operation-icon"><i class="fas ${icon}"></i></div>
+            <div class="operation-content">
+                <div class="operation-main">
                     ${valueDisplay}
                 </div>
                 ${description}
@@ -1034,7 +1007,7 @@ function processTurn(data) {
         });
     }
     
-    // 8. Создаем блок изменений за ход
+    // 8. Создаем блок изменений за ход (используем обновленную функцию)
     const updatesHTML = createTurnUpdatesHTML(pendingActionResults, data.events || [], completedTurn);
     
     // 9. Увеличиваем счетчик ходов

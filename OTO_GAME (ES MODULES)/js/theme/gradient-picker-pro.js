@@ -2,14 +2,16 @@
 'use strict';
 
 /**
- * ЕДИНЫЙ КОМПОНЕНТ ВЫБОРА ЦВЕТА И ГРАДИЕНТА
+ * ПРОФЕССИОНАЛЬНЫЙ КОМПОНЕНТ ВЫБОРА ЦВЕТА И ГРАДИЕНТА
  *
  * Режимы:
- * - 1 точка -> полноценный ColorPicker (сплошной цвет)
- * - >=2 точек -> GradientPicker с настройками градиента
+ * - solid  : полноценный ColorPicker (сплошной цвет)
+ * - gradient: GradientPicker с произвольным числом остановок,
+ *             каждая из которых редактируется через тот же мощный ColorPicker.
  *
- * При редактировании любой точки открывается тот же интерфейс выбора цвета
- * (история, палитры, альфа, пипетка) с предварительным просмотром.
+ * Публичный API:
+ *   open(callback, initialValue) – открывает модальное окно редактора.
+ *     callback получает строку CSS (rgba() или gradient(...)).
  */
 
 export class GradientPicker {
@@ -26,7 +28,7 @@ export class GradientPicker {
         this.radialShape = 'circle';
         this.radialPosition = 'center';
 
-        // Цветовые остановки (точки)
+        // Цветовые остановки
         this.colorStops = [
             { color: '#2a220a', alpha: 1, position: 0 },
             { color: '#1a1805', alpha: 1, position: 100 }
@@ -70,7 +72,7 @@ export class GradientPicker {
     }
 
     // -------------------------------------------------------------------------
-    // Парсинг входных данных
+    // Парсинг входных данных (без изменений)
     // -------------------------------------------------------------------------
     _parseInitialValue(value) {
         if (!value) {
@@ -79,7 +81,6 @@ export class GradientPicker {
             return;
         }
 
-        // Определяем градиент по наличию "gradient" в строке
         if (value.includes('gradient')) {
             this.mode = 'gradient';
             this._parseGradient(value);
@@ -106,12 +107,10 @@ export class GradientPicker {
         const radialMatch = gradient.match(/radial-gradient\((.*),\s*(.+)\)/);
         if (radialMatch) {
             this.gradientType = 'radial';
-            // можно парсить форму и позицию, но для простоты оставим по умолчанию
             this._parseColorStops(radialMatch[2]);
             return;
         }
 
-        // Если не удалось распознать, считаем сплошным цветом
         this.mode = 'solid';
         const parsed = this._parseColor(gradient);
         this.colorStops = [{ color: parsed.hex, alpha: parsed.alpha, position: 50 }];
@@ -142,7 +141,6 @@ export class GradientPicker {
             }
         });
 
-        // Если позиции не указаны, распределяем равномерно
         if (this.colorStops.length > 0 && this.colorStops[0].position === 0 &&
             this.colorStops[this.colorStops.length - 1].position === 0) {
             this.colorStops.forEach((stop, i) => {
@@ -182,7 +180,7 @@ export class GradientPicker {
     }
 
     // -------------------------------------------------------------------------
-    // Генерация результата
+    // Генерация результата (без изменений)
     // -------------------------------------------------------------------------
     generateCSS() {
         if (this.mode === 'solid' || this.colorStops.length === 1) {
@@ -204,7 +202,7 @@ export class GradientPicker {
     }
 
     // -------------------------------------------------------------------------
-    // Цветовые конверсии
+    // Цветовые конверсии (без изменений)
     // -------------------------------------------------------------------------
     _hexToRgb(hex) {
         const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -264,7 +262,7 @@ export class GradientPicker {
     }
 
     // -------------------------------------------------------------------------
-    // История
+    // История (без изменений)
     // -------------------------------------------------------------------------
     _loadHistory() {
         try {
@@ -290,7 +288,7 @@ export class GradientPicker {
     }
 
     // -------------------------------------------------------------------------
-    // Главный рендер
+    // Главный рендер (верхняя оболочка)
     // -------------------------------------------------------------------------
     _renderMain() {
         const overlay = document.createElement('div');
@@ -321,7 +319,7 @@ export class GradientPicker {
             </div>
             <!-- Предпросмотр -->
             <div id="preview" style="height:100px; margin:20px; border-radius:8px; border:2px solid #333;"></div>
-            <!-- Контент будет динамически заполняться методами _renderSolid или _renderGradient -->
+            <!-- Контент будет динамически заполняться -->
             <div id="content-area"></div>
             <!-- Кнопки -->
             <div style="display:flex; gap:10px; padding:20px; border-top:1px solid #333;">
@@ -334,7 +332,6 @@ export class GradientPicker {
         document.body.appendChild(overlay);
         this.modal = overlay;
 
-        // Обработчики кнопок
         document.getElementById('mode-solid').onclick = () => this._switchToSolid();
         document.getElementById('mode-gradient').onclick = () => this._switchToGradient();
         document.getElementById('cancel-btn').onclick = () => this.modal.remove();
@@ -346,7 +343,6 @@ export class GradientPicker {
         };
         this.modal.onclick = (e) => { if (e.target === this.modal) this.modal.remove(); };
 
-        // Инициализация согласно текущему режиму
         this._updateModeUI();
         this._renderContent();
         this._updatePreview();
@@ -355,16 +351,11 @@ export class GradientPicker {
     _renderContent() {
         const area = document.getElementById('content-area');
         if (!area) return;
+        area.innerHTML = ''; // очищаем
         if (this.mode === 'solid') {
-            area.innerHTML = this._getSolidHTML();
-            this._initSolidEvents();
-            this._updateSolidUI();
+            this._renderSolidContent(area);
         } else {
-            area.innerHTML = this._getGradientHTML();
-            this._initGradientEvents();
-            this._updateGradientUI();
-            this._renderStops();
-            this._renderStopEditor();
+            this._renderGradientContent(area);
         }
     }
 
@@ -385,12 +376,191 @@ export class GradientPicker {
         if (preview) preview.style.background = this.generateCSS();
     }
 
+    // =========================================================================
+    // УНИВЕРСАЛЬНЫЙ КОМПОНЕНТ ВЫБОРА ЦВЕТА
+    // =========================================================================
+    /**
+     * Создаёт интерфейс выбора цвета (S/L‑область, ползунки, поля ввода,
+     * палитры, историю) внутри указанного контейнера.
+     * Все изменения применяются к объекту colorState (поля .hex, .alpha).
+     * @param {HTMLElement} container - куда вставить интерфейс
+     * @param {Object} colorState - объект вида { hex: '#rrggbb', alpha: 1 }
+     * @param {Function} onChange - вызывается после каждого изменения (для обновления предпросмотра)
+     */
+    _createColorPickerUI(container, colorState, onChange) {
+        container.innerHTML = ''; // очистка
+
+        // ---- Построение HTML ----
+        const html = `
+            <div style="margin-bottom:20px;">
+                <div id="picker-area" style="
+                    width:100%; height:200px; border-radius:8px; position:relative;
+                    cursor:crosshair; border:2px solid #444;
+                    background: linear-gradient(to right, white, hsl(0,100%,50%)),
+                                linear-gradient(to top, black, transparent);
+                ">
+                    <div id="picker-cursor" style="
+                        position:absolute; width:16px; height:16px; border:2px solid white;
+                        border-radius:50%; box-shadow:0 0 0 1px black;
+                        transform:translate(-50%,-50%); pointer-events:none;
+                    "></div>
+                </div>
+            </div>
+            <div style="margin-bottom:15px;">
+                <label style="color:#aaa;">Оттенок (Hue): <span id="picker-hue-display">0</span>°</label>
+                <input type="range" id="picker-hue-slider" min="0" max="360" value="0" style="width:100%; accent-color:#d4af37;">
+            </div>
+            <div style="margin-bottom:15px;">
+                <label style="color:#aaa;">Прозрачность: <span id="picker-alpha-display">100</span>%</label>
+                <input type="range" id="picker-alpha-slider" min="0" max="100" value="100" style="width:100%; accent-color:#d4af37;">
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
+                <div><label style="color:#888;">HEX</label><input type="text" id="picker-hex-input" style="width:100%; background:#2a2a2a; border:1px solid #444; color:#fff; padding:6px; border-radius:3px; font-family:monospace;"></div>
+                <div><label style="color:#888;">RGBA</label><input type="text" id="picker-rgba-input" style="width:100%; background:#2a2a2a; border:1px solid #444; color:#fff; padding:6px; border-radius:3px; font-family:monospace;"></div>
+            </div>
+            <div id="picker-palettes"></div>
+            <div id="picker-history"></div>
+        `;
+
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+        container.appendChild(wrapper);
+
+        // ---- Ссылки на DOM - элементы ----
+        const area = document.getElementById('picker-area');
+        const cursor = document.getElementById('picker-cursor');
+        const hueSlider = document.getElementById('picker-hue-slider');
+        const alphaSlider = document.getElementById('picker-alpha-slider');
+        const hueDisplay = document.getElementById('picker-hue-display');
+        const alphaDisplay = document.getElementById('picker-alpha-display');
+        const hexInput = document.getElementById('picker-hex-input');
+        const rgbaInput = document.getElementById('picker-rgba-input');
+        const palettesDiv = document.getElementById('picker-palettes');
+        const historyDiv = document.getElementById('picker-history');
+
+        // ---- Вспомогательная функция обновления UI по текущему colorState ----
+        const updateUI = () => {
+            const rgb = this._hexToRgb(colorState.hex);
+            const [h, s, l] = this._rgbToHsl(rgb.r, rgb.g, rgb.b);
+
+            // Курсор
+            cursor.style.left = s + '%';
+            cursor.style.top = (100 - l) + '%';
+
+            // Фон области (оттенок)
+            area.style.background = `linear-gradient(to right, white, hsl(${h},100%,50%)), linear-gradient(to top, black, transparent)`;
+
+            // Слайдеры и дисплеи
+            hueSlider.value = h;
+            hueDisplay.textContent = h;
+            alphaSlider.value = Math.round(colorState.alpha * 100);
+            alphaDisplay.textContent = Math.round(colorState.alpha * 100);
+
+            // Поля ввода
+            const hexWithAlpha = colorState.hex + (colorState.alpha < 1 ? Math.round(colorState.alpha * 255).toString(16).padStart(2, '0') : '');
+            hexInput.value = hexWithAlpha;
+            rgbaInput.value = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${colorState.alpha})`;
+        };
+
+        // ---- Функция, вызываемая при любом изменении цвета ----
+        const handleChange = () => {
+            updateUI();
+            if (onChange) onChange(colorState);
+        };
+
+        // ---- Обработчики ----
+        // 1. Область S/L
+        const onAreaMove = (clientX, clientY) => {
+            const rect = area.getBoundingClientRect();
+            let x = clientX - rect.left;
+            let y = clientY - rect.top;
+            x = Math.max(0, Math.min(rect.width, x));
+            y = Math.max(0, Math.min(rect.height, y));
+            const s = (x / rect.width) * 100;
+            const l = 100 - (y / rect.height) * 100;
+
+            const [h] = this._rgbToHsl(
+                this._hexToRgb(colorState.hex).r,
+                this._hexToRgb(colorState.hex).g,
+                this._hexToRgb(colorState.hex).b
+            );
+            const rgb = this._hslToRgb(h, s, l);
+            colorState.hex = this._rgbToHex(rgb[0], rgb[1], rgb[2]);
+            // alpha не меняется
+            handleChange();
+        };
+
+        area.addEventListener('mousedown', (e) => {
+            onAreaMove(e.clientX, e.clientY);
+            const onMouseMove = (e) => onAreaMove(e.clientX, e.clientY);
+            const onMouseUp = () => {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+            };
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+        });
+
+        // 2. Ползунок оттенка
+        hueSlider.addEventListener('input', (e) => {
+            const h = parseInt(e.target.value);
+            const [ , s, l] = this._rgbToHsl(
+                this._hexToRgb(colorState.hex).r,
+                this._hexToRgb(colorState.hex).g,
+                this._hexToRgb(colorState.hex).b
+            );
+            const rgb = this._hslToRgb(h, s, l);
+            colorState.hex = this._rgbToHex(rgb[0], rgb[1], rgb[2]);
+            handleChange();
+        });
+
+        // 3. Ползунок прозрачности
+        alphaSlider.addEventListener('input', (e) => {
+            colorState.alpha = parseInt(e.target.value) / 100;
+            handleChange();
+        });
+
+        // 4. Поле HEX
+        hexInput.addEventListener('change', (e) => {
+            const parsed = this._parseColor(e.target.value);
+            colorState.hex = parsed.hex;
+            colorState.alpha = parsed.alpha;
+            handleChange();
+        });
+
+        // 5. Поле RGBA
+        rgbaInput.addEventListener('change', (e) => {
+            const parsed = this._parseColor(e.target.value);
+            colorState.hex = parsed.hex;
+            colorState.alpha = parsed.alpha;
+            handleChange();
+        });
+
+        // 6. Палитры
+        this._renderPalettes(palettesDiv, (colorStr) => {
+            const parsed = this._parseColor(colorStr);
+            colorState.hex = parsed.hex;
+            colorState.alpha = parsed.alpha;
+            handleChange();
+        });
+
+        // 7. История
+        this._renderHistory(historyDiv, (colorStr) => {
+            const parsed = this._parseColor(colorStr);
+            colorState.hex = parsed.hex;
+            colorState.alpha = parsed.alpha;
+            handleChange();
+        });
+
+        // Первоначальное обновление
+        updateUI();
+    }
+
     // -------------------------------------------------------------------------
-    // РЕЖИМ SOLID (полноценный пикер)
+    // РЕЖИМ SOLID (использует универсальный UI)
     // -------------------------------------------------------------------------
     _switchToSolid() {
         this.mode = 'solid';
-        // При переходе из градиента оставляем только одну точку (текущую выбранную или первую)
         const stop = this.colorStops[this.selectedStopIndex] || this.colorStops[0];
         this.colorStops = [{ color: stop.color, alpha: stop.alpha, position: 50 }];
         this.selectedStopIndex = 0;
@@ -399,175 +569,11 @@ export class GradientPicker {
         this._updatePreview();
     }
 
-    _getSolidHTML() {
-        return `
-            <div style="padding:0 20px 20px 20px;">
-                <!-- Область выбора S/L -->
-                <div style="margin-bottom:20px;">
-                    <div id="solid-area" style="
-                        width:100%; height:200px; border-radius:8px; position:relative;
-                        cursor:crosshair; border:2px solid #444;
-                        background: linear-gradient(to right, white, hsl(0,100%,50%)),
-                                    linear-gradient(to top, black, transparent);
-                    ">
-                        <div id="solid-cursor" style="
-                            position:absolute; width:16px; height:16px; border:2px solid white;
-                            border-radius:50%; box-shadow:0 0 0 1px black;
-                            transform:translate(-50%,-50%); pointer-events:none;
-                        "></div>
-                    </div>
-                </div>
-                <!-- Hue -->
-                <div style="margin-bottom:15px;">
-                    <label style="color:#aaa;">Оттенок (Hue): <span id="hue-display">0</span>°</label>
-                    <input type="range" id="hue-slider" min="0" max="360" value="0" style="width:100%; accent-color:#d4af37;">
-                </div>
-                <!-- Alpha -->
-                <div style="margin-bottom:15px;">
-                    <label style="color:#aaa;">Прозрачность: <span id="alpha-display">100</span>%</label>
-                    <input type="range" id="alpha-slider" min="0" max="100" value="100" style="width:100%; accent-color:#d4af37;">
-                </div>
-                <!-- Поля HEX/RGBA -->
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
-                    <div><label style="color:#888;">HEX</label><input type="text" id="hex-input" style="width:100%; background:#2a2a2a; border:1px solid #444; color:#fff; padding:6px; border-radius:3px; font-family:monospace;"></div>
-                    <div><label style="color:#888;">RGBA</label><input type="text" id="rgba-input" style="width:100%; background:#2a2a2a; border:1px solid #444; color:#fff; padding:6px; border-radius:3px; font-family:monospace;"></div>
-                </div>
-                <!-- Палитры и история -->
-                <div id="solid-palettes"></div>
-                <div id="solid-history"></div>
-            </div>
-        `;
-    }
-
-    _initSolidEvents() {
-        const area = document.getElementById('solid-area');
-        if (!area) return;
-
-        // Обновление цвета из области
-        const onMove = (e) => {
-            const rect = area.getBoundingClientRect();
-            let x = e.clientX - rect.left;
-            let y = e.clientY - rect.top;
-            x = Math.max(0, Math.min(rect.width, x));
-            y = Math.max(0, Math.min(rect.height, y));
-            const s = (x / rect.width) * 100;
-            const l = 100 - (y / rect.height) * 100;
-            // Преобразуем в HSL и обновляем точку
-            const [h, , ] = [this._getHueFromStop(), 0, 0]; // текущий оттенок
-            const rgb = this._hslToRgb(h, s, l);
-            const hex = this._rgbToHex(rgb[0], rgb[1], rgb[2]);
-            this.colorStops[0].color = hex;
-            this._updateSolidUI();
-            this._updatePreview();
-        };
-
-        area.onmousedown = (e) => {
-            onMove(e);
-            const onMouseMove = (e) => onMove(e);
-            const onMouseUp = () => {
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
-            };
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-        };
-
-        // Hue слайдер
-        const hueSlider = document.getElementById('hue-slider');
-        hueSlider.oninput = (e) => {
-            const h = parseInt(e.target.value);
-            const stop = this.colorStops[0];
-            const rgb = this._hslToRgb(h, this._getSaturationFromStop(), this._getLightnessFromStop());
-            stop.color = this._rgbToHex(rgb[0], rgb[1], rgb[2]);
-            this._updateSolidUI();
-            this._updatePreview();
-        };
-
-        // Alpha слайдер
-        const alphaSlider = document.getElementById('alpha-slider');
-        alphaSlider.oninput = (e) => {
-            this.colorStops[0].alpha = parseInt(e.target.value) / 100;
-            this._updateSolidUI();
-            this._updatePreview();
-        };
-
-        // Поля ввода
-        document.getElementById('hex-input').onchange = (e) => {
-            const parsed = this._parseColor(e.target.value);
-            this.colorStops[0].color = parsed.hex;
-            this.colorStops[0].alpha = parsed.alpha;
-            this._updateSolidUI();
-            this._updatePreview();
-        };
-        document.getElementById('rgba-input').onchange = (e) => {
-            const parsed = this._parseColor(e.target.value);
-            this.colorStops[0].color = parsed.hex;
-            this.colorStops[0].alpha = parsed.alpha;
-            this._updateSolidUI();
-            this._updatePreview();
-        };
-
-        // Палитры и история заполняются отдельно
-        this._renderPalettes('solid-palettes', (color) => {
-            const parsed = this._parseColor(color);
-            this.colorStops[0].color = parsed.hex;
-            this.colorStops[0].alpha = parsed.alpha;
-            this._updateSolidUI();
+    _renderSolidContent(container) {
+        // Просто встраиваем универсальный пикер, привязанный к this.colorStops[0]
+        this._createColorPickerUI(container, this.colorStops[0], () => {
             this._updatePreview();
         });
-        this._renderHistory('solid-history', (color) => {
-            const parsed = this._parseColor(color);
-            this.colorStops[0].color = parsed.hex;
-            this.colorStops[0].alpha = parsed.alpha;
-            this._updateSolidUI();
-            this._updatePreview();
-        });
-    }
-
-    _getHueFromStop() {
-        const rgb = this._hexToRgb(this.colorStops[0].color);
-        return this._rgbToHsl(rgb.r, rgb.g, rgb.b)[0];
-    }
-    _getSaturationFromStop() {
-        const rgb = this._hexToRgb(this.colorStops[0].color);
-        return this._rgbToHsl(rgb.r, rgb.g, rgb.b)[1];
-    }
-    _getLightnessFromStop() {
-        const rgb = this._hexToRgb(this.colorStops[0].color);
-        return this._rgbToHsl(rgb.r, rgb.g, rgb.b)[2];
-    }
-
-    _updateSolidUI() {
-        const stop = this.colorStops[0];
-        const rgb = this._hexToRgb(stop.color);
-        const [h, s, l] = this._rgbToHsl(rgb.r, rgb.g, rgb.b);
-
-        // Позиция курсора
-        const cursor = document.getElementById('solid-cursor');
-        if (cursor) {
-            cursor.style.left = s + '%';
-            cursor.style.top = (100 - l) + '%';
-        }
-
-        // Цвет области (фон оттенка)
-        const area = document.getElementById('solid-area');
-        if (area) {
-            area.style.background = `linear-gradient(to right, white, hsl(${h},100%,50%)), linear-gradient(to top, black, transparent)`;
-        }
-
-        // Слайдеры
-        const hueSlider = document.getElementById('hue-slider');
-        if (hueSlider) hueSlider.value = h;
-        document.getElementById('hue-display').textContent = h;
-
-        const alphaSlider = document.getElementById('alpha-slider');
-        if (alphaSlider) alphaSlider.value = stop.alpha * 100;
-        document.getElementById('alpha-display').textContent = Math.round(stop.alpha * 100);
-
-        // Поля ввода
-        const hex = stop.color + (stop.alpha < 1 ? Math.round(stop.alpha * 255).toString(16).padStart(2, '0') : '');
-        document.getElementById('hex-input').value = hex;
-        document.getElementById('rgba-input').value = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${stop.alpha})`;
     }
 
     // -------------------------------------------------------------------------
@@ -575,7 +581,6 @@ export class GradientPicker {
     // -------------------------------------------------------------------------
     _switchToGradient() {
         this.mode = 'gradient';
-        // Если сейчас только одна точка, создаём вторую
         if (this.colorStops.length === 1) {
             const stop = this.colorStops[0];
             this.colorStops = [
@@ -589,8 +594,8 @@ export class GradientPicker {
         this._updatePreview();
     }
 
-    _getGradientHTML() {
-        return `
+    _renderGradientContent(container) {
+        const html = `
             <div style="padding:0 20px 20px 20px;">
                 <!-- Тип -->
                 <div style="margin-bottom:15px;">
@@ -640,10 +645,15 @@ export class GradientPicker {
                 </div>
             </div>
         `;
+        container.innerHTML = html;
+
+        this._initGradientEvents();
+        this._updateGradientUI();
+        this._renderStops();
+        this._renderStopEditor();
     }
 
     _initGradientEvents() {
-        // Тип
         document.getElementById('type-linear').onclick = () => {
             this.gradientType = 'linear';
             this._updateGradientUI();
@@ -655,21 +665,21 @@ export class GradientPicker {
             this._updatePreview();
         };
 
-        // Угол
         const angleSlider = document.getElementById('grad-angle');
         const angleNum = document.getElementById('grad-angle-num');
-        angleSlider.oninput = () => {
-            this.angle = parseInt(angleSlider.value);
-            angleNum.value = this.angle;
-            this._updatePreview();
-        };
-        angleNum.oninput = () => {
-            this.angle = parseInt(angleNum.value);
-            angleSlider.value = this.angle;
-            this._updatePreview();
-        };
+        if (angleSlider) {
+            angleSlider.oninput = () => {
+                this.angle = parseInt(angleSlider.value);
+                angleNum.value = this.angle;
+                this._updatePreview();
+            };
+            angleNum.oninput = () => {
+                this.angle = parseInt(angleNum.value);
+                angleSlider.value = this.angle;
+                this._updatePreview();
+            };
+        }
 
-        // Радиальные параметры
         document.getElementById('shape-circle').onclick = () => {
             this.radialShape = 'circle';
             this._updateRadialShapeUI();
@@ -680,12 +690,14 @@ export class GradientPicker {
             this._updateRadialShapeUI();
             this._updatePreview();
         };
-        document.getElementById('radial-position').onchange = (e) => {
-            this.radialPosition = e.target.value;
-            this._updatePreview();
-        };
+        const posSelect = document.getElementById('radial-position');
+        if (posSelect) {
+            posSelect.onchange = (e) => {
+                this.radialPosition = e.target.value;
+                this._updatePreview();
+            };
+        }
 
-        // Добавить остановку
         document.getElementById('add-stop-btn').onclick = () => this._addColorStop();
     }
 
@@ -721,7 +733,7 @@ export class GradientPicker {
         }
     }
 
-    // Рендер остановок
+    // Рендер остановок (без изменений, кроме вызова _openColorPicker)
     _renderStops() {
         const container = document.getElementById('stops-container');
         if (!container || this.mode !== 'gradient') return;
@@ -746,6 +758,17 @@ export class GradientPicker {
             el.onmousedown = (e) => this._startDragStop(e, index);
             container.appendChild(el);
         });
+
+        // Обновляем фон полосы градиента
+        const bar = document.getElementById('gradient-bar');
+        if (bar) {
+            const sorted = [...this.colorStops].sort((a,b) => a.position - b.position);
+            const stopsStr = sorted.map(s => {
+                const rgb = this._hexToRgb(s.color);
+                return `rgba(${rgb.r},${rgb.g},${rgb.b},${s.alpha}) ${s.position}%`;
+            }).join(', ');
+            bar.style.background = `linear-gradient(to right, ${stopsStr})`;
+        }
     }
 
     _startDragStop(e, index) {
@@ -807,7 +830,7 @@ export class GradientPicker {
         `;
 
         document.getElementById('pick-stop-color').onclick = () => {
-            this._openColorPickerForStop(this.selectedStopIndex);
+            this._openColorPicker(stop); // ← теперь используем универсальный метод
         };
 
         const alphaSlider = document.getElementById('stop-alpha');
@@ -883,14 +906,18 @@ export class GradientPicker {
     }
 
     // -------------------------------------------------------------------------
-    // ОБЩИЙ ПИКЕР ДЛЯ РЕДАКТИРОВАНИЯ ЛЮБОЙ ТОЧКИ
-    // (переиспользует логику solid-режима)
+    // УНИВЕРСАЛЬНЫЙ МЕТОД ОТКРЫТИЯ МОДАЛЬНОГО ПИКЕРА ДЛЯ ТОЧКИ
     // -------------------------------------------------------------------------
-    _openColorPickerForStop(index) {
-        const stop = this.colorStops[index];
+    /**
+     * Открывает полноценный модальный ColorPicker для редактирования остановки.
+     * После выбора цвета обновляет остановку и добавляет цвет в историю.
+     * @param {Object} stop - объект остановки { color, alpha }
+     */
+    _openColorPicker(stop) {
         const initialColor = this._getCurrentRGBA(stop);
+        const parsed = this._parseColor(initialColor);
+        const tempColor = { hex: parsed.hex, alpha: parsed.alpha };
 
-        // Создаём временный модальный пикер (аналогично solid-режиму)
         const overlay = document.createElement('div');
         overlay.style.cssText = `
             position: fixed; top:0; left:0; width:100%; height:100%;
@@ -901,57 +928,29 @@ export class GradientPicker {
         const container = document.createElement('div');
         container.style.cssText = `
             background:#1a1a1a; border:2px solid #d4af37; border-radius:8px;
-            width:400px; padding:20px;
+            width:450px; max-width:90%; padding:20px;
         `;
         container.innerHTML = `
             <h4 style="color:#d4af37; margin-top:0;">Выберите цвет</h4>
-            <div id="picker-placeholder"></div>
+            <div id="color-picker-placeholder"></div>
             <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:20px;">
-                <button id="picker-cancel" style="background:transparent; border:1px solid #666; color:#aaa; padding:8px 16px; border-radius:4px; cursor:pointer;">Отмена</button>
-                <button id="picker-ok" style="background:#d4af37; border:none; color:#000; padding:8px 16px; border-radius:4px; cursor:pointer;">OK</button>
+                <button id="color-picker-cancel" style="background:transparent; border:1px solid #666; color:#aaa; padding:8px 16px; border-radius:4px; cursor:pointer;">Отмена</button>
+                <button id="color-picker-ok" style="background:#d4af37; border:none; color:#000; padding:8px 16px; border-radius:4px; cursor:pointer;">OK</button>
             </div>
         `;
         overlay.appendChild(container);
         document.body.appendChild(overlay);
 
-        // Временные данные для пикера
-        const tempStop = { color: stop.color, alpha: stop.alpha };
-        const updateUI = () => {
-            const rgb = this._hexToRgb(tempStop.color);
-            const [h,s,l] = this._rgbToHsl(rgb.r, rgb.g, rgb.b);
-            // Здесь можно было бы отрендерить полноценный интерфейс, но для краткости используем простые поля
-            const html = `
-                <div style="margin-bottom:10px;">
-                    <div style="background:rgba(${rgb.r},${rgb.g},${rgb.b},${tempStop.alpha}); height:50px; border-radius:4px; border:1px solid #444;"></div>
-                </div>
-                <div style="margin-bottom:10px;">
-                    <label style="color:#aaa;">HEX</label>
-                    <input type="text" id="picker-hex" value="${tempStop.color}" style="width:100%; background:#2a2a2a; border:1px solid #444; color:#fff; padding:6px; border-radius:3px;">
-                </div>
-                <div>
-                    <label style="color:#aaa;">Alpha</label>
-                    <input type="range" id="picker-alpha" min="0" max="1" step="0.01" value="${tempStop.alpha}" style="width:100%;">
-                </div>
-            `;
-            document.getElementById('picker-placeholder').innerHTML = html;
+        const placeholder = document.getElementById('color-picker-placeholder');
+        this._createColorPickerUI(placeholder, tempColor, () => {
+            // live preview внутри модального окна (можно обновлять что-то, но не обязательно)
+        });
 
-            document.getElementById('picker-hex').onchange = (e) => {
-                const parsed = this._parseColor(e.target.value);
-                tempStop.color = parsed.hex;
-                tempStop.alpha = parsed.alpha;
-                updateUI();
-            };
-            document.getElementById('picker-alpha').oninput = (e) => {
-                tempStop.alpha = parseFloat(e.target.value);
-                updateUI();
-            };
-        };
-        updateUI();
-
-        overlay.querySelector('#picker-cancel').onclick = () => overlay.remove();
-        overlay.querySelector('#picker-ok').onclick = () => {
-            stop.color = tempStop.color;
-            stop.alpha = tempStop.alpha;
+        overlay.querySelector('#color-picker-cancel').onclick = () => overlay.remove();
+        overlay.querySelector('#color-picker-ok').onclick = () => {
+            stop.color = tempColor.hex;
+            stop.alpha = tempColor.alpha;
+            this._addToHistory(this._getCurrentRGBA(stop)); // добавляем выбранный цвет в историю
             this._renderStops();
             this._renderStopEditor();
             this._updatePreview();
@@ -963,8 +962,7 @@ export class GradientPicker {
     // -------------------------------------------------------------------------
     // Палитры и история (общие)
     // -------------------------------------------------------------------------
-    _renderPalettes(containerId, onClick) {
-        const container = document.getElementById(containerId);
+    _renderPalettes(container, onClick) {
         if (!container) return;
         let html = '<label style="color:#aaa; display:block; margin:15px 0 8px;"><i class="fas fa-swatchbook"></i> Палитры</label>';
         for (const [name, colors] of Object.entries(this.palettes)) {
@@ -982,8 +980,7 @@ export class GradientPicker {
         });
     }
 
-    _renderHistory(containerId, onClick) {
-        const container = document.getElementById(containerId);
+    _renderHistory(container, onClick) {
         if (!container || this.history.length === 0) return;
         let html = '<label style="color:#aaa; display:block; margin:15px 0 8px;"><i class="fas fa-history"></i> Недавние</label>';
         html += '<div style="display:flex; flex-wrap:wrap; gap:4px;">';
@@ -1000,4 +997,5 @@ export class GradientPicker {
     }
 }
 
-export { GradientPicker as GradientPickerPro }
+// Для совместимости с существующим кодом, экспортируем под обоими именами
+export { GradientPicker as GradientPickerPro };

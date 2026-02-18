@@ -1,3 +1,4 @@
+// Файл: theme-config-pro.js (ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ)
 'use strict';
 
 /**
@@ -150,7 +151,7 @@ export const GLOBAL_SETTINGS = {
         },
         selectionColor: "#d4af37",
         selectionBg: "rgba(212, 175, 55, 0.2)",
-        blockMargin: "15px"
+        blockMargin: "5px"
     }
 };
 
@@ -158,25 +159,25 @@ export const GLOBAL_SETTINGS = {
 export const TYPOGRAPHY_CONFIG = {
     headers: {
         fontFamily: "'Unbounded', sans-serif",
-        fontWeight: "700",
+        fontWeight: "500",
         letterSpacing: "1px",
         textTransform: "uppercase"
     },
     body: {
         fontFamily: "'Nunito Sans', sans-serif",
-        fontWeight: "400",
-        fontSize: "16px",
+        fontWeight: "300",
+        fontSize: "14px",
         lineHeight: "1.6"
     },
     ui: {
         fontFamily: "'Exo 2', sans-serif",
-        fontWeight: "600",
+        fontWeight: "400",
         fontSize: "14px",
         letterSpacing: "0.5px"
     },
     monospace: {
         fontFamily: "'Roboto Mono', monospace",
-        fontSize: "13px"
+        fontSize: "14px"
     }
 };
 
@@ -227,14 +228,14 @@ export const GAME_ITEMS_CONFIG = {
     details: createGameItemConfig("#00cec9", "#0a2a2a", "#051a1a")
 };
 
-// 8. ОБНОВЛЕНИЯ ЗА ХОД
+// 8. ОБНОВЛЕНИЯ ЗА ХОД — РАСШИРЕННАЯ КОНФИГУРАЦИЯ
 export const TURN_UPDATES_CONFIG = {
     container: {
         background: "rgba(10, 0, 0, 0.8)",
         border: "1px solid #4a0a0a",
         borderRadius: "4px",
-        padding: "10px",
-        marginBottom: "15px"
+        padding: "5px",
+        marginBottom: "5px"
     },
     header: {
         color: "#d4af37",
@@ -243,17 +244,49 @@ export const TURN_UPDATES_CONFIG = {
         fontFamily: "'Unbounded', sans-serif",
         textTransform: "uppercase"
     },
-    content: {
-        color: "#cccccc",
-        fontSize: "0.85em",
-        fontFamily: "'Nunito Sans', sans-serif"
+    // НАСТРОЙКИ ДЛЯ СООБЩЕНИЙ ОТ ДЕЙСТВИЙ ИГРОКА
+    action: {
+        background: "rgba(76, 209, 55, 0.05)",
+        border: "1px solid #4cd137",
+        color: "#4cd137",
+        fontFamily: "'Nunito Sans', sans-serif",
+        fontSize: "0.9em",
+        padding: "4px 8px",
+        borderRadius: "4px",
+        marginBottom: "4px",
+        success: {
+            background: "rgba(76, 209, 55, 0.15)",
+            border: "1px solid #4cd137",
+            color: "#4cd137"
+        },
+        failure: {
+            background: "rgba(232, 65, 24, 0.15)",
+            border: "1px solid #e84118",
+            color: "#e84118"
+        },
+        partial: {
+            background: "rgba(251, 197, 49, 0.15)",
+            border: "1px solid #fbc531",
+            color: "#fbc531"
+        }
+    },
+    // НАСТРОЙКИ ДЛЯ СОБЫТИЙ (нейтральные, окружение)
+    event: {
+        background: "rgba(100, 100, 100, 0.1)",
+        border: "1px solid #aaa",
+        color: "#ccc",
+        fontFamily: "'Nunito Sans', sans-serif",
+        fontSize: "0.9em",
+        padding: "4px 8px",
+        borderRadius: "4px",
+        marginBottom: "4px"
     }
 };
 
 // 9. ИСТОРИЯ
 export const HISTORY_CONFIG = HISTORY_VISUAL_CONFIG;
 
-// 10. БАЗОВАЯ ТЕМА (ИЗМЕНЕНО: используется новый layout.scrollbar)
+// 10. БАЗОВАЯ ТЕМА (Industrial Gothic) — ОБНОВЛЕНА С НОВЫМИ ПОЛЯМИ
 export const DEFAULT_THEME_CONFIG = {
     name: "Default Pro",
     description: "Стандартная профессиональная темная тема",
@@ -266,451 +299,272 @@ export const DEFAULT_THEME_CONFIG = {
     icons: ICON_MAPPINGS
 };
 
-// 11. РАСШИРЕННЫЕ ПРЕСЕТЫ (ИЗМЕНЕНО: во всех пресетах layout.scrollbar вместо старых полей)
+// 11. РАСШИРЕННЫЕ ПРЕСЕТЫ (ПОЛНОСТЬЮ ПЕРЕРАБОТАНЫ С УЧЁТОМ action/event)
 export const PRESET_THEMES = {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 1. Industrial Gothic (дефолтная) – НЕ ТРОГАЕМ
+    // ═══════════════════════════════════════════════════════════════════════════
     default: {
-        name: "Dark Industrial",
-        description: "Оригинальная темная тема с золотыми акцентами",
+        name: "Industrial Gothic",
+        description: "Оригинальная тёмная тема с золотыми акцентами (по умолчанию)",
         preview: "linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%)",
         config: DEFAULT_THEME_CONFIG
     },
-    
-    forest: {
-        name: "Elven Forest",
-        description: "Глубокий тёмный лес с изумрудными акцентами",
-        preview: "linear-gradient(135deg, #0a1f0a 0%, #1a2a1a 100%)",
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 2. OldPaper – состаренная бумага, рукописные шрифты
+    // ═══════════════════════════════════════════════════════════════════════════
+    oldPaper: {
+        name: "Old Paper",
+        description: "Тёмно-коричневая состаренная бумага, рукописные шрифты (Caveat, кириллица), идеальная контрастность и гармония",
+        preview: "linear-gradient(135deg, #2b1e0f 0%, #3c2e1f 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
-            name: "Elven Forest",
+            name: "Old Paper",
             global: {
-                icons: { set: 'fa', emojiFilter: 'hue-rotate(90deg) brightness(1.2)' },
+                icons: { set: 'fa', emojiFilter: 'sepia(50%) brightness(1.2)' },
                 layout: {
                     scrollbar: {
-                        trackBg: '#0a1a0a',
-                        thumbBg: '#2ecc71',
-                        thumbHoverBg: '#3edd81'
-                    },
-                    selectionColor: "#2ecc71",
-                    selectionBg: "rgba(46, 204, 113, 0.2)",
-                    blockMargin: "15px"
-                }
-            },
-            typography: {
-                headers: { fontFamily: "'Cinzel', serif", fontWeight: "700", letterSpacing: "2px", textTransform: "uppercase" },
-                body: { fontFamily: "'Lora', serif", fontWeight: "400", fontSize: "16px", lineHeight: "1.7", color: "#d0e0d0" },
-                ui: { fontFamily: "'Lora', serif", fontWeight: "600", fontSize: "14px", letterSpacing: "0.5px" },
-                monospace: { fontFamily: "'Fira Code', monospace", fontSize: "13px" }
-            },
-            scene: {
-                ...DEFAULT_THEME_CONFIG.scene,
-                textBlock: {
-                    background: "rgba(10, 25, 10, 0.9)",
-                    border: "2px solid #2ecc71",
-                    borderRadius: "12px",
-                    padding: "18px",
-                    color: "#e0f0e0",
-                    fontFamily: "'Lora', serif",
-                    fontSize: "1.05em",
-                    boxShadow: "0 4px 12px rgba(46, 204, 113, 0.3)"
-                },
-                aiMemory: {
-                    background: "rgba(46, 204, 113, 0.1)",
-                    borderLeft: "4px solid #2ecc71",
-                    borderRadius: "8px",
-                    padding: "12px",
-                    titleColor: "#2ecc71",
-                    contentColor: "#c0e0c0",
-                    keyColor: "#2ecc71",
-                    valueColor: "#e0f0e0"
-                },
-                choices: {
-                    containerMargin: "20px 0 0 0",
-                    btn: {
-                        background: "linear-gradient(180deg, #1a2a1a 0%, #0a1a0a 100%)",
-                        border: "2px solid #2ecc71",
-                        color: "#e0f0e0",
-                        borderRadius: "10px",
-                        padding: "14px 18px",
-                        fontFamily: "'Cinzel', serif",
-                        fontSize: "1em",
-                        hoverBg: "linear-gradient(180deg, #2a4d2f 0%, #1a2f1a 100%)",
-                        hoverBorder: "#3edd81",
-                        selectedBg: "rgba(46, 204, 113, 0.3)",
-                        selectedBorder: "#3edd81",
-                        selectedColor: "#ffffff",
-                        marginBottom: "10px"
-                    }
-                },
-                designNotes: {
-                    ...DEFAULT_THEME_CONFIG.scene.designNotes,
-                    background: "rgba(46,204,113,0.08)",
-                    borderLeft: "4px solid #2ecc71",
-                    titleColor: "#2ecc71",
-                    contentColor: "#d0e0d0"
-                },
-                summary: {
-                    ...DEFAULT_THEME_CONFIG.scene.summary,
-                    background: "rgba(46,204,113,0.07)",
-                    borderLeft: "4px solid #2ecc71",
-                    titleColor: "#2ecc71",
-                    contentColor: "#d0e0d0"
-                },
-                reflection: {
-                    ...DEFAULT_THEME_CONFIG.scene.reflection,
-                    background: "rgba(46,204,113,0.08)",
-                    borderLeft: "4px solid #2ecc71",
-                    titleColor: "#2ecc71",
-                    contentColor: "#d0e0d0"
-                },
-                personality: {
-                    ...DEFAULT_THEME_CONFIG.scene.personality,
-                    background: "rgba(46,204,113,0.08)",
-                    borderLeft: "4px solid #2ecc71",
-                    titleColor: "#2ecc71",
-                    contentColor: "#d0e0d0"
-                },
-                typology: {
-                    ...DEFAULT_THEME_CONFIG.scene.typology,
-                    background: "rgba(46,204,113,0.08)",
-                    borderLeft: "4px solid #2ecc71",
-                    titleColor: "#2ecc71",
-                    contentColor: "#d0e0d0"
-                },
-                additionalField: {
-                    ...DEFAULT_THEME_CONFIG.scene.additionalField,
-                    borderLeft: "3px solid #2ecc71",
-                    titleColor: "#2ecc71"
-                }
-            },
-            gameItems: {
-                personality: createGameItemConfig("#2ecc71", "#0a2a0a", "#051a05"),
-                typology: createGameItemConfig("#4cd137", "#0f2a0f", "#071a07"),
-                organization: createGameItemConfig("#27ae60", "#0a2515", "#051512"),
-                relations: createGameItemConfig("#1abc9c", "#0a2a25", "#051a15"),
-                skill: createGameItemConfig("#f1c40f", "#2a220a", "#1a1100"),
-                stat_buffs: createGameItemConfig("#3498db", "#0a1a2a", "#051025"),
-                bless: createGameItemConfig("#ecf0f1", "#2a2a2a", "#1a1a1a"),
-                curse: createGameItemConfig("#e74c3c", "#2a0000", "#1a0000"),
-                buff_debuff: createGameItemConfig("#16a085", "#0a2520", "#051512"),
-                inventory: createGameItemConfig("#e67e22", "#2a1505", "#1a0a00"),
-                details: createGameItemConfig("#2ecc71", "#0a2a0a", "#051a05")
-            },
-            history: {
-                ...HISTORY_CONFIG,
-                container: { background: "#0a1a0a", padding: "0" },
-                header: { background: "#1a2a1a", borderBottom: "2px solid #2ecc71", color: "#e0f0e0" },
-                headerButtons: {
-                    background: "rgba(46,204,113,0.15)",
-                    border: "1px solid #2ecc71",
-                    color: "#2ecc71",
-                    hover: { background: "rgba(46,204,113,0.3)", borderColor: "#2ecc71", color: "#ffffff" }
-                },
-                turn: { background: "#0f1f0f", border: "0.5px solid rgba(46,204,113,0.2)" },
-                turnSummary: {
-                    background: "rgba(0,0,0,0.2)",
-                    color: "#e0f0e0",
-                    summaryColor: "#c0e0c0",
-                    actionCountColor: "#a0c0a0",
-                    timestampColor: "#80a080"
-                },
-                turnContent: { background: "rgba(0,0,0,0.15)", color: "#d0e0d0" },
-                accentColors: { success: "#2ecc71", failure: "#e74c3c", mixed: "#f1c40f", neutral: "#7f8c8d" }
-            }
-        }
-    },
-    
-    cyber: {
-        name: "Cyberpunk Neon",
-        description: "Тёмный киберпанк с неоновыми акцентами",
-        preview: "linear-gradient(135deg, #0a0a0a 0%, #1a0033 100%)",
-        config: {
-            ...DEFAULT_THEME_CONFIG,
-            name: "Cyberpunk Neon",
-            global: {
-                icons: { set: 'emoji', emojiFilter: 'drop-shadow(0 0 2px rgba(0,255,255,0.8))' },
-                layout: {
-                    scrollbar: {
-                        trackBg: '#0a0a0a',
-                        thumbBg: '#00ffff',
-                        thumbHoverBg: '#33ffff',
-                        thumbBorder: '1px solid #00ffff'
-                    },
-                    selectionColor: "#ff00ff",
-                    selectionBg: "rgba(255, 0, 255, 0.2)",
-                    blockMargin: "15px"
-                }
-            },
-            typography: {
-                headers: { fontFamily: "'Orbitron', sans-serif", fontWeight: "900", letterSpacing: "3px", textTransform: "uppercase" },
-                body: { fontFamily: "'Roboto Mono', monospace", fontWeight: "400", fontSize: "15px", lineHeight: "1.5", color: "#e0e0e0" },
-                ui: { fontFamily: "'Orbitron', sans-serif", fontWeight: "700", fontSize: "13px", letterSpacing: "1px" },
-                monospace: { fontFamily: "'Fira Code', monospace", fontSize: "13px" }
-            },
-            scene: {
-                ...DEFAULT_THEME_CONFIG.scene,
-                textBlock: {
-                    background: "#111111",
-                    border: "2px solid #00ffff",
-                    borderRadius: "0px",
-                    padding: "15px",
-                    color: "#e0e0e0",
-                    fontFamily: "'Roboto Mono', monospace",
-                    fontSize: "1em",
-                    boxShadow: "0 0 20px rgba(0,255,255,0.3), inset 0 0 10px rgba(0,255,255,0.05)"
-                },
-                aiMemory: {
-                    background: "rgba(255, 0, 255, 0.1)",
-                    borderLeft: "4px solid #ff00ff",
-                    borderRadius: "0px",
-                    padding: "12px",
-                    titleColor: "#ff00ff",
-                    contentColor: "#00ffff",
-                    keyColor: "#ff00ff",
-                    valueColor: "#00ffff"
-                },
-                choices: {
-                    containerMargin: "25px 0 0 0",
-                    btn: {
-                        background: "#111111",
-                        border: "2px solid #ff00ff",
-                        color: "#ff00ff",
-                        borderRadius: "0px",
-                        padding: "12px 20px",
-                        fontFamily: "'Orbitron', sans-serif",
-                        fontSize: "0.95em",
-                        hoverBg: "rgba(255,0,255,0.2)",
-                        hoverBorder: "#ff00ff",
-                        selectedBg: "#ff00ff",
-                        selectedBorder: "#ff00ff",
-                        selectedColor: "#000000",
-                        marginBottom: "10px"
-                    }
-                },
-                designNotes: {
-                    ...DEFAULT_THEME_CONFIG.scene.designNotes,
-                    background: "rgba(255,0,255,0.05)",
-                    borderLeft: "4px solid #ff00ff",
-                    titleColor: "#ff00ff",
-                    contentColor: "#00ffff"
-                },
-                summary: {
-                    ...DEFAULT_THEME_CONFIG.scene.summary,
-                    background: "rgba(0,255,255,0.05)",
-                    borderLeft: "4px solid #00ffff",
-                    titleColor: "#00ffff",
-                    contentColor: "#ff00ff"
-                },
-                reflection: {
-                    ...DEFAULT_THEME_CONFIG.scene.reflection,
-                    background: "rgba(255,0,255,0.05)",
-                    borderLeft: "4px solid #ff00ff",
-                    titleColor: "#ff00ff",
-                    contentColor: "#00ffff"
-                },
-                personality: {
-                    ...DEFAULT_THEME_CONFIG.scene.personality,
-                    background: "rgba(0,255,255,0.05)",
-                    borderLeft: "4px solid #00ffff",
-                    titleColor: "#00ffff",
-                    contentColor: "#ff00ff"
-                },
-                typology: {
-                    ...DEFAULT_THEME_CONFIG.scene.typology,
-                    background: "rgba(255,0,255,0.05)",
-                    borderLeft: "4px solid #ff00ff",
-                    titleColor: "#ff00ff",
-                    contentColor: "#00ffff"
-                },
-                additionalField: {
-                    ...DEFAULT_THEME_CONFIG.scene.additionalField,
-                    borderLeft: "3px solid #00ffff",
-                    titleColor: "#00ffff"
-                }
-            },
-            gameItems: {
-                personality: createGameItemConfig("#ff00ff", "#2a002a", "#1a001a"),
-                typology: createGameItemConfig("#00ffff", "#002a2a", "#001a1a"),
-                organization: createGameItemConfig("#00ff00", "#002a00", "#001a00"),
-                relations: createGameItemConfig("#ff0099", "#2a0022", "#1a0015"),
-                skill: createGameItemConfig("#9900ff", "#22002a", "#15001a"),
-                stat_buffs: createGameItemConfig("#00ccff", "#00222a", "#00151a"),
-                bless: createGameItemConfig("#ffffff", "#2a2a2a", "#1a1a1a"),
-                curse: createGameItemConfig("#ff0000", "#2a0000", "#1a0000"),
-                buff_debuff: createGameItemConfig("#ffff00", "#2a2a00", "#1a1a00"),
-                inventory: createGameItemConfig("#ff9900", "#2a1a00", "#1a1000"),
-                details: createGameItemConfig("#00ffff", "#002a2a", "#001a1a")
-            },
-            history: {
-                ...HISTORY_CONFIG,
-                container: { background: "#0a0a0a", padding: "0" },
-                header: { background: "#111111", borderBottom: "2px solid #ff00ff", color: "#00ffff" },
-                headerButtons: {
-                    background: "rgba(255,0,255,0.15)",
-                    border: "1px solid #ff00ff",
-                    color: "#ff00ff",
-                    hover: { background: "rgba(255,0,255,0.3)", borderColor: "#ff00ff", color: "#ffffff" }
-                },
-                turn: { background: "#151515", border: "0.5px solid rgba(255,0,255,0.2)" },
-                turnSummary: {
-                    background: "rgba(0,0,0,0.4)",
-                    color: "#e0e0e0",
-                    summaryColor: "#cccccc",
-                    actionCountColor: "#aaaaaa",
-                    timestampColor: "#888888"
-                },
-                turnContent: { background: "rgba(0,0,0,0.3)", color: "#dddddd" },
-                accentColors: { success: "#00ff00", failure: "#ff0000", mixed: "#ffff00", neutral: "#00ffff" }
-            }
-        }
-    },
-    
-    paper: {
-        name: "Old Paper (Dark)",
-        description: "Тёмная тема с имитацией старого пергамента",
-        preview: "linear-gradient(135deg, #2a241a 0%, #3a2e22 100%)",
-        config: {
-            ...DEFAULT_THEME_CONFIG,
-            name: "Old Paper Dark",
-            global: {
-                icons: { set: 'emoji', emojiFilter: 'sepia(50%) brightness(1.2)' },
-                layout: {
-                    scrollbar: {
-                        trackBg: '#2a241a',
+                        width: '6px',
+                        height: '6px',
+                        trackBg: '#2b1e0f',
+                        trackBorderRadius: '4px',
                         thumbBg: '#b89b7b',
-                        thumbHoverBg: '#d4af37'
+                        thumbBorder: '1px solid #5a4a3a',
+                        thumbBorderRadius: '4px',
+                        thumbHoverBg: '#d4af37',
+                        thumbHoverBorder: '1px solid #b89b7b'
                     },
                     selectionColor: "#d4af37",
-                    selectionBg: "rgba(180, 130, 80, 0.2)",
+                    selectionBg: "rgba(180, 130, 80, 0.3)",
                     blockMargin: "15px"
                 }
             },
             typography: {
-                headers: { fontFamily: "'Playfair Display', serif", fontWeight: "900", letterSpacing: "1px", textTransform: "uppercase" },
-                body: { fontFamily: "'Lora', serif", fontWeight: "400", fontSize: "17px", lineHeight: "1.8", color: "#e8d8c0" },
-                ui: { fontFamily: "'Playfair Display', serif", fontWeight: "600", fontSize: "15px", letterSpacing: "0.5px" },
-                monospace: { fontFamily: "'Source Code Pro', monospace", fontSize: "13px" }
+                headers: { fontFamily: "'Caveat', cursive", fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" },
+                body: { fontFamily: "'Caveat', cursive", fontWeight: "400", fontSize: "18px", lineHeight: "1.8", color: "#f0e6d2" },
+                ui: { fontFamily: "'Caveat', cursive", fontWeight: "600", fontSize: "16px", letterSpacing: "0.5px" },
+                monospace: { fontFamily: "'Roboto Mono', monospace", fontSize: "14px" }
             },
             scene: {
-                ...DEFAULT_THEME_CONFIG.scene,
+                container: { padding: "15px", background: "transparent" },
                 textBlock: {
-                    background: "linear-gradient(135deg, #2a241a 0%, #3a2e22 100%)",
+                    background: "linear-gradient(135deg, #2b1e0f 0%, #3c2e1f 100%)",
                     border: "2px solid #b89b7b",
                     borderRadius: "8px",
                     padding: "18px",
-                    color: "#f0e0d0",
-                    fontFamily: "'Lora', serif",
-                    fontSize: "1.05em",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.5), inset 0 0 20px rgba(200,150,100,0.1)"
+                    color: "#f0e6d2",
+                    fontFamily: "'Caveat', cursive",
+                    fontSize: "1.1em",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.5), inset 0 0 20px rgba(180,130,80,0.2)"
                 },
                 aiMemory: {
-                    background: "rgba(180, 130, 80, 0.15)",
+                    background: "rgba(180,130,80,0.15)",
                     borderLeft: "4px solid #b89b7b",
                     borderRadius: "6px",
                     padding: "12px",
-                    titleColor: "#e0c0a0",
-                    contentColor: "#d0c0b0",
-                    keyColor: "#e0c0a0",
-                    valueColor: "#f0e0d0"
+                    titleColor: "#f0e6d2",
+                    contentColor: "#f0e6d2",
+                    keyColor: "#d4af37",
+                    valueColor: "#f0e6d2"
                 },
                 choices: {
                     containerMargin: "20px 0 0 0",
                     btn: {
-                        background: "linear-gradient(180deg, #3a2e22 0%, #2a241a 100%)",
+                        background: "linear-gradient(180deg, #3c2e1f 0%, #2b1e0f 100%)",
                         border: "2px solid #b89b7b",
-                        color: "#f0e0d0",
+                        color: "#f0e6d2",
                         borderRadius: "8px",
                         padding: "14px 18px",
-                        fontFamily: "'Playfair Display', serif",
+                        fontFamily: "'Caveat', cursive",
                         fontSize: "1em",
-                        hoverBg: "linear-gradient(180deg, #4a3e32 0%, #3a2e22 100%)",
+                        marginBottom: "10px",
+                        hoverBg: "linear-gradient(180deg, #4c3e2f 0%, #3c2e1f 100%)",
                         hoverBorder: "#d4af37",
-                        selectedBg: "rgba(180, 130, 80, 0.3)",
+                        selectedBg: "rgba(180,130,80,0.3)",
                         selectedBorder: "#d4af37",
-                        selectedColor: "#ffffff",
-                        marginBottom: "10px"
+                        selectedColor: "#ffffff"
                     }
                 },
                 designNotes: {
-                    ...DEFAULT_THEME_CONFIG.scene.designNotes,
                     background: "rgba(180,130,80,0.1)",
                     borderLeft: "4px solid #b89b7b",
-                    titleColor: "#e0c0a0",
-                    contentColor: "#d0c0b0"
+                    borderRadius: "6px",
+                    padding: "12px",
+                    titleColor: "#d4af37",
+                    titleFontFamily: "'Caveat', cursive",
+                    titleFontSize: "0.85em",
+                    contentColor: "#f0e6d2",
+                    contentFontFamily: "'Caveat', cursive",
+                    fontSize: "0.9em"
                 },
                 summary: {
-                    ...DEFAULT_THEME_CONFIG.scene.summary,
                     background: "rgba(180,130,80,0.1)",
                     borderLeft: "4px solid #b89b7b",
-                    titleColor: "#e0c0a0",
-                    contentColor: "#d0c0b0"
+                    borderRadius: "6px",
+                    padding: "12px",
+                    titleColor: "#d4af37",
+                    titleFontFamily: "'Caveat', cursive",
+                    titleFontSize: "0.9em",
+                    contentColor: "#f0e6d2",
+                    contentFontFamily: "'Caveat', cursive",
+                    fontSize: "0.9em"
                 },
                 reflection: {
-                    ...DEFAULT_THEME_CONFIG.scene.reflection,
                     background: "rgba(180,130,80,0.1)",
                     borderLeft: "4px solid #b89b7b",
-                    titleColor: "#e0c0a0",
-                    contentColor: "#d0c0b0"
+                    borderRadius: "6px",
+                    padding: "14px",
+                    titleColor: "#d4af37",
+                    titleFontFamily: "'Caveat', cursive",
+                    titleFontSize: "0.95em",
+                    contentColor: "#f0e6d2",
+                    contentFontFamily: "'Caveat', cursive",
+                    fontSize: "0.9em",
+                    italic: true
                 },
                 personality: {
-                    ...DEFAULT_THEME_CONFIG.scene.personality,
                     background: "rgba(180,130,80,0.1)",
                     borderLeft: "4px solid #b89b7b",
-                    titleColor: "#e0c0a0",
-                    contentColor: "#d0c0b0"
+                    borderRadius: "6px",
+                    padding: "14px",
+                    titleColor: "#d4af37",
+                    titleFontFamily: "'Caveat', cursive",
+                    titleFontSize: "0.95em",
+                    contentColor: "#f0e6d2",
+                    contentFontFamily: "'Caveat', cursive",
+                    fontSize: "0.9em"
                 },
                 typology: {
-                    ...DEFAULT_THEME_CONFIG.scene.typology,
                     background: "rgba(180,130,80,0.1)",
                     borderLeft: "4px solid #b89b7b",
-                    titleColor: "#e0c0a0",
-                    contentColor: "#d0c0b0"
+                    borderRadius: "6px",
+                    padding: "14px",
+                    titleColor: "#d4af37",
+                    titleFontFamily: "'Caveat', cursive",
+                    titleFontSize: "0.95em",
+                    contentColor: "#f0e6d2",
+                    contentFontFamily: "'Caveat', cursive",
+                    fontSize: "0.9em"
                 },
                 additionalField: {
-                    ...DEFAULT_THEME_CONFIG.scene.additionalField,
+                    background: "rgba(180,130,80,0.05)",
                     borderLeft: "3px solid #b89b7b",
-                    titleColor: "#e0c0a0"
+                    borderRadius: "4px",
+                    padding: "10px",
+                    titleColor: "#b89b7b",
+                    titleFontFamily: "'Caveat', cursive",
+                    titleFontSize: "0.85em",
+                    contentColor: "#f0e6d2",
+                    contentFontFamily: "'Caveat', cursive",
+                    fontSize: "0.85em"
                 }
             },
             gameItems: {
-                personality: createGameItemConfig("#b89b7b", "#3a2e22", "#2a241a"),
-                typology: createGameItemConfig("#8b6b4f", "#3a2e22", "#2a241a"),
-                organization: createGameItemConfig("#a0522d", "#3a2e22", "#2a241a"),
-                relations: createGameItemConfig("#cd5c5c", "#3a2e22", "#2a241a"),
-                skill: createGameItemConfig("#d4af37", "#3a2e22", "#2a241a"),
-                stat_buffs: createGameItemConfig("#4682b4", "#2a3a4a", "#1a2a3a"),
-                bless: createGameItemConfig("#b0a090", "#3a3a3a", "#2a2a2a"),
-                curse: createGameItemConfig("#8b0000", "#3a1a1a", "#2a0f0f"),
-                buff_debuff: createGameItemConfig("#20b2aa", "#1a3a3a", "#0f2a2a"),
-                inventory: createGameItemConfig("#a0522d", "#3a2e22", "#2a241a"),
-                details: createGameItemConfig("#b89b7b", "#3a2e22", "#2a241a")
+                personality: createGameItemConfig("#b89b7b", "#3c2e1f", "#2b1e0f"),
+                typology: createGameItemConfig("#a67c52", "#3c2e1f", "#2b1e0f"),
+                organization: createGameItemConfig("#8b6b4f", "#3c2e1f", "#2b1e0f"),
+                relations: createGameItemConfig("#cd7f5c", "#3c2e1f", "#2b1e0f"),
+                skill: createGameItemConfig("#d4af37", "#3c2e1f", "#2b1e0f"),
+                stat_buffs: createGameItemConfig("#6b8e23", "#2b3c1e", "#1a2b0f"),
+                bless: createGameItemConfig("#b0a090", "#3c3c2e", "#2b2b1e"),
+                curse: createGameItemConfig("#8b4513", "#3c2e1f", "#2b1e0f"),
+                buff_debuff: createGameItemConfig("#20b2aa", "#1e3c3c", "#0f2b2b"),
+                inventory: createGameItemConfig("#a0522d", "#3c2e1f", "#2b1e0f"),
+                details: createGameItemConfig("#b89b7b", "#3c2e1f", "#2b1e0f")
+            },
+            turnUpdates: {
+                container: {
+                    background: "rgba(43,30,15,0.9)",
+                    border: "1px solid #b89b7b",
+                    borderRadius: "4px",
+                    padding: "10px",
+                    marginBottom: "15px"
+                },
+                header: {
+                    color: "#d4af37",
+                    borderBottom: "1px solid #b89b7b",
+                    fontSize: "0.9em",
+                    fontFamily: "'Caveat', cursive",
+                    textTransform: "uppercase"
+                },
+                action: {
+                    background: "rgba(180,130,80,0.1)",
+                    border: "1px solid #b89b7b",
+                    color: "#d4af37",
+                    fontFamily: "'Caveat', cursive",
+                    fontSize: "0.9em",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    marginBottom: "4px",
+                    success: {
+                        background: "rgba(107,142,35,0.15)",
+                        border: "1px solid #6b8e23",
+                        color: "#6b8e23"
+                    },
+                    failure: {
+                        background: "rgba(178,34,34,0.15)",
+                        border: "1px solid #b22222",
+                        color: "#b22222"
+                    },
+                    partial: {
+                        background: "rgba(212,175,55,0.15)",
+                        border: "1px solid #d4af37",
+                        color: "#d4af37"
+                    }
+                },
+                event: {
+                    background: "rgba(180,130,80,0.05)",
+                    border: "1px solid #8b6b4f",
+                    color: "#b89b7b",
+                    fontFamily: "'Caveat', cursive",
+                    fontSize: "0.9em",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    marginBottom: "4px"
+                }
             },
             history: {
                 ...HISTORY_CONFIG,
-                container: { background: "#1e1a14", padding: "0" },
-                header: { background: "#2a241a", borderBottom: "2px solid #b89b7b", color: "#f0e0d0" },
+                container: { background: "#1e150c", padding: "0" },
+                header: { background: "#2b1e0f", borderBottom: "2px solid #b89b7b", color: "#f0e6d2" },
                 headerButtons: {
                     background: "rgba(180,130,80,0.15)",
                     border: "1px solid #b89b7b",
                     color: "#b89b7b",
-                    hover: { background: "rgba(180,130,80,0.3)", borderColor: "#d4af37", color: "#f0e0d0" }
+                    hover: { background: "rgba(180,130,80,0.3)", borderColor: "#d4af37", color: "#ffffff" }
                 },
-                turn: { background: "#2a241a", border: "0.5px solid rgba(180,130,80,0.3)" },
+                turn: { background: "#2b1e0f", border: "0.5px solid rgba(180,130,80,0.3)" },
                 turnSummary: {
                     background: "rgba(0,0,0,0.2)",
-                    color: "#f0e0d0",
+                    color: "#f0e6d2",
                     summaryColor: "#d0c0b0",
                     actionCountColor: "#b0a090",
                     timestampColor: "#908070"
                 },
                 turnContent: { background: "rgba(0,0,0,0.15)", color: "#e0d0c0" },
-                accentColors: { success: "#6b8e23", failure: "#b22222", mixed: "#daa520", neutral: "#b89b7b" }
+                accentColors: { success: "#6b8e23", failure: "#b22222", mixed: "#d4af37", neutral: "#b89b7b" },
+                contentBlocks: {
+                    designNotes: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", contentColor: "#f0e6d2", italic: false },
+                    aiMemory: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", keyColor: "#d4af37", valueColor: "#f0e6d2", booleanTrueColor: "#6b8e23", booleanFalseColor: "#b22222", numberColor: "#d4af37", arrayColor: "#b89b7b", stringColor: "#f0e6d2", objectColor: "#a67c52" },
+                    summary: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", contentColor: "#f0e6d2" },
+                    sceneText: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", contentColor: "#f0e6d2" },
+                    reflection: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", contentColor: "#f0e6d2", italic: true },
+                    personality: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", contentColor: "#f0e6d2" },
+                    typology: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", contentColor: "#f0e6d2" },
+                    actions: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", fontSize: "0.75em", successBg: "rgba(107,142,35,0.1)", successColor: "#6b8e23", partialBg: "rgba(212,175,55,0.1)", partialColor: "#d4af37", failureBg: "rgba(178,34,34,0.1)", failureColor: "#b22222" },
+                    changes: { background: "rgba(180,130,80,0.05)", borderLeftColor: "#b89b7b", titleColor: "#d4af37", contentColor: "#f0e6d2" }
+                }
             }
         }
     },
-    
-    vampire: {
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 3. VampireGothic – кроваво-чёрная готика (ПОЛНОСТЬЮ ПРОРАБОТАНО)
+    // ═══════════════════════════════════════════════════════════════════════════
+    vampireGothic: {
         name: "Vampire Gothic",
-        description: "Готическая тема с кровавыми акцентами",
+        description: "Тёмно-кроваво-красные тона, готические шрифты (Cinzel, Cormorant), мрачная элегантность",
         preview: "linear-gradient(135deg, #1a0a0a 0%, #2a0f0f 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
@@ -719,10 +573,15 @@ export const PRESET_THEMES = {
                 icons: { set: 'fa', emojiFilter: 'brightness(0.9) contrast(1.2)' },
                 layout: {
                     scrollbar: {
+                        width: '6px',
+                        height: '6px',
                         trackBg: '#1a0a0a',
+                        trackBorderRadius: '4px',
                         thumbBg: '#b22222',
+                        thumbBorder: '1px solid #8b0000',
+                        thumbBorderRadius: '4px',
                         thumbHoverBg: '#ff6b6b',
-                        thumbBorder: '1px solid #b22222'
+                        thumbHoverBorder: '1px solid #b22222'
                     },
                     selectionColor: "#ff6b6b",
                     selectionBg: "rgba(178, 34, 34, 0.3)",
@@ -731,12 +590,12 @@ export const PRESET_THEMES = {
             },
             typography: {
                 headers: { fontFamily: "'Cinzel', serif", fontWeight: "900", letterSpacing: "2px", textTransform: "uppercase" },
-                body: { fontFamily: "'Cormorant', serif", fontWeight: "400", fontSize: "17px", lineHeight: "1.7", color: "#e0d0d0" },
-                ui: { fontFamily: "'Cinzel', serif", fontWeight: "600", fontSize: "14px", letterSpacing: "1px" },
-                monospace: { fontFamily: "'Fira Code', monospace", fontSize: "13px" }
+                body: { fontFamily: "'Cormorant', serif", fontWeight: "400", fontSize: "18px", lineHeight: "1.7", color: "#e0d0d0" },
+                ui: { fontFamily: "'Cinzel', serif", fontWeight: "600", fontSize: "15px", letterSpacing: "1px" },
+                monospace: { fontFamily: "'Fira Code', monospace", fontSize: "14px" }
             },
             scene: {
-                ...DEFAULT_THEME_CONFIG.scene,
+                container: { padding: "15px", background: "transparent" },
                 textBlock: {
                     background: "linear-gradient(135deg, #1a0a0a 0%, #2a0f0f 100%)",
                     border: "2px solid #b22222",
@@ -767,53 +626,86 @@ export const PRESET_THEMES = {
                         padding: "14px 20px",
                         fontFamily: "'Cinzel', serif",
                         fontSize: "1em",
+                        marginBottom: "10px",
                         hoverBg: "linear-gradient(180deg, #3a1a1a 0%, #2a0f0f 100%)",
                         hoverBorder: "#ff6b6b",
                         selectedBg: "rgba(178,34,34,0.3)",
                         selectedBorder: "#ff6b6b",
-                        selectedColor: "#ffffff",
-                        marginBottom: "10px"
+                        selectedColor: "#ffffff"
                     }
                 },
                 designNotes: {
-                    ...DEFAULT_THEME_CONFIG.scene.designNotes,
                     background: "rgba(178,34,34,0.1)",
                     borderLeft: "4px solid #b22222",
+                    borderRadius: "6px",
+                    padding: "12px",
                     titleColor: "#ff8a8a",
-                    contentColor: "#d0b0b0"
+                    titleFontFamily: "'Cinzel', serif",
+                    titleFontSize: "0.85em",
+                    contentColor: "#d0b0b0",
+                    contentFontFamily: "'Cormorant', serif",
+                    fontSize: "0.9em"
                 },
                 summary: {
-                    ...DEFAULT_THEME_CONFIG.scene.summary,
                     background: "rgba(178,34,34,0.1)",
                     borderLeft: "4px solid #b22222",
+                    borderRadius: "6px",
+                    padding: "12px",
                     titleColor: "#ff8a8a",
-                    contentColor: "#d0b0b0"
+                    titleFontFamily: "'Cinzel', serif",
+                    titleFontSize: "0.9em",
+                    contentColor: "#d0b0b0",
+                    contentFontFamily: "'Cormorant', serif",
+                    fontSize: "0.9em"
                 },
                 reflection: {
-                    ...DEFAULT_THEME_CONFIG.scene.reflection,
                     background: "rgba(178,34,34,0.1)",
                     borderLeft: "4px solid #b22222",
+                    borderRadius: "6px",
+                    padding: "14px",
                     titleColor: "#ff8a8a",
-                    contentColor: "#d0b0b0"
+                    titleFontFamily: "'Cinzel', serif",
+                    titleFontSize: "0.95em",
+                    contentColor: "#d0b0b0",
+                    contentFontFamily: "'Cormorant', serif",
+                    fontSize: "0.9em",
+                    italic: true
                 },
                 personality: {
-                    ...DEFAULT_THEME_CONFIG.scene.personality,
                     background: "rgba(178,34,34,0.1)",
                     borderLeft: "4px solid #b22222",
+                    borderRadius: "6px",
+                    padding: "14px",
                     titleColor: "#ff8a8a",
-                    contentColor: "#d0b0b0"
+                    titleFontFamily: "'Cinzel', serif",
+                    titleFontSize: "0.95em",
+                    contentColor: "#d0b0b0",
+                    contentFontFamily: "'Cormorant', serif",
+                    fontSize: "0.9em"
                 },
                 typology: {
-                    ...DEFAULT_THEME_CONFIG.scene.typology,
                     background: "rgba(178,34,34,0.1)",
                     borderLeft: "4px solid #b22222",
+                    borderRadius: "6px",
+                    padding: "14px",
                     titleColor: "#ff8a8a",
-                    contentColor: "#d0b0b0"
+                    titleFontFamily: "'Cinzel', serif",
+                    titleFontSize: "0.95em",
+                    contentColor: "#d0b0b0",
+                    contentFontFamily: "'Cormorant', serif",
+                    fontSize: "0.9em"
                 },
                 additionalField: {
-                    ...DEFAULT_THEME_CONFIG.scene.additionalField,
+                    background: "rgba(178,34,34,0.05)",
                     borderLeft: "3px solid #b22222",
-                    titleColor: "#ff8a8a"
+                    borderRadius: "4px",
+                    padding: "10px",
+                    titleColor: "#b22222",
+                    titleFontFamily: "'Cinzel', serif",
+                    titleFontSize: "0.85em",
+                    contentColor: "#d0b0b0",
+                    contentFontFamily: "'Cormorant', serif",
+                    fontSize: "0.85em"
                 }
             },
             gameItems: {
@@ -828,6 +720,57 @@ export const PRESET_THEMES = {
                 buff_debuff: createGameItemConfig("#a52a2a", "#2a0a05", "#1a0502"),
                 inventory: createGameItemConfig("#8b4513", "#2a1a0a", "#1a0d05"),
                 details: createGameItemConfig("#cd5c5c", "#2a0a0a", "#1a0505")
+            },
+            turnUpdates: {
+                container: {
+                    background: "rgba(26,10,10,0.9)",
+                    border: "1px solid #b22222",
+                    borderRadius: "4px",
+                    padding: "10px",
+                    marginBottom: "15px"
+                },
+                header: {
+                    color: "#ff8a8a",
+                    borderBottom: "1px solid #b22222",
+                    fontSize: "0.9em",
+                    fontFamily: "'Cinzel', serif",
+                    textTransform: "uppercase"
+                },
+                action: {
+                    background: "rgba(178,34,34,0.1)",
+                    border: "1px solid #b22222",
+                    color: "#ff8a8a",
+                    fontFamily: "'Cormorant', serif",
+                    fontSize: "0.9em",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    marginBottom: "4px",
+                    success: {
+                        background: "rgba(76,209,55,0.15)",
+                        border: "1px solid #4cd137",
+                        color: "#4cd137"
+                    },
+                    failure: {
+                        background: "rgba(232,65,24,0.15)",
+                        border: "1px solid #e84118",
+                        color: "#e84118"
+                    },
+                    partial: {
+                        background: "rgba(251,197,49,0.15)",
+                        border: "1px solid #fbc531",
+                        color: "#fbc531"
+                    }
+                },
+                event: {
+                    background: "rgba(178,34,34,0.05)",
+                    border: "1px solid #8b0000",
+                    color: "#b22222",
+                    fontFamily: "'Cormorant', serif",
+                    fontSize: "0.9em",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    marginBottom: "4px"
+                }
             },
             history: {
                 ...HISTORY_CONFIG,
@@ -848,297 +791,514 @@ export const PRESET_THEMES = {
                     timestampColor: "#907070"
                 },
                 turnContent: { background: "rgba(0,0,0,0.2)", color: "#e0d0d0" },
-                accentColors: { success: "#4cd137", failure: "#e84118", mixed: "#fbc531", neutral: "#b22222" }
+                accentColors: { success: "#4cd137", failure: "#e84118", mixed: "#fbc531", neutral: "#b22222" },
+                contentBlocks: {
+                    designNotes: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", contentColor: "#d0b0b0", italic: false },
+                    aiMemory: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", keyColor: "#ff8a8a", valueColor: "#d0b0b0", booleanTrueColor: "#4cd137", booleanFalseColor: "#e84118", numberColor: "#ff8a8a", arrayColor: "#b22222", stringColor: "#d0b0b0", objectColor: "#cd5c5c" },
+                    summary: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", contentColor: "#d0b0b0" },
+                    sceneText: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", contentColor: "#d0b0b0" },
+                    reflection: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", contentColor: "#d0b0b0", italic: true },
+                    personality: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", contentColor: "#d0b0b0" },
+                    typology: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", contentColor: "#d0b0b0" },
+                    actions: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", fontSize: "0.75em", successBg: "rgba(76,209,55,0.1)", successColor: "#4cd137", partialBg: "rgba(251,197,49,0.1)", partialColor: "#fbc531", failureBg: "rgba(232,65,24,0.1)", failureColor: "#e84118" },
+                    changes: { background: "rgba(178,34,34,0.05)", borderLeftColor: "#b22222", titleColor: "#ff8a8a", contentColor: "#d0b0b0" }
+                }
             }
         }
     },
-    
-    retro: {
-        name: "Retro Console",
-        description: "Ретро-стиль игровой консоли 8-бит на тёмном фоне",
-        preview: "linear-gradient(135deg, #1a103a 0%, #2a1a4a 100%)",
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 4. OceanSun – сине-жёлтые оттенки (патриотические, но незаметно) – ПРОРАБОТАНО
+    // ═══════════════════════════════════════════════════════════════════════════
+    oceanSun: {
+        name: "Ocean Sun",
+        description: "Глубокий синий океан с золотыми лучами солнца – контрастно и гармонично",
+        preview: "linear-gradient(135deg, #002b5c 0%, #0a3f6f 100%)",
         config: {
             ...DEFAULT_THEME_CONFIG,
-            name: "Retro Console",
+            name: "Ocean Sun",
             global: {
-                icons: { set: 'emoji', emojiFilter: 'none' },
+                icons: { set: 'fa', emojiFilter: 'hue-rotate(180deg) brightness(1.1)' },
                 layout: {
                     scrollbar: {
-                        trackBg: '#1a103a',
-                        thumbBg: '#ff9f00',
-                        thumbHoverBg: '#ffbf40',
-                        thumbBorder: '2px solid #c0ff80'
+                        width: '6px',
+                        height: '6px',
+                        trackBg: '#002b5c',
+                        trackBorderRadius: '4px',
+                        thumbBg: '#fbc531',
+                        thumbBorder: '1px solid #ffd966',
+                        thumbBorderRadius: '4px',
+                        thumbHoverBg: '#ffd966',
+                        thumbHoverBorder: '1px solid #fbc531'
                     },
-                    selectionColor: "#ffeb3b",
-                    selectionBg: "rgba(255, 159, 0, 0.3)",
+                    selectionColor: "#fbc531",
+                    selectionBg: "rgba(251, 197, 49, 0.2)",
                     blockMargin: "15px"
                 }
             },
             typography: {
-                headers: { fontFamily: "'Press Start 2P', cursive", fontWeight: "400", letterSpacing: "2px", textTransform: "uppercase" },
-                body: { fontFamily: "'VT323', monospace", fontWeight: "400", fontSize: "20px", lineHeight: "1.4", color: "#e0e0a0" },
-                ui: { fontFamily: "'Press Start 2P', cursive", fontWeight: "400", fontSize: "11px", letterSpacing: "1px" },
-                monospace: { fontFamily: "'VT323', monospace", fontSize: "18px" }
-            },
-            scene: {
-                ...DEFAULT_THEME_CONFIG.scene,
-                textBlock: {
-                    background: "#1a103a",
-                    border: "4px solid #ff9f00",
-                    borderRadius: "0px",
-                    padding: "16px",
-                    color: "#ffffb0",
-                    fontFamily: "'VT323', monospace",
-                    fontSize: "1.3em",
-                    boxShadow: "0 0 20px rgba(255,159,0,0.5), inset 0 0 20px rgba(255,159,0,0.1)"
-                },
-                aiMemory: {
-                    background: "rgba(255, 159, 0, 0.15)",
-                    borderLeft: "6px solid #ff9f00",
-                    borderRadius: "0px",
-                    padding: "12px",
-                    titleColor: "#ff9f00",
-                    contentColor: "#c0ff80",
-                    keyColor: "#ff9f00",
-                    valueColor: "#c0ff80"
-                },
-                choices: {
-                    containerMargin: "20px 0 0 0",
-                    btn: {
-                        background: "#1a103a",
-                        border: "3px solid #c0ff80",
-                        color: "#c0ff80",
-                        borderRadius: "0px",
-                        padding: "12px 16px",
-                        fontFamily: "'Press Start 2P', cursive",
-                        fontSize: "0.9em",
-                        hoverBg: "rgba(192,255,128,0.2)",
-                        hoverBorder: "#c0ff80",
-                        selectedBg: "#c0ff80",
-                        selectedBorder: "#c0ff80",
-                        selectedColor: "#1a103a",
-                        marginBottom: "10px"
-                    }
-                },
-                designNotes: {
-                    ...DEFAULT_THEME_CONFIG.scene.designNotes,
-                    background: "rgba(255,159,0,0.1)",
-                    borderLeft: "6px solid #ff9f00",
-                    titleColor: "#ff9f00",
-                    contentColor: "#c0ff80"
-                },
-                summary: {
-                    ...DEFAULT_THEME_CONFIG.scene.summary,
-                    background: "rgba(192,255,128,0.1)",
-                    borderLeft: "6px solid #c0ff80",
-                    titleColor: "#c0ff80",
-                    contentColor: "#ff9f00"
-                },
-                reflection: {
-                    ...DEFAULT_THEME_CONFIG.scene.reflection,
-                    background: "rgba(255,159,0,0.1)",
-                    borderLeft: "6px solid #ff9f00",
-                    titleColor: "#ff9f00",
-                    contentColor: "#c0ff80"
-                },
-                personality: {
-                    ...DEFAULT_THEME_CONFIG.scene.personality,
-                    background: "rgba(192,255,128,0.1)",
-                    borderLeft: "6px solid #c0ff80",
-                    titleColor: "#c0ff80",
-                    contentColor: "#ff9f00"
-                },
-                typology: {
-                    ...DEFAULT_THEME_CONFIG.scene.typology,
-                    background: "rgba(255,159,0,0.1)",
-                    borderLeft: "6px solid #ff9f00",
-                    titleColor: "#ff9f00",
-                    contentColor: "#c0ff80"
-                },
-                additionalField: {
-                    ...DEFAULT_THEME_CONFIG.scene.additionalField,
-                    borderLeft: "4px solid #ff9f00",
-                    titleColor: "#ff9f00"
-                }
-            },
-            gameItems: {
-                personality: createGameItemConfig("#ff9f00", "#2a1a4a", "#1a103a"),
-                typology: createGameItemConfig("#c0ff80", "#1a3a1a", "#0f2a0f"),
-                organization: createGameItemConfig("#80ffff", "#103a3a", "#0a2a2a"),
-                relations: createGameItemConfig("#ff80ff", "#3a103a", "#2a0a2a"),
-                skill: createGameItemConfig("#ffff80", "#3a3a10", "#2a2a0a"),
-                stat_buffs: createGameItemConfig("#80c0ff", "#102a3a", "#0a1a2a"),
-                bless: createGameItemConfig("#ffffff", "#2a2a2a", "#1a1a1a"),
-                curse: createGameItemConfig("#ff4040", "#3a1010", "#2a0a0a"),
-                buff_debuff: createGameItemConfig("#80ffc0", "#103a2a", "#0a2a1a"),
-                inventory: createGameItemConfig("#ffb080", "#3a2a10", "#2a1a0a"),
-                details: createGameItemConfig("#80c0ff", "#102a3a", "#0a1a2a")
-            },
-            history: {
-                ...HISTORY_CONFIG,
-                container: { background: "#120a2a", padding: "0" },
-                header: { background: "#1a103a", borderBottom: "4px solid #ff9f00", color: "#ffffb0" },
-                headerButtons: {
-                    background: "rgba(255,159,0,0.15)",
-                    border: "2px solid #ff9f00",
-                    color: "#ff9f00",
-                    hover: { background: "rgba(255,159,0,0.3)", borderColor: "#ff9f00", color: "#ffffff" }
-                },
-                turn: { background: "#1a103a", border: "2px solid rgba(255,159,0,0.3)" },
-                turnSummary: {
-                    background: "rgba(0,0,0,0.3)",
-                    color: "#ffffb0",
-                    summaryColor: "#e0e0a0",
-                    actionCountColor: "#c0c080",
-                    timestampColor: "#a0a060"
-                },
-                turnContent: { background: "rgba(0,0,0,0.2)", color: "#f0f0c0" },
-                accentColors: { success: "#c0ff80", failure: "#ff4040", mixed: "#ffff80", neutral: "#ff9f00" }
-            }
-        }
-    },
-    
-    ocean: {
-        name: "Deep Ocean",
-        description: "Глубоководная тема с бирюзовыми акцентами",
-        preview: "linear-gradient(135deg, #001a2a 0%, #002b3a 100%)",
-        config: {
-            ...DEFAULT_THEME_CONFIG,
-            name: "Deep Ocean",
-            global: {
-                icons: { set: 'emoji', emojiFilter: 'hue-rotate(180deg) brightness(1.1)' },
-                layout: {
-                    scrollbar: {
-                        trackBg: '#001a2a',
-                        thumbBg: '#00b8d4',
-                        thumbHoverBg: '#33ccff',
-                        thumbBorder: '1px solid #00b8d4'
-                    },
-                    selectionColor: "#00e5ff",
-                    selectionBg: "rgba(0, 184, 212, 0.2)",
-                    blockMargin: "15px"
-                }
-            },
-            typography: {
-                headers: { fontFamily: "'Montserrat', sans-serif", fontWeight: "700", letterSpacing: "1.5px", textTransform: "uppercase" },
-                body: { fontFamily: "'Inter', sans-serif", fontWeight: "400", fontSize: "16px", lineHeight: "1.6", color: "#d0eef0" },
+                headers: { fontFamily: "'Montserrat', sans-serif", fontWeight: "800", letterSpacing: "1.5px", textTransform: "uppercase" },
+                body: { fontFamily: "'Inter', sans-serif", fontWeight: "400", fontSize: "16px", lineHeight: "1.7", color: "#e0f0ff" },
                 ui: { fontFamily: "'Montserrat', sans-serif", fontWeight: "600", fontSize: "14px", letterSpacing: "0.5px" },
                 monospace: { fontFamily: "'JetBrains Mono', monospace", fontSize: "13px" }
             },
             scene: {
-                ...DEFAULT_THEME_CONFIG.scene,
+                container: { padding: "15px", background: "transparent" },
                 textBlock: {
-                    background: "linear-gradient(135deg, #001f2f 0%, #002b3f 100%)",
-                    border: "2px solid #00b8d4",
+                    background: "linear-gradient(135deg, #002b5c 0%, #0a3f6f 100%)",
+                    border: "2px solid #fbc531",
                     borderRadius: "12px",
                     padding: "18px",
-                    color: "#e0f7fa",
+                    color: "#e0f0ff",
                     fontFamily: "'Inter', sans-serif",
                     fontSize: "1.05em",
-                    boxShadow: "0 4px 16px rgba(0, 184, 212, 0.3), inset 0 0 20px rgba(0,184,212,0.05)"
+                    boxShadow: "0 4px 16px rgba(251,197,49,0.2), inset 0 0 20px rgba(251,197,49,0.05)"
                 },
                 aiMemory: {
-                    background: "rgba(0, 184, 212, 0.1)",
-                    borderLeft: "4px solid #00b8d4",
+                    background: "rgba(251,197,49,0.1)",
+                    borderLeft: "4px solid #fbc531",
                     borderRadius: "8px",
                     padding: "12px",
-                    titleColor: "#00e5ff",
-                    contentColor: "#b0e0e0",
-                    keyColor: "#00e5ff",
-                    valueColor: "#d0f0f0"
+                    titleColor: "#fbc531",
+                    contentColor: "#b0e0ff",
+                    keyColor: "#fbc531",
+                    valueColor: "#d0f0ff"
                 },
                 choices: {
                     containerMargin: "20px 0 0 0",
                     btn: {
-                        background: "linear-gradient(180deg, #002b3f 0%, #001f2f 100%)",
-                        border: "2px solid #00b8d4",
-                        color: "#e0f7fa",
+                        background: "linear-gradient(180deg, #0a3f6f 0%, #002b5c 100%)",
+                        border: "2px solid #fbc531",
+                        color: "#e0f0ff",
                         borderRadius: "10px",
                         padding: "14px 18px",
                         fontFamily: "'Montserrat', sans-serif",
                         fontSize: "1em",
-                        hoverBg: "linear-gradient(180deg, #003f5f 0%, #002b3f 100%)",
-                        hoverBorder: "#00d8ff",
-                        selectedBg: "rgba(0, 184, 212, 0.3)",
-                        selectedBorder: "#00e5ff",
-                        selectedColor: "#ffffff",
-                        marginBottom: "10px"
+                        marginBottom: "10px",
+                        hoverBg: "linear-gradient(180deg, #1a4f7f 0%, #0a3f6f 100%)",
+                        hoverBorder: "#ffd966",
+                        selectedBg: "rgba(251,197,49,0.3)",
+                        selectedBorder: "#ffd966",
+                        selectedColor: "#ffffff"
                     }
                 },
                 designNotes: {
-                    ...DEFAULT_THEME_CONFIG.scene.designNotes,
-                    background: "rgba(0,184,212,0.1)",
-                    borderLeft: "4px solid #00b8d4",
-                    titleColor: "#00e5ff",
-                    contentColor: "#b0e0e0"
+                    background: "rgba(251,197,49,0.1)",
+                    borderLeft: "4px solid #fbc531",
+                    borderRadius: "8px",
+                    padding: "12px",
+                    titleColor: "#fbc531",
+                    titleFontFamily: "'Montserrat', sans-serif",
+                    titleFontSize: "0.85em",
+                    contentColor: "#b0e0ff",
+                    contentFontFamily: "'Inter', sans-serif",
+                    fontSize: "0.9em"
                 },
                 summary: {
-                    ...DEFAULT_THEME_CONFIG.scene.summary,
-                    background: "rgba(0,184,212,0.1)",
-                    borderLeft: "4px solid #00b8d4",
-                    titleColor: "#00e5ff",
-                    contentColor: "#b0e0e0"
+                    background: "rgba(251,197,49,0.1)",
+                    borderLeft: "4px solid #fbc531",
+                    borderRadius: "8px",
+                    padding: "12px",
+                    titleColor: "#fbc531",
+                    titleFontFamily: "'Montserrat', sans-serif",
+                    titleFontSize: "0.9em",
+                    contentColor: "#b0e0ff",
+                    contentFontFamily: "'Inter', sans-serif",
+                    fontSize: "0.9em"
                 },
                 reflection: {
-                    ...DEFAULT_THEME_CONFIG.scene.reflection,
-                    background: "rgba(0,184,212,0.1)",
-                    borderLeft: "4px solid #00b8d4",
-                    titleColor: "#00e5ff",
-                    contentColor: "#b0e0e0"
+                    background: "rgba(251,197,49,0.1)",
+                    borderLeft: "4px solid #fbc531",
+                    borderRadius: "8px",
+                    padding: "14px",
+                    titleColor: "#fbc531",
+                    titleFontFamily: "'Montserrat', sans-serif",
+                    titleFontSize: "0.95em",
+                    contentColor: "#b0e0ff",
+                    contentFontFamily: "'Inter', sans-serif",
+                    fontSize: "0.9em",
+                    italic: true
                 },
                 personality: {
-                    ...DEFAULT_THEME_CONFIG.scene.personality,
-                    background: "rgba(0,184,212,0.1)",
-                    borderLeft: "4px solid #00b8d4",
-                    titleColor: "#00e5ff",
-                    contentColor: "#b0e0e0"
+                    background: "rgba(251,197,49,0.1)",
+                    borderLeft: "4px solid #fbc531",
+                    borderRadius: "8px",
+                    padding: "14px",
+                    titleColor: "#fbc531",
+                    titleFontFamily: "'Montserrat', sans-serif",
+                    titleFontSize: "0.95em",
+                    contentColor: "#b0e0ff",
+                    contentFontFamily: "'Inter', sans-serif",
+                    fontSize: "0.9em"
                 },
                 typology: {
-                    ...DEFAULT_THEME_CONFIG.scene.typology,
-                    background: "rgba(0,184,212,0.1)",
-                    borderLeft: "4px solid #00b8d4",
-                    titleColor: "#00e5ff",
-                    contentColor: "#b0e0e0"
+                    background: "rgba(251,197,49,0.1)",
+                    borderLeft: "4px solid #fbc531",
+                    borderRadius: "8px",
+                    padding: "14px",
+                    titleColor: "#fbc531",
+                    titleFontFamily: "'Montserrat', sans-serif",
+                    titleFontSize: "0.95em",
+                    contentColor: "#b0e0ff",
+                    contentFontFamily: "'Inter', sans-serif",
+                    fontSize: "0.9em"
                 },
                 additionalField: {
-                    ...DEFAULT_THEME_CONFIG.scene.additionalField,
-                    borderLeft: "3px solid #00b8d4",
-                    titleColor: "#00e5ff"
+                    background: "rgba(251,197,49,0.05)",
+                    borderLeft: "3px solid #fbc531",
+                    borderRadius: "4px",
+                    padding: "10px",
+                    titleColor: "#fbc531",
+                    titleFontFamily: "'Montserrat', sans-serif",
+                    titleFontSize: "0.85em",
+                    contentColor: "#b0e0ff",
+                    contentFontFamily: "'Inter', sans-serif",
+                    fontSize: "0.85em"
                 }
             },
             gameItems: {
-                personality: createGameItemConfig("#00b8d4", "#001a2a", "#000d15"),
-                typology: createGameItemConfig("#00e5ff", "#002a3a", "#00151d"),
-                organization: createGameItemConfig("#0091ea", "#001a2a", "#000d15"),
-                relations: createGameItemConfig("#18ffff", "#002a2a", "#001515"),
-                skill: createGameItemConfig("#00acc1", "#001a25", "#000d12"),
-                stat_buffs: createGameItemConfig("#0277bd", "#000d2a", "#000615"),
-                bless: createGameItemConfig("#b0bec5", "#1a2a2a", "#0d1515"),
-                curse: createGameItemConfig("#d32f2f", "#2a0000", "#150000"),
-                buff_debuff: createGameItemConfig("#00bcd4", "#001a2a", "#000d15"),
-                inventory: createGameItemConfig("#455a64", "#1a1a2a", "#0d0d15"),
-                details: createGameItemConfig("#00b8d4", "#001a2a", "#000d15")
+                personality: createGameItemConfig("#fbc531", "#0a3f6f", "#002b5c"),
+                typology: createGameItemConfig("#ffd966", "#0a3f6f", "#002b5c"),
+                organization: createGameItemConfig("#1e90ff", "#0a3f6f", "#002b5c"),
+                relations: createGameItemConfig("#ffaa33", "#0a3f6f", "#002b5c"),
+                skill: createGameItemConfig("#fbc531", "#0a3f6f", "#002b5c"),
+                stat_buffs: createGameItemConfig("#00bfff", "#0a3f6f", "#002b5c"),
+                bless: createGameItemConfig("#f0e68c", "#2a4f7f", "#1a3f6f"),
+                curse: createGameItemConfig("#ff6347", "#4f2a2a", "#3f1a1a"),
+                buff_debuff: createGameItemConfig("#40e0d0", "#0a4f4f", "#003f3f"),
+                inventory: createGameItemConfig("#f4a460", "#4f3f2a", "#3f2f1a"),
+                details: createGameItemConfig("#fbc531", "#0a3f6f", "#002b5c")
+            },
+            turnUpdates: {
+                container: {
+                    background: "rgba(0,43,92,0.9)",
+                    border: "1px solid #fbc531",
+                    borderRadius: "4px",
+                    padding: "10px",
+                    marginBottom: "15px"
+                },
+                header: {
+                    color: "#fbc531",
+                    borderBottom: "1px solid #fbc531",
+                    fontSize: "0.9em",
+                    fontFamily: "'Montserrat', sans-serif",
+                    textTransform: "uppercase"
+                },
+                action: {
+                    background: "rgba(251,197,49,0.1)",
+                    border: "1px solid #fbc531",
+                    color: "#fbc531",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: "0.9em",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    marginBottom: "4px",
+                    success: {
+                        background: "rgba(46,204,113,0.15)",
+                        border: "1px solid #2ecc71",
+                        color: "#2ecc71"
+                    },
+                    failure: {
+                        background: "rgba(231,76,60,0.15)",
+                        border: "1px solid #e74c3c",
+                        color: "#e74c3c"
+                    },
+                    partial: {
+                        background: "rgba(241,196,15,0.15)",
+                        border: "1px solid #f1c40f",
+                        color: "#f1c40f"
+                    }
+                },
+                event: {
+                    background: "rgba(52,152,219,0.1)",
+                    border: "1px solid #3498db",
+                    color: "#3498db",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: "0.9em",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    marginBottom: "4px"
+                }
             },
             history: {
                 ...HISTORY_CONFIG,
-                container: { background: "#00121f", padding: "0" },
-                header: { background: "#001f2f", borderBottom: "2px solid #00b8d4", color: "#e0f7fa" },
+                container: { background: "#001f3f", padding: "0" },
+                header: { background: "#002b5c", borderBottom: "2px solid #fbc531", color: "#e0f0ff" },
                 headerButtons: {
-                    background: "rgba(0,184,212,0.15)",
-                    border: "1px solid #00b8d4",
-                    color: "#00b8d4",
-                    hover: { background: "rgba(0,184,212,0.3)", borderColor: "#00e5ff", color: "#ffffff" }
+                    background: "rgba(251,197,49,0.15)",
+                    border: "1px solid #fbc531",
+                    color: "#fbc531",
+                    hover: { background: "rgba(251,197,49,0.3)", borderColor: "#ffd966", color: "#ffffff" }
                 },
-                turn: { background: "#001a2a", border: "0.5px solid rgba(0,184,212,0.2)" },
+                turn: { background: "#002b5c", border: "0.5px solid rgba(251,197,49,0.2)" },
                 turnSummary: {
                     background: "rgba(0,0,0,0.2)",
-                    color: "#e0f7fa",
-                    summaryColor: "#b0e0e0",
-                    actionCountColor: "#90c0c0",
-                    timestampColor: "#70a0a0"
+                    color: "#e0f0ff",
+                    summaryColor: "#b0e0ff",
+                    actionCountColor: "#90c0ff",
+                    timestampColor: "#70a0d0"
                 },
-                turnContent: { background: "rgba(0,0,0,0.15)", color: "#d0f0f0" },
-                accentColors: { success: "#00e676", failure: "#ff1744", mixed: "#ffea00", neutral: "#00b8d4" }
+                turnContent: { background: "rgba(0,0,0,0.15)", color: "#d0f0ff" },
+                accentColors: { success: "#2ecc71", failure: "#e74c3c", mixed: "#fbc531", neutral: "#3498db" },
+                contentBlocks: {
+                    designNotes: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", contentColor: "#b0e0ff", italic: false },
+                    aiMemory: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", keyColor: "#fbc531", valueColor: "#b0e0ff", booleanTrueColor: "#2ecc71", booleanFalseColor: "#e74c3c", numberColor: "#fbc531", arrayColor: "#1e90ff", stringColor: "#b0e0ff", objectColor: "#00bfff" },
+                    summary: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", contentColor: "#b0e0ff" },
+                    sceneText: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", contentColor: "#b0e0ff" },
+                    reflection: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", contentColor: "#b0e0ff", italic: true },
+                    personality: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", contentColor: "#b0e0ff" },
+                    typology: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", contentColor: "#b0e0ff" },
+                    actions: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", fontSize: "0.75em", successBg: "rgba(46,204,113,0.1)", successColor: "#2ecc71", partialBg: "rgba(251,197,49,0.1)", partialColor: "#fbc531", failureBg: "rgba(231,76,60,0.1)", failureColor: "#e74c3c" },
+                    changes: { background: "rgba(251,197,49,0.05)", borderLeftColor: "#fbc531", titleColor: "#fbc531", contentColor: "#b0e0ff" }
+                }
+            }
+        }
+    },
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 5. ConsoleMonochrome – монохромный терминал (ПОЛНОСТЬЮ ПРОРАБОТАНО, ВСЕ ИКОНКИ МОНОХРОМНЫ)
+    // ═══════════════════════════════════════════════════════════════════════════
+    consoleMonochrome: {
+        name: "Console Monochrome",
+        description: "Чёрно-белый терминал, строгие монохромные иконки (все иконки обесцвечены)",
+        preview: "linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%)",
+        config: {
+            ...DEFAULT_THEME_CONFIG,
+            name: "Console Monochrome",
+            global: {
+                icons: { set: 'emoji', emojiFilter: 'grayscale(100%) brightness(1.2)' },
+                layout: {
+                    scrollbar: {
+                        width: '8px',
+                        height: '8px',
+                        trackBg: '#0a0a0a',
+                        trackBorderRadius: '2px',
+                        thumbBg: '#888888',
+                        thumbBorder: '1px solid #444',
+                        thumbBorderRadius: '2px',
+                        thumbHoverBg: '#cccccc',
+                        thumbHoverBorder: '1px solid #888'
+                    },
+                    selectionColor: "#ffffff",
+                    selectionBg: "rgba(255, 255, 255, 0.1)",
+                    blockMargin: "15px"
+                }
+            },
+            typography: {
+                headers: { fontFamily: "'VT323', monospace", fontWeight: "400", letterSpacing: "0px", textTransform: "uppercase" },
+                body: { fontFamily: "'VT323', monospace", fontWeight: "400", fontSize: "20px", lineHeight: "1.4", color: "#f0f0f0" },
+                ui: { fontFamily: "'Roboto Mono', monospace", fontWeight: "500", fontSize: "15px", letterSpacing: "0px" },
+                monospace: { fontFamily: "'VT323', monospace", fontSize: "18px" }
+            },
+            scene: {
+                container: { padding: "15px", background: "transparent" },
+                textBlock: {
+                    background: "#0a0a0a",
+                    border: "2px solid #666",
+                    borderRadius: "0px",
+                    padding: "15px",
+                    color: "#f0f0f0",
+                    fontFamily: "'VT323', monospace",
+                    fontSize: "1.2em",
+                    boxShadow: "none"
+                },
+                aiMemory: {
+                    background: "rgba(128,128,128,0.1)",
+                    borderLeft: "4px solid #888",
+                    borderRadius: "0px",
+                    padding: "12px",
+                    titleColor: "#cccccc",
+                    contentColor: "#f0f0f0",
+                    keyColor: "#cccccc",
+                    valueColor: "#f0f0f0"
+                },
+                choices: {
+                    containerMargin: "20px 0 0 0",
+                    btn: {
+                        background: "#0a0a0a",
+                        border: "2px solid #888",
+                        color: "#f0f0f0",
+                        borderRadius: "0px",
+                        padding: "12px 16px",
+                        fontFamily: "'VT323', monospace",
+                        fontSize: "1.1em",
+                        marginBottom: "8px",
+                        hoverBg: "#1a1a1a",
+                        hoverBorder: "#aaa",
+                        selectedBg: "#222",
+                        selectedBorder: "#fff",
+                        selectedColor: "#ffffff"
+                    }
+                },
+                designNotes: {
+                    background: "rgba(128,128,128,0.05)",
+                    borderLeft: "4px solid #888",
+                    borderRadius: "0px",
+                    padding: "10px",
+                    titleColor: "#aaa",
+                    titleFontFamily: "'VT323', monospace",
+                    titleFontSize: "0.9em",
+                    contentColor: "#f0f0f0",
+                    contentFontFamily: "'VT323', monospace",
+                    fontSize: "1em"
+                },
+                summary: {
+                    background: "rgba(128,128,128,0.05)",
+                    borderLeft: "4px solid #888",
+                    borderRadius: "0px",
+                    padding: "10px",
+                    titleColor: "#aaa",
+                    titleFontFamily: "'VT323', monospace",
+                    titleFontSize: "0.9em",
+                    contentColor: "#f0f0f0",
+                    contentFontFamily: "'VT323', monospace",
+                    fontSize: "1em"
+                },
+                reflection: {
+                    background: "rgba(128,128,128,0.05)",
+                    borderLeft: "4px solid #888",
+                    borderRadius: "0px",
+                    padding: "12px",
+                    titleColor: "#aaa",
+                    titleFontFamily: "'VT323', monospace",
+                    titleFontSize: "0.95em",
+                    contentColor: "#f0f0f0",
+                    contentFontFamily: "'VT323', monospace",
+                    fontSize: "1em",
+                    italic: false
+                },
+                personality: {
+                    background: "rgba(128,128,128,0.05)",
+                    borderLeft: "4px solid #888",
+                    borderRadius: "0px",
+                    padding: "12px",
+                    titleColor: "#aaa",
+                    titleFontFamily: "'VT323', monospace",
+                    titleFontSize: "0.95em",
+                    contentColor: "#f0f0f0",
+                    contentFontFamily: "'VT323', monospace",
+                    fontSize: "1em"
+                },
+                typology: {
+                    background: "rgba(128,128,128,0.05)",
+                    borderLeft: "4px solid #888",
+                    borderRadius: "0px",
+                    padding: "12px",
+                    titleColor: "#aaa",
+                    titleFontFamily: "'VT323', monospace",
+                    titleFontSize: "0.95em",
+                    contentColor: "#f0f0f0",
+                    contentFontFamily: "'VT323', monospace",
+                    fontSize: "1em"
+                },
+                additionalField: {
+                    background: "rgba(128,128,128,0.03)",
+                    borderLeft: "3px solid #888",
+                    borderRadius: "0px",
+                    padding: "8px",
+                    titleColor: "#888",
+                    titleFontFamily: "'VT323', monospace",
+                    titleFontSize: "0.9em",
+                    contentColor: "#f0f0f0",
+                    contentFontFamily: "'VT323', monospace",
+                    fontSize: "0.95em"
+                }
+            },
+            gameItems: {
+                personality: createGameItemConfig("#aaaaaa", "#1a1a1a", "#0a0a0a"),
+                typology: createGameItemConfig("#999999", "#1a1a1a", "#0a0a0a"),
+                organization: createGameItemConfig("#888888", "#1a1a1a", "#0a0a0a"),
+                relations: createGameItemConfig("#777777", "#1a1a1a", "#0a0a0a"),
+                skill: createGameItemConfig("#cccccc", "#1a1a1a", "#0a0a0a"),
+                stat_buffs: createGameItemConfig("#bbbbbb", "#1a1a1a", "#0a0a0a"),
+                bless: createGameItemConfig("#ffffff", "#2a2a2a", "#1a1a1a"),
+                curse: createGameItemConfig("#555555", "#2a2a2a", "#1a1a1a"),
+                buff_debuff: createGameItemConfig("#dddddd", "#1a1a1a", "#0a0a0a"),
+                inventory: createGameItemConfig("#aaaaaa", "#1a1a1a", "#0a0a0a"),
+                details: createGameItemConfig("#cccccc", "#1a1a1a", "#0a0a0a")
+            },
+            turnUpdates: {
+                container: {
+                    background: "#0a0a0a",
+                    border: "1px solid #444",
+                    borderRadius: "0px",
+                    padding: "10px",
+                    marginBottom: "15px"
+                },
+                header: {
+                    color: "#cccccc",
+                    borderBottom: "1px solid #444",
+                    fontSize: "0.9em",
+                    fontFamily: "'VT323', monospace",
+                    textTransform: "uppercase"
+                },
+                action: {
+                    background: "rgba(128,128,128,0.1)",
+                    border: "1px solid #888",
+                    color: "#cccccc",
+                    fontFamily: "'VT323', monospace",
+                    fontSize: "0.9em",
+                    padding: "4px 8px",
+                    borderRadius: "0px",
+                    marginBottom: "4px",
+                    success: {
+                        background: "rgba(200,200,200,0.15)",
+                        border: "1px solid #ccc",
+                        color: "#ccc"
+                    },
+                    failure: {
+                        background: "rgba(100,100,100,0.15)",
+                        border: "1px solid #666",
+                        color: "#888"
+                    },
+                    partial: {
+                        background: "rgba(150,150,150,0.15)",
+                        border: "1px solid #aaa",
+                        color: "#aaa"
+                    }
+                },
+                event: {
+                    background: "rgba(80,80,80,0.1)",
+                    border: "1px solid #555",
+                    color: "#aaa",
+                    fontFamily: "'VT323', monospace",
+                    fontSize: "0.9em",
+                    padding: "4px 8px",
+                    borderRadius: "0px",
+                    marginBottom: "4px"
+                }
+            },
+            history: {
+                ...HISTORY_CONFIG,
+                container: { background: "#050505", padding: "0" },
+                header: { background: "#0a0a0a", borderBottom: "2px solid #888", color: "#f0f0f0" },
+                headerButtons: {
+                    background: "rgba(128,128,128,0.15)",
+                    border: "1px solid #888",
+                    color: "#cccccc",
+                    hover: { background: "rgba(128,128,128,0.3)", borderColor: "#aaa", color: "#ffffff" }
+                },
+                turn: { background: "#0a0a0a", border: "0.5px solid #333" },
+                turnSummary: {
+                    background: "rgba(0,0,0,0.3)",
+                    color: "#f0f0f0",
+                    summaryColor: "#cccccc",
+                    actionCountColor: "#aaaaaa",
+                    timestampColor: "#888888"
+                },
+                turnContent: { background: "rgba(0,0,0,0.2)", color: "#f0f0f0" },
+                accentColors: { success: "#cccccc", failure: "#888888", mixed: "#aaaaaa", neutral: "#666666" },
+                contentBlocks: {
+                    designNotes: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", contentColor: "#f0f0f0", italic: false },
+                    aiMemory: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", keyColor: "#aaa", valueColor: "#f0f0f0", booleanTrueColor: "#ccc", booleanFalseColor: "#888", numberColor: "#aaa", arrayColor: "#999", stringColor: "#f0f0f0", objectColor: "#bbb" },
+                    summary: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", contentColor: "#f0f0f0" },
+                    sceneText: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", contentColor: "#f0f0f0" },
+                    reflection: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", contentColor: "#f0f0f0", italic: false },
+                    personality: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", contentColor: "#f0f0f0" },
+                    typology: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", contentColor: "#f0f0f0" },
+                    actions: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", fontSize: "0.75em", successBg: "rgba(200,200,200,0.1)", successColor: "#ccc", partialBg: "rgba(170,170,170,0.1)", partialColor: "#aaa", failureBg: "rgba(136,136,136,0.1)", failureColor: "#888" },
+                    changes: { background: "rgba(128,128,128,0.03)", borderLeftColor: "#888", titleColor: "#aaa", contentColor: "#f0f0f0" }
+                }
             }
         }
     }

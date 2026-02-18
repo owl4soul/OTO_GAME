@@ -1,3 +1,4 @@
+// Файл: theme-pro.js (ПОЛНАЯ ИСПРАВЛЕННАЯ ВЕРСИЯ)
 'use strict';
 
 import { DEFAULT_THEME_CONFIG, PRESET_THEMES, FONT_LIBRARY, ICON_MAPPINGS } from './theme-config-pro.js';
@@ -49,12 +50,6 @@ class ThemeManagerPro {
         console.log('💾 Редактирование завершено');
     }
 
-    /**
-     * Обновляет конкретную настройку в редактируемой теме.
-     * @param {Array} path - Путь к свойству в объекте темы.
-     * @param {any} value - Новое значение.
-     * @param {boolean} shouldLog - Нужно ли выводить в консоль (для "живого" превью).
-     */
     updateSetting(path, value, shouldLog = true) {
         if (!this.isEditing) return;
         
@@ -152,7 +147,6 @@ class ThemeManagerPro {
         const css = this._generateCSS(theme);
         this.styleElement.textContent = css;
         
-        // Расширенные правила для песочницы превью
         const previewCss = css
             .replaceAll('#sceneArea', '#te-preview-container #sceneArea')
             .replaceAll('#personalityBlockContainer', '#te-preview-container #personalityBlockContainer')
@@ -162,7 +156,6 @@ class ThemeManagerPro {
             
         this.styleElement.textContent += '\n\n/* === PREVIEW SANDBOX OVERRIDES === */\n' + previewCss;
         
-        // Глобальные исправления для редактора, чтобы он сам не ломался от своих настроек
         this.styleElement.textContent += `
             #te-overlay, #te-overlay * { 
                 box-sizing: border-box !important; 
@@ -180,7 +173,6 @@ class ThemeManagerPro {
     _generateCSS(theme) {
         let css = '/* === THEME PRO GENERATED CSS === */\n\n';
         
-        // 1. Импорт шрифтов
         const usedFonts = new Set();
         const traverseForFonts = (obj) => {
             for (const key in obj) {
@@ -201,7 +193,6 @@ class ThemeManagerPro {
         });
         css += '\n';
 
-        // 2. Глобальные настройки (ИЗМЕНЕНО: использование scrollbar объекта)
         const g = theme.global || {
             icons: { set: 'fa', emojiFilter: 'none' },
             layout: {
@@ -267,7 +258,6 @@ body {
 }
 \n`;
 
-        // 3. Иконки
         css += `/* === ICONS === */\n`;
         if (g.icons.set === 'emoji') {
             const filter = g.icons.emojiFilter || 'none';
@@ -288,7 +278,6 @@ body {
         }
         css += '\n';
 
-        // 4. Сцена
         css += `/* === SCENE === */\n`;
         const s = theme.scene || DEFAULT_THEME_CONFIG.scene;
         
@@ -298,7 +287,6 @@ body {
     background: ${s.container.background} !important;
 }
 
-/* Единые отступы между блоками сцены */
 #sceneArea > * {
     margin-bottom: ${g.layout.blockMargin} !important;
 }
@@ -388,7 +376,6 @@ body {
 }
 `;
 
-        // === НОВЫЕ СЕКЦИИ МЕТА-БЛОКОВ ===
         if (s.designNotes) {
             css += `
 .design-notes-block {
@@ -546,7 +533,6 @@ body {
 `;
         }
 
-        // 5. Game Items
         css += `/* === GAME ITEMS === */\n`;
         const containerMap = {
             personality: 'personalityBlockContainer',
@@ -603,32 +589,165 @@ body {
             }
         });
 
-        // 6. Turn Updates
+        // ========== 6. TURN UPDATES (ПОЛНАЯ НАСТРОЙКА С РАЗДЕЛЕНИЕМ) ==========
         const tu = theme.turnUpdates || DEFAULT_THEME_CONFIG.turnUpdates;
-        css += `\n/* === TURN UPDATES === */\n`;
+        css += `\n/* === TURN UPDATES (action & event) === */\n`;
+        
         css += `
-#turnUpdatesContainer > div,
+/* Основной контейнер блока изменений за ход */
+#turnUpdatesContainer,
 .turn-updates-container {
     background: ${tu.container.background} !important;
     border: ${tu.container.border} !important;
     border-radius: ${tu.container.borderRadius} !important;
     padding: ${tu.container.padding} !important;
+    margin-bottom: ${tu.container.marginBottom || '15px'} !important;
 }
 
-#turnUpdatesContainer > div > div:first-child {
+/* Заголовок блока */
+.turn-updates-header {
     color: ${tu.header.color} !important;
     border-bottom: ${tu.header.borderBottom} !important;
     font-family: ${tu.header.fontFamily} !important;
     font-size: ${tu.header.fontSize} !important;
     text-transform: ${tu.header.textTransform} !important;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
 }
 
-#turnUpdatesContainer > div > div:last-child {
-    color: ${tu.content.color} !important;
-    font-size: ${tu.content.fontSize} !important;
-    font-family: ${tu.content.fontFamily} !important;
+/* Пустой блок */
+.turn-updates-empty {
+    color: #888;
+    font-style: italic;
+    text-align: center;
+    padding: 12px;
 }
-\n`;
+
+/* Подзаголовки секций */
+.turn-updates-subheader {
+    font-size: 0.85em;
+    font-weight: bold;
+    margin-bottom: 6px;
+    padding-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.actions-subheader {
+    color: ${tu.action?.color || '#4cd137'};
+    border-bottom: 1px solid ${tu.action?.borderColor || '#4cd13740'};
+}
+.events-subheader {
+    color: ${tu.event?.color || '#00a8ff'};
+    border-bottom: 1px solid ${tu.event?.borderColor || '#00a8ff40'};
+}
+
+/* Списки */
+.turn-updates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+`;
+
+        // Стили для действий
+        if (tu.action) {
+            css += `
+/* === ДЕЙСТВИЯ ИГРОКА === */
+.turn-update-action {
+    background: ${tu.action.background || 'transparent'} !important;
+    border: ${tu.action.border || 'none'} !important;
+    color: ${tu.action.color || 'inherit'} !important;
+    font-family: ${tu.action.fontFamily || 'inherit'} !important;
+    font-size: ${tu.action.fontSize || '0.9em'} !important;
+    padding: ${tu.action.padding || '4px 8px'} !important;
+    border-radius: ${tu.action.borderRadius || '4px'} !important;
+    margin-bottom: ${tu.action.marginBottom || '4px'} !important;
+}
+.turn-update-action-success {
+    background: ${tu.action.success?.background || tu.action.background} !important;
+    border: ${tu.action.success?.border || tu.action.border} !important;
+    color: ${tu.action.success?.color || tu.action.color} !important;
+}
+.turn-update-action-failure {
+    background: ${tu.action.failure?.background || tu.action.background} !important;
+    border: ${tu.action.failure?.border || tu.action.border} !important;
+    color: ${tu.action.failure?.color || tu.action.color} !important;
+}
+.turn-update-action-partial {
+    background: ${tu.action.partial?.background || tu.action.background} !important;
+    border: ${tu.action.partial?.border || tu.action.border} !important;
+    color: ${tu.action.partial?.color || tu.action.color} !important;
+}
+`;
+        }
+
+        // Стили для событий
+        if (tu.event) {
+            css += `
+/* === СОБЫТИЯ === */
+.turn-update-event {
+    background: ${tu.event.background || 'transparent'} !important;
+    border: ${tu.event.border || 'none'} !important;
+    color: ${tu.event.color || 'inherit'} !important;
+    font-family: ${tu.event.fontFamily || 'inherit'} !important;
+    font-size: ${tu.event.fontSize || '0.9em'} !important;
+    padding: ${tu.event.padding || '4px 8px'} !important;
+    border-radius: ${tu.event.borderRadius || '4px'} !important;
+    margin-bottom: ${tu.event.marginBottom || '4px'} !important;
+}
+`;
+        }
+
+        // Стили для операций внутри сообщений
+        css += `
+/* Операции */
+.operation-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 5px 0;
+    border-bottom: 1px dotted #333;
+}
+.operation-icon {
+    margin-right: 8px;
+    margin-top: 2px;
+}
+.operation-content {
+    flex: 1;
+    min-width: 0;
+}
+.operation-description {
+    color: #aaa;
+    font-size: 0.75em;
+    margin-top: 2px;
+    font-style: italic;
+}
+.operation-extra {
+    color: #666;
+    font-size: 0.7em;
+}
+.action-operation .operation-main { color: #4cd137; }
+.event-operation .operation-main { color: #00a8ff; }
+.operation-stat { color: #fbc531; }
+.operation-skill { color: #9c88ff; }
+.operation-inventory { color: #d4af37; }
+.operation-relations { color: #ff9ff3; }
+.operation-bless { color: #fbc531; }
+.operation-curse { color: #c23616; }
+.operation-buff { color: #4cd137; }
+.operation-debuff { color: #e84118; }
+.operation-progress { color: #00a8ff; }
+.operation-personality { color: #1dd1a1; }
+.operation-degree { color: #ff9ff3; }
+.operation-organization { color: #d4af37; }
+.operation-value.positive { color: #4cd137; font-weight: bold; }
+.operation-value.negative { color: #e84118; font-weight: bold; }
+.operation-add { color: #4cd137; }
+.operation-remove { color: #e84118; }
+.operation-set { color: #fbc531; }
+.operation-modify.positive { color: #4cd137; font-weight: bold; }
+.operation-modify.negative { color: #e84118; font-weight: bold; }
+`;
 
         // 7. История
         css += this._generateHistoryCSS(theme.history);
