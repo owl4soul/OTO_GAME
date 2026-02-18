@@ -23,68 +23,182 @@ export class ThemeEditorPro {
 
         // ── Метки полей ───────────────────────────────────────────────────────
         this.labels = {
-            // Global
-            icons: '🎨 Система иконок', set: 'Набор иконок', emojiFilter: 'CSS-фильтр для emoji',
-            layout: '📐 Разметка',
-            scrollbarColor: 'Цвет ползунка', scrollbarBg: 'Фон дорожки',
-            selectionColor: 'Цвет выделения', selectionBg: 'Фон выделения',
-            blockMargin: 'Отступ между блоками',
-            // ДОБАВЛЕНО: поля для скроллбара
-            width: 'Толщина',
-            height: 'Высота (гориз.)',
-            trackBg: 'Фон дорожки',
+            // ── Global / Icons ────────────────────────────────────────────────
+            icons: '🎨 Иконки',
+            set: 'Набор иконок',                          // 'fa' = FontAwesome, 'emoji' = Unicode
+            emojiFilter: 'CSS-фильтр emoji',              // CSS filter применяется к ::before emoji-иконок
+
+            // ── Global / Layout ───────────────────────────────────────────────
+            layout: '📐 Разметка и прокрутка',
+            blockMargin: 'Отступ между блоками',          // margin-bottom для прямых потомков #sceneArea
+
+            // ── Global / Layout / Scrollbar ───────────────────────────────────
+            scrollbar: '🖱️ Скроллбар',
+            width: 'Толщина (вертик.)',                   // ::-webkit-scrollbar { width }
+            height: 'Толщина (горизонт.)',                // ::-webkit-scrollbar { height }
+            trackBg: 'Фон дорожки',                      // ::-webkit-scrollbar-track { background }
             trackBorderRadius: 'Скругление дорожки',
-            thumbBg: 'Фон ползунка',
-            thumbBorder: 'Граница ползунка',
-            thumbBorderRadius: 'Скругление ползунка',
-            thumbHoverBg: 'Фон (наведение)',
-            thumbHoverBorder: 'Граница (наведение)',
-            // Typography
-            headers: '📰 Заголовки', body: '📝 Основной текст',
-            ui: '🎛️ UI-элементы', monospace: '⌨️ Моноширинный',
-            fontFamily: 'Шрифт', fontWeight: 'Насыщенность',
-            fontSize: 'Размер', lineHeight: 'Высота строки',
-            letterSpacing: 'Межбуквенный', textTransform: 'Регистр', color: 'Цвет текста',
-            // Scene
-            container: '📦 Контейнер', textBlock: '📄 Блок текста',
-            aiMemory: '🧠 Память ИИ', choices: '🎯 Варианты выбора',
-            designNotes: '📝 Заметки дизайнера', summary: '📋 Сводка',
-            reflection: '💭 Внутренний голос', personality: '👤 Личность (мета)',
-            typology: '🔖 Типология (мета)', additionalField: '➕ Доп. поля',
-            btn: 'Кнопка выбора',
-            // CSS-свойства
-            background: 'Фон', border: 'Граница', borderLeft: 'Граница слева',
-            borderRight: 'Граница справа', borderTop: 'Граница сверху',
-            borderBottom: 'Граница снизу', borderColor: 'Цвет границы',
-            borderRadius: 'Скругление', padding: 'Внутр. отступы',
-            margin: 'Внешн. отступы', marginBottom: 'Отступ снизу',
-            boxShadow: 'Тень', containerMargin: 'Отступы контейнера',
-            // Цвета компонентов
-            titleColor: 'Цвет заголовка', contentColor: 'Цвет содержимого',
-            keyColor: 'Цвет ключей JSON', valueColor: 'Цвет значений JSON',
-            hoverBg: 'Фон (наведение)', hoverBorder: 'Граница (наведение)',
-            selectedBg: 'Фон (выбрана)', selectedBorder: 'Граница (выбрана)',
-            selectedColor: 'Текст (выбрана)',
-            titleFontFamily: 'Шрифт заголовка', contentFontFamily: 'Шрифт содержимого',
-            titleFontSize: 'Размер заголовка', italic: 'Курсив',
-            // Game Items
-            header: '📌 Заголовок секции', badge: '🏷️ Бейдж',
-            hoverTransform: 'Transform (наведение)', hoverShadow: 'Тень (наведение)',
-            personality_gi: '👤 Личность', typology_gi: '🔖 Типология',
-            organization: '🏛️ Организации', relations: '💑 Отношения',
-            skill: '📜 Навыки', stat_buffs: '📊 Моды статов',
-            bless: '✨ Благословения', curse: '☠️ Проклятия',
-            buff_debuff: '📈 Баффы/Дебаффы', inventory: '🎒 Инвентарь', details: 'ℹ️ Детали',
-            // Turn updates
+            thumbBg: 'Фон бегунка',                      // ::-webkit-scrollbar-thumb { background }
+            thumbBorder: 'Граница бегунка',
+            thumbBorderRadius: 'Скругление бегунка',
+            thumbHoverBg: 'Бегунок: фон при наведении',
+            thumbHoverBorder: 'Бегунок: граница при наведении',
+
+            // ── Global / Selection ────────────────────────────────────────────
+            selectionColor: 'Цвет выделенного текста',   // ::selection { color }
+            selectionBg: 'Фон выделения текста',          // ::selection { background }
+
+            // ── Typography ────────────────────────────────────────────────────
+            headers: '🔤 Заголовки (.section-header, .history-header, etc.)',
+            body: '📝 Основной текст (#sceneText, .scene-text-block)',
+            ui: '🎛️ UI-шрифт (кнопки, метки, навигация)',
+            monospace: '⌨️ Моноширинный (JSON-память, консоль)',
+            fontFamily: 'Шрифт (font-family)',
+            fontWeight: 'Насыщенность (font-weight)',
+            fontSize: 'Размер (font-size)',
+            lineHeight: 'Высота строки (line-height)',
+            letterSpacing: 'Межбуквенный интервал (letter-spacing)',
+            textTransform: 'Преобразование регистра',
+            color: 'Цвет текста',
+            italic: 'Курсив',
+
+            // ── Scene — блоки ─────────────────────────────────────────────────
+            container: '📦 Контейнер (#sceneArea)',
+            textBlock: '📄 Основной текст сцены (#sceneText)',
+            aiMemory: '🧠 Блок памяти ГМ (.ai-memory-block)',
+            choices: '🎯 Кнопки вариантов выбора (.choices-container)',
+            btn: '⬜ Кнопка варианта (.choice-btn)',
+            designNotes: '✏️ Заметки дизайнера (.design-notes-block)',
+            summary: '📋 Сводка хода (.summary-block)',
+            reflection: '💭 Рефлексия / внутренний голос (.reflection-block)',
+            personality: '👤 Изменение личности (.personality-block)',
+            typology: '🔖 Типология (.typology-block)',
+            additionalField: '➕ Дополнительное поле (.additional-field-block)',
+
+            // ── CSS-свойства (общие) ──────────────────────────────────────────
+            background: 'Фон (background)',
+            border: 'Граница (border)',
+            borderLeft: 'Левая граница (border-left)',
+            borderRight: 'Правая граница (border-right)',
+            borderTop: 'Верхняя граница (border-top)',
+            borderBottom: 'Нижняя граница (border-bottom)',
+            borderColor: 'Цвет границы',
+            borderRadius: 'Скругление углов (border-radius)',
+            padding: 'Внутренний отступ (padding)',
+            margin: 'Внешний отступ (margin)',
+            marginBottom: 'Отступ снизу (margin-bottom)',
+            boxShadow: 'Тень (box-shadow)',
+            containerMargin: 'Внешний отступ контейнера',
+            zIndex: 'Порядок наложения (z-index)',
+            overflowY: 'Прокрутка по вертикали',
+            overflowX: 'Прокрутка по горизонтали',
+
+            // ── Цвета компонентов ─────────────────────────────────────────────
+            titleColor: 'Цвет заголовка',
+            contentColor: 'Цвет содержимого',
+            keyColor: 'Цвет ключей (JSON-память)',
+            valueColor: 'Цвет значений (JSON-память)',
+            numberColor: 'Цвет чисел (JSON)',
+            arrayColor: 'Цвет массивов (JSON)',
+            stringColor: 'Цвет строк (JSON)',
+            objectColor: 'Цвет объектов (JSON)',
+            booleanTrueColor: 'Цвет true (JSON)',
+            booleanFalseColor: 'Цвет false (JSON)',
+            hoverBg: 'Фон при наведении',
+            hoverBorder: 'Граница при наведении',
+            selectedBg: 'Фон (выбранный элемент)',
+            selectedBorder: 'Граница (выбранный элемент)',
+            selectedColor: 'Цвет текста (выбранный элемент)',
+            titleFontFamily: 'Шрифт заголовка',
+            contentFontFamily: 'Шрифт содержимого',
+            titleFontSize: 'Размер заголовка',
+
+            // ── Game Items (игровые блоки) ────────────────────────────────────
+            header: '📌 Заголовок блока (.section-header)',
+            badge: '🏷️ Бейдж / тег (.game-item-badge)',
+            hoverTransform: 'Transform бейджа при наведении',
+            hoverShadow: 'Тень бейджа при наведении',
+            // Типы блоков (через _gi суффикс для disambiguation)
+            personality_gi: '👤 Личность (#personalityBlockContainer)',
+            typology_gi: '🔖 Типология (#typologyContainer)',
+            organization: '🏛️ Организации (#organizationsContainer)',
+            relations: '💑 Отношения (#relationsContainer)',
+            skill: '📜 Навыки (#skillsContainer)',
+            stat_buffs: '📊 Модификаторы статов (#statBuffsContainer)',
+            bless: '✨ Благословения (#blessingsContainer)',
+            curse: '☠️ Проклятия (#cursesContainer)',
+            buff_debuff: '📈 Баффы и дебаффы (#buffsDebuffsContainer)',
+            inventory: '🎒 Инвентарь (#inventoryContainer)',
+            details: 'ℹ️ Детали (#detailsContainer)',
+
+            // ── Turn Updates (изменения за ход) ───────────────────────────────
+            action: '⚔️ Блок действия (.turn-update-action)',
+            event: '📣 Блок события (.turn-update-event)',
+            partial: '🟡 Частичный успех (.turn-update-action-partial)',
             content: '📄 Содержимое',
-            // History
-            header_history: '🎯 Заголовок журнала', headerButtons: '🔘 Кнопки заголовка',
-            hover: 'Стиль (наведение)', turn: '📝 Блок хода',
-            turnSummary: '📋 Сводка хода', turnContent: '📄 Содержимое хода',
-            accentColors: '🎨 Акцентные цвета',
-            summaryColor: 'Цвет сводки', actionCountColor: 'Цвет счётчика',
-            timestampColor: 'Цвет времени',
-            success: 'Успех', failure: 'Провал', mixed: 'Смешанный', neutral: 'Нейтральный',
+
+            // ── History (журнал истории) ───────────────────────────────────────
+            header_history: '🎯 Шапка журнала (.history-header)',
+            headerButtons: '🔘 Кнопки шапки (Expand/Collapse All)',
+            hover: '✨ Состояние наведения',
+            turnsContainer: '📚 Список ходов (.turns-container)',
+            turn: '📝 Элемент хода (.history-turn)',
+            turnSummary: '📋 Строка-сводка хода (.turn-summary)',
+            turnContent: '📄 Развёрнутое содержимое хода (.turn-content)',
+            contentBlock: '🧩 Общие стили блоков контента',
+            contentBlocks: '🧩 Типы блоков контента внутри хода',
+            accentColors: '🎨 Акцентные цвета (левая граница хода)',
+            footerIndicator: '📉 Индикатор «последние X из Y ходов»',
+            emptyState: '🕳️ Пустое состояние (история пуста)',
+
+            // Поля turnSummary
+            numberColor: 'Цвет номера хода',
+            summaryColor: 'Цвет текста сводки',
+            actionCountColor: 'Цвет счётчика действий',
+            timestampColor: 'Цвет метки времени',
+            chevronColor: 'Цвет шеврона ▾',
+
+            // Поля contentBlock (общие)
+            titleFontFamily_cb: 'Шрифт заголовка блока',
+            titleMarginBottom: 'Отступ под заголовком блока',
+            contentFontSize: 'Размер текста содержимого',
+            contentFontFamily: 'Шрифт содержимого',
+            contentLineHeight: 'Высота строки содержимого',
+            titleFontSize_cb: 'Размер заголовка блока',
+            borderLeftWidth: 'Ширина левой полосы блока',
+            borderLeftStyle: 'Стиль левой полосы блока',
+            borderLeftColor: 'Цвет левой полосы блока',
+
+            // contentBlocks — специфические типы
+            designNotes_cb: '✏️ Заметки дизайнера',
+            aiMemory_cb: '🧠 JSON-память ГМ',
+            summary_cb: '📋 Сводка',
+            sceneText: '🎬 Текст сцены',
+            reflection_cb: '💭 Рефлексия',
+            personality_cb: '👤 Личность',
+            typology_cb: '🔖 Типология',
+            actions_cb: '⚔️ Действия игрока',
+            changes_cb: '🔄 Изменения',
+
+            // Цвета для actions внутри истории
+            successColor: 'Цвет «успех»',
+            successBg: 'Фон «успех»',
+            partialColor: 'Цвет «частичный успех»',
+            partialBg: 'Фон «частичный успех»',
+            failureColor: 'Цвет «провал»',
+            failureBg: 'Фон «провал»',
+
+            // Акцентные цвета истории
+            success: '✅ Акцент: успех',
+            failure: '❌ Акцент: провал',
+            mixed: '🟡 Акцент: смешанный',
+            neutral: '⬜ Акцент: нейтральный',
+
+            // emptyState / footerIndicator
+            iconSize: 'Размер иконки',
+            iconOpacity: 'Прозрачность иконки',
+            textAlign: 'Выравнивание текста',
+            fontStyle: 'Стиль шрифта (italic)',
         };
     }
 
@@ -97,7 +211,7 @@ export class ThemeEditorPro {
         const k = key.toLowerCase();
         const isCompound = ['border','borderleft','borderright','bordertop','borderbottom',
             'hoverborder','selectedborder','boxshadow','hovershadow',
-            'thumbborder','thumbhoverborder'].includes(k);   // <-- ИЗМЕНЕНО: добавлены новые составные поля
+            'thumbborder','thumbhoverborder'].includes(k);
         if (!isCompound) return false;
         return /#[0-9a-fA-F]{3,8}/.test(value) || /rgba?\(/.test(value) || /hsla?\(/.test(value);
     }
@@ -106,12 +220,15 @@ export class ThemeEditorPro {
         if (typeof value !== 'string') return false;
         if (this._isCompoundCssWithColor(key, value)) return false;
         const k = key.toLowerCase();
+        // Ключевые слова, однозначно указывающие на цвет
         const colorKw = ['color','background','bg'];
-        const explicit = ['success','failure','mixed','neutral'];
+        // Явные ключи из конфигов (success/failure/etc. — акцентные цвета)
+        const explicit = ['success','failure','mixed','neutral','partial'];
         const hasKw = colorKw.some(kw => k.includes(kw));
         const isExpl = explicit.includes(key);
         if (!hasKw && !isExpl) return false;
         const v = value.trim();
+        // Допускаем: hex, rgb/rgba, hsl/hsla, gradient, ключевые слова CSS
         return v.startsWith('#') || v.startsWith('rgb') || v.startsWith('hsl') ||
             v.toLowerCase().includes('gradient') || v === 'transparent' ||
             v === 'inherit' || v === 'currentColor' ||
@@ -268,74 +385,71 @@ export class ThemeEditorPro {
     }
 
     // ── Верхняя панель: заголовок + пресет + undo/redo/export/import ─────────
-    // (изменено: инлайн-стили заменены на классы)
-_createTopBar() {
-    const bar = document.createElement('div');
-    bar.className = 'te-topbar';
+    _createTopBar() {
+        const bar = document.createElement('div');
+        bar.className = 'te-topbar';
 
-    const left = document.createElement('div');
-    left.className = 'te-topbar-left';
-    left.innerHTML = `<span class="te-logo">THEME EDITOR PRO</span>`;
+        const left = document.createElement('div');
+        left.className = 'te-topbar-left';
+        left.innerHTML = `<span class="te-logo">THEME EDITOR PRO</span>`;
 
-    const presetSel = document.createElement('select');
-    presetSel.className = 'te-preset-select';
-    themeManagerPro.getPresets().forEach(p => {
-        const o = document.createElement('option');
-        o.value = p.key; o.text = p.name;
-        if (p.isCurrent) o.selected = true;
-        presetSel.appendChild(o);
-    });
-    presetSel.onchange = e => {
-        if (confirm('Загрузить пресет? Несохранённые изменения будут потеряны.')) {
-            themeManagerPro.loadPreset(e.target.value);
-            themeManagerPro.startEditing();
-            this._pushHistory();
-            this._renderPanelContent();
-        }
-    };
-    left.appendChild(presetSel);
-    bar.appendChild(left);
+        const presetSel = document.createElement('select');
+        presetSel.className = 'te-preset-select';
+        themeManagerPro.getPresets().forEach(p => {
+            const o = document.createElement('option');
+            o.value = p.key; o.text = p.name;
+            if (p.isCurrent) o.selected = true;
+            presetSel.appendChild(o);
+        });
+        presetSel.onchange = e => {
+            if (confirm('Загрузить пресет? Несохранённые изменения будут потеряны.')) {
+                themeManagerPro.loadPreset(e.target.value);
+                themeManagerPro.startEditing();
+                this._pushHistory();
+                this._renderPanelContent();
+            }
+        };
+        left.appendChild(presetSel);
+        bar.appendChild(left);
 
-    const right = document.createElement('div');
-    right.className = 'te-topbar-right';
+        const right = document.createElement('div');
+        right.className = 'te-topbar-right';
 
-    // ИЗМЕНЕНО: теперь только иконки и title
-    const undo = document.createElement('button');
-    undo.id = 'te-undo';
-    undo.innerHTML = '↩';                // иконка
-    undo.className = 'te-btn-icon';
-    undo.title = 'Отменить (Ctrl+Z)';    // подсказка
-    undo.onclick = () => this._undo();
+        const undo = document.createElement('button');
+        undo.id = 'te-undo';
+        undo.innerHTML = '↩';
+        undo.className = 'te-btn-icon';
+        undo.title = 'Отменить (Ctrl+Z)';
+        undo.onclick = () => this._undo();
 
-    const redo = document.createElement('button');
-    redo.id = 'te-redo';
-    redo.innerHTML = '↪';                // иконка
-    redo.className = 'te-btn-icon';
-    redo.title = 'Повторить (Ctrl+Y)';
-    redo.onclick = () => this._redo();
+        const redo = document.createElement('button');
+        redo.id = 'te-redo';
+        redo.innerHTML = '↪';
+        redo.className = 'te-btn-icon';
+        redo.title = 'Повторить (Ctrl+Y)';
+        redo.onclick = () => this._redo();
 
-    const sep = document.createElement('span');
-    sep.className = 'te-separator';
+        const sep = document.createElement('span');
+        sep.className = 'te-separator';
 
-    const imp = document.createElement('button');
-    imp.innerHTML = '📥';                // можно оставить текст или тоже иконку
-    imp.className = 'te-btn-icon';
-    imp.title = 'Импорт';
-    imp.onclick = () => this._import();
+        const imp = document.createElement('button');
+        imp.innerHTML = '📥';
+        imp.className = 'te-btn-icon';
+        imp.title = 'Импорт';
+        imp.onclick = () => this._import();
 
-    const exp = document.createElement('button');
-    exp.innerHTML = '📤';
-    exp.className = 'te-btn-icon';
-    exp.title = 'Экспорт';
-    exp.onclick = () => this._export();
+        const exp = document.createElement('button');
+        exp.innerHTML = '📤';
+        exp.className = 'te-btn-icon';
+        exp.title = 'Экспорт';
+        exp.onclick = () => this._export();
 
-    right.append(undo, redo, sep, imp, exp);
-    bar.appendChild(right);
-    return bar;
-}
+        right.append(undo, redo, sep, imp, exp);
+        bar.appendChild(right);
+        return bar;
+    }
 
     // ── Строка вкладок ───────────────────────────────────────────────────────
-    // (изменено: инлайн-стили заменены на классы)
     _createTabBar() {
         const bar = document.createElement('div');
         bar.id = 'te-tabbar';
@@ -368,15 +482,13 @@ _createTopBar() {
         Array.from(bar.children).forEach(tab => {
             const active = tab.dataset.tabId === this.activeTab;
             tab.className = 'te-tab' + (active ? ' active' : '');
-            // обновляем содержимое (иконка и текст не меняются, но если нужно - можно обновить)
         });
     }
 
     // ── Панель настроек ──────────────────────────────────────────────────────
-    // (изменено: убран инлайн-стиль ширины, добавлены классы)
     _createSettingsPanel() {
         const panel = document.createElement('div');
-        panel.id = 'te-settings-panel'; // для возможного использования
+        panel.id = 'te-settings-panel';
 
         const titleBar = document.createElement('div');
         titleBar.id = 'te-section-title';
@@ -392,7 +504,6 @@ _createTopBar() {
     }
 
     // ── Панель превью ────────────────────────────────────────────────────────
-    // (изменено: инлайн-стили заменены на классы)
     _createPreviewPanel() {
         const wrap = document.createElement('div');
         wrap.id = 'te-preview-panel';
@@ -410,7 +521,6 @@ _createTopBar() {
     }
 
     // ── Футер ────────────────────────────────────────────────────────────────
-    // (изменено: инлайн-стили заменены на классы)
     _createFooter() {
         const f = document.createElement('div');
         f.className = 'te-footer';
@@ -530,8 +640,9 @@ _createTopBar() {
 
         const lbl = document.createElement('div');
         lbl.textContent = this._getLabel(key, path.slice(0, -1));
-        lbl.title = key;
-        lbl.style.cssText = "color:#777;font-size:0.72em;font-weight:600;min-width:130px;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;";
+        // Tooltip: показывает полный путь к настройке (например: scene.reflection.italic)
+        lbl.title = path.join('.') + '\n─────────────────\nКлюч: ' + key + '\nЗначение: ' + val;
+        lbl.style.cssText = "color:#777;font-size:0.72em;font-weight:600;min-width:130px;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;cursor:help;";
 
         const inputWrap = document.createElement('div');
         inputWrap.style.cssText = "flex:1;display:flex;align-items:center;min-width:0;";
@@ -632,7 +743,7 @@ _createTopBar() {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // ВИДЖЕТЫ ВВОДА — КОМПАКТНЫЕ (без изменений)
+    // ВИДЖЕТЫ ВВОДА — КОМПАКТНЫЕ
     // ═══════════════════════════════════════════════════════════════════════
 
     _makeColorInput(val, path) {
@@ -652,6 +763,7 @@ _createTopBar() {
             input.value = newVal;
             preview.style.background = newVal;
             themeManagerPro.updateSetting(path, newVal);
+            this._updatePreview();   // <-- ИСПРАВЛЕНИЕ: обновляем предпросмотр
             this._pushHistory();
         };
 
@@ -699,6 +811,7 @@ _createTopBar() {
                 input.value = newVal;
                 refreshPreview(newVal);
                 themeManagerPro.updateSetting(path, newVal);
+                this._updatePreview();   // <-- ИСПРАВЛЕНИЕ: обновляем предпросмотр
                 this._pushHistory();
             }, cur);
         };
@@ -807,13 +920,25 @@ _createTopBar() {
     // ═══════════════════════════════════════════════════════════════════════
 
     _getLabel(key, path = []) {
+        // Секция game items — блоки типов
         if (path[0] === 'gameItems' && path.length === 1) {
             const k = key + '_gi';
             if (this.labels[k]) return this.labels[k];
         }
+        // Секция history — заголовок
         if (path[0] === 'history' && path.length === 1) {
             const k = key + '_history';
             if (this.labels[k]) return this.labels[k];
+        }
+        // turnUpdates: action/event
+        if (path[0] === 'turnUpdates' && path.length === 1) {
+            if (key === 'action') return '⚔️ Действие (.turn-update-action)';
+            if (key === 'event')  return '📣 Событие (.turn-update-event)';
+        }
+        // История: вложенные contentBlocks
+        if (path.includes('contentBlocks') && path.length > 1) {
+            if (key === 'background') return 'Фон блока';
+            if (key === 'borderLeftColor') return 'Цвет левой полосы';
         }
         return this.labels[key] || key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
     }
