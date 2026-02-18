@@ -3,132 +3,269 @@
 
 import { CONFIG } from './1-config.js';
 
+// Категории обрабатываемых game_item:
+const GAME_ITEM_CATEGORIES = {
+    STAT: 'stat',
+    SKILL: 'skill',
+    INVENTORY: 'inventory',
+    RELATIONS: 'relations',
+    ORGANIZATION: 'organization',
+    BLESSING: 'bless',
+    CURSE: 'curse',
+    BUFF: 'buff',
+    DEBUFF: 'debuff',
+    PERSONALITY: 'personality',
+    PROGRESS: 'progress'
+};
+
+function getRussianStatName(key) {
+    const map = {
+        'will': 'Воля',
+        'stealth': 'Скрытность',
+        'influence': 'Влияние',
+        'sanity': 'Разум'
+    };
+    return map[key] || key;
+}
+
 /**
- * Пытается починить обрезанный JSON (Auto-Heal)
- * Восстанавливает закрывающие кавычки и скобки.
+ * Получает иконку для типа игрового предмета
+ * @param {string} itemId - Идентификатор предмета (например, 'stat:will')
+ * @returns {string} Emoji-иконка
+ */
+function getGameItemIcon(itemId) {
+    if (!itemId) return '📌';
+    
+    const type = itemId.split(':')[0];
+    const icons = {
+        'stat': '📊',
+        'skill': '📜',
+        'inventory': '🎒',
+        'relations': '👤',
+        'bless': '✨',
+        'curse': '💀',
+        'buff': '⬆️',
+        'debuff': '⬇️',
+        'initiation_degree': '🎓',
+        'progress': '📈',
+        'personality': '🧠',
+        'effect': '⚡',
+        'status': '🔘',
+        'ability': '💫',
+        'trait': '🎭',
+        'item': '🎁',
+        'ritual': '🕯️',
+        'knowledge': '📚',
+        'secret': '🔐',
+        'location': '📍',
+        'event': '📅',
+        'quest': '🎯',
+        'achievement': '🏆',
+        'reputation': '⭐',
+        'currency': '💰',
+        'resource': '⛏️',
+        'weapon': '⚔️',
+        'armor': '🛡️',
+        'potion': '🧪',
+        'scroll': '📜',
+        'key': '🔑',
+        'map': '🗺️',
+        'tool': '🔧'
+    };
+    
+    return icons[type] || '📌';
+}
+
+function categorizeGameItem(id) {
+    if (!id || typeof id !== 'string') return null;
+    
+    const [category] = id.split(':');
+    
+    // Специальная обработка организаций
+    if (category === 'organization_rank') return GAME_ITEM_CATEGORIES.ORGANIZATION;
+    
+    // Для остальных - первая часть
+    const categoryMap = {
+        'stat': GAME_ITEM_CATEGORIES.STAT,
+        'skill': GAME_ITEM_CATEGORIES.SKILL,
+        'inventory': GAME_ITEM_CATEGORIES.INVENTORY,
+        'relations': GAME_ITEM_CATEGORIES.RELATIONS,
+        'bless': GAME_ITEM_CATEGORIES.BLESSING,
+        'curse': GAME_ITEM_CATEGORIES.CURSE,
+        'buff': GAME_ITEM_CATEGORIES.BUFF,
+        'debuff': GAME_ITEM_CATEGORIES.DEBUFF,
+        'personality': GAME_ITEM_CATEGORIES.PERSONALITY,
+        'progress': GAME_ITEM_CATEGORIES.PROGRESS
+    };
+    
+    return categoryMap[category] || null;
+}
+
+function getOperationDetails(operation) {
+    const category = categorizeGameItem(operation.id);
+    const [type, name] = operation.id.split(':');
+    
+    return {
+        category,
+        type,
+        name,
+        operation: operation.operation,
+        value: operation.value,
+        delta: operation.delta
+    };
+}
+
+/**
+ * УЛУЧШЕННАЯ ВЕРСИЯ: Пытается починить обрезанный JSON (Auto-Heal)
+ * Восстанавливает закрывающие кавычки и скобки, включая обрезанные строки в массивах.
  * @param {string} text - Битая JSON строка
  * @returns {string} - Потенциально валидная JSON строка
  */
 function repairTruncatedJSON(text) {
     let repaired = text.trim();
     
-    // 1. Если обрыв внутри строки (нечетное кол-во кавычек), закрываем кавычку
-    // Считаем неэкранированные кавычки
-    let quoteCount = 0;
-    for (let i = 0; i < repaired.length; i++) {
-        if (repaired[i] === '"' && (i === 0 || repaired[i - 1] !== '\\')) {
-            quoteCount++;
-        }
-    }
+    console.log(`🔧 [JSON Repair] Начинаем ремонт JSON (длина: ${repaired.length} символов)`);
     
-    if (quoteCount % 2 !== 0) {
-        // Если обрыв произошел прямо на экранирующем слеше, убираем его
-        if (repaired.endsWith('\\')) {
-            repaired = repaired.slice(0, -1);
-        }
-        repaired += '"';
-    }
+    // 1. Убираем возможные markdown обертки
+    repaired = repaired.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+    repaired = repaired.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
     
-    // 2. Удаляем "висячую" запятую в конце (частая проблема обрыва массивов/объектов)
-    // Например: {"items": ["key",], -> {"items": ["key"]}
-    repaired = repaired.replace(/,\s*([}\]]*)$/, '$1');
-    
-    // 3. Балансируем скобки
-    // Считаем фигурные { и }
-    const openCurly = (repaired.match(/\{/g) || []).length;
-    const closeCurly = (repaired.match(/\}/g) || []).length;
-    // Считаем квадратные [ и ]
-    const openSquare = (repaired.match(/\[/g) || []).length;
-    const closeSquare = (repaired.match(/\]/g) || []).length;
-    
-    // Добавляем недостающие закрывающие скобки.
-    // Эвристика: обычно в JSON сначала закрывают массивы, потом объекты.
-    if (openSquare > closeSquare) {
-        repaired += ']'.repeat(openSquare - closeSquare);
-    }
-    if (openCurly > closeCurly) {
-        repaired += '}'.repeat(openCurly - closeCurly);
-    }
-    
-    return repaired;
-}
-
-/**
- * Извлекает объекты choices из текста массива (новый формат)
- * Знаем структуру: text, requirements{stats{}, inventory}, success_changes, failure_changes
- * @param {string} choicesText - Текст массива choices
- * @returns {Array} Массив объектов choice
- */
-function extractChoiceObjects(choicesText) {
-    const choiceObjects = [];
-    let currentObject = '';
-    let braceDepth = 0;
+    // 2. Проверяем, не обрывается ли JSON в середине строки
     let inString = false;
     let escapeNext = false;
+    let lastQuoteIndex = -1;
     
-    for (let i = 0; i < choicesText.length; i++) {
-        const char = choicesText[i];
+    for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
         
         if (escapeNext) {
-            currentObject += char;
             escapeNext = false;
             continue;
         }
         
         if (char === '\\') {
-            currentObject += char;
             escapeNext = true;
             continue;
         }
         
         if (char === '"') {
             inString = !inString;
-        }
-        
-        if (!inString) {
-            if (char === '{') {
-                if (braceDepth === 0) {
-                    currentObject = '';
-                }
-                braceDepth++;
-            } else if (char === '}') {
-                braceDepth--;
-                if (braceDepth === 0) {
-                    currentObject += char;
-                    try {
-                        const parsedObject = JSON.parse(currentObject);
-                        // Валидируем структуру объекта choice
-                        if (parsedObject.text && typeof parsedObject.text === 'string') {
-                            choiceObjects.push(parsedObject);
-                        }
-                    } catch (e) {
-                        console.warn('Не удалось распарсить объект choice:', currentObject.substring(0, 100));
-                    }
-                    currentObject = '';
-                    continue;
-                }
-            } else if (char === ',' && braceDepth === 0) {
-                // Разделитель между объектами - пропускаем
-                continue;
-            }
-        }
-        
-        if (braceDepth > 0) {
-            currentObject += char;
+            lastQuoteIndex = i;
         }
     }
     
-    return choiceObjects;
+    // Если мы закончили внутри строки, закрываем её
+    if (inString) {
+        console.log('⚠️ [JSON Repair] Обнаружена незакрытая строка, закрываем');
+        repaired += '"';
+    }
+    
+    // 3. Балансируем скобки
+    let openCurly = 0,
+        closeCurly = 0;
+    let openSquare = 0,
+        closeSquare = 0;
+    inString = false;
+    escapeNext = false;
+    
+    for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        
+        if (char === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        
+        if (char === '"') {
+            inString = !inString;
+            continue;
+        }
+        
+        if (!inString) {
+            if (char === '{') openCurly++;
+            if (char === '}') closeCurly++;
+            if (char === '[') openSquare++;
+            if (char === ']') closeSquare++;
+        }
+    }
+    
+    console.log(`📊 [JSON Repair] Баланс скобок: { ${openCurly}/${closeCurly} } [ ${openSquare}/${closeSquare} ]`);
+    
+    // 4. Удаляем "висячие" запятые и незакрытые конструкции перед добавлением скобок
+    // Ищем последнюю запятую вне строки
+    let lastCommaIndex = -1;
+    inString = false;
+    escapeNext = false;
+    
+    for (let i = repaired.length - 1; i >= 0; i--) {
+        const char = repaired[i];
+        
+        if (!inString && char === ',') {
+            lastCommaIndex = i;
+            break;
+        }
+        
+        if (char === '"' && !escapeNext) {
+            inString = !inString;
+        }
+        
+        escapeNext = (char === '\\' && !escapeNext);
+    }
+    
+    // Если последняя запятая находится близко к концу (в пределах 50 символов), удаляем её
+    if (lastCommaIndex > 0 && (repaired.length - lastCommaIndex) < 50) {
+        const afterComma = repaired.substring(lastCommaIndex + 1).trim();
+        // Проверяем, что после запятой нет значимого контента
+        if (!afterComma || afterComma.match(/^[\s\}\]]*$/)) {
+            console.log('⚠️ [JSON Repair] Удаляем висячую запятую');
+            repaired = repaired.substring(0, lastCommaIndex) + repaired.substring(lastCommaIndex + 1);
+        }
+    }
+    
+    // 5. Закрываем массивы (сначала массивы, потом объекты - важно!)
+    if (openSquare > closeSquare) {
+        const missing = openSquare - closeSquare;
+        console.log(`🔧 [JSON Repair] Добавляем ${missing} закрывающих скобок для массивов`);
+        repaired += ']'.repeat(missing);
+        closeSquare = openSquare;
+    }
+    
+    // 6. Закрываем объекты
+    if (openCurly > closeCurly) {
+        const missing = openCurly - closeCurly;
+        console.log(`🔧 [JSON Repair] Добавляем ${missing} закрывающих скобок для объектов`);
+        repaired += '}'.repeat(missing);
+        closeCurly = openCurly;
+    }
+    
+    // 7. Финальная очистка - удаляем дублирующиеся закрывающие скобки
+    let cleaned = '';
+    let prevChar = '';
+    for (let i = 0; i < repaired.length; i++) {
+        const char = repaired[i];
+        // Не добавляем дублирующиеся } или ]
+        if ((char === '}' && prevChar === '}') || (char === ']' && prevChar === ']')) {
+            continue;
+        }
+        cleaned += char;
+        prevChar = char;
+    }
+    
+    console.log(`✅ [JSON Repair] Ремонт завершён (новая длина: ${cleaned.length} символов)`);
+    return cleaned;
 }
 
 /**
- * Надежный парсинг JSON из ответа ИИ
- * Специально для нового формата с requirements, success_changes, failure_changes
- * @param {string} rawContent - Сырой текст ответа
- * @returns {Object} Распарсенный JSON объект
+ * УЛУЧШЕННАЯ ВЕРСИЯ: Надежный парсинг JSON из ответа ИИ (ФОРМАТ 4.1)
+ * Многоуровневая система восстановления данных
  */
 function robustJsonParse(rawContent) {
-    if (!rawContent) {
+    if (!rawContent || typeof rawContent !== 'string') {
         throw new Error('Пустой ответ от ИИ');
     }
     
@@ -138,231 +275,339 @@ function robustJsonParse(rawContent) {
     text = text.replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
     text = text.replace(/^```\s*/i, '').replace(/\s*```$/i, '');
     
-    // Пытаемся стандартный парсинг
+    console.log(`📝 [Robust Parse] Попытка парсинга JSON (длина: ${text.length} символов)`);
+    
+    // УРОВЕНЬ 1: Стандартный парсинг
     try {
-        return JSON.parse(text);
+        const result = JSON.parse(text);
+        console.log('✅ [Robust Parse] Стандартный JSON.parse успешен');
+        return result;
     } catch (e) {
-        console.warn('Стандартный JSON.parse не удался, переходим к агрессивному парсингу:', e.message);
+        console.warn(`⚠️ [Robust Parse] Стандартный парсинг не удался: ${e.message}`);
     }
     
-    // Извлекаем основные поля через regex
-    const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    const shortSummaryMatch = text.match(/"short_summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    // УРОВЕНЬ 2: Парсинг с предварительным ремонтом
+    try {
+        const repaired = repairTruncatedJSON(text);
+        const result = JSON.parse(repaired);
+        console.log('✅ [Robust Parse] Парсинг после ремонта успешен');
+        return result;
+    } catch (e) {
+        console.warn(`⚠️ [Robust Parse] Парсинг после ремонта не удался: ${e.message}`);
+    }
     
-    const fallback = {
-        scene: sceneMatch ? sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : "Сцена не сгенерирована",
-        short_summary: shortSummaryMatch ? shortSummaryMatch[1].replace(/\\"/g, '"') : "",
+    // УРОВЕНЬ 3: Агрессивное извлечение данных через regex
+    console.warn('🚨 [Robust Parse] Переход к агрессивному извлечению данных');
+    
+    const result = {
+        design_notes: "",
+        scene: "",
+        reflection: "",
+        typology: "",
         choices: [],
-        stat_changes: {},
-        progress_change: 0,
-        thoughtsOfHero: []
+        events: [],
+        aiMemory: {},
+        thoughts: [],
+        summary: ""
     };
     
-    const personalityMatch = text.match(/"personality"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-    if (personalityMatch) {
-        fallback.personality = personalityMatch[1].replace(/\\"/g, '"');
-    } else {
-        fallback.personality = null;
-    }
+    // 3.1. Извлекаем scene (КРИТИЧЕСКИ ВАЖНО)
+    const scenePatterns = [
+        /"scene"\s*:\s*"((?:[^"\\]|\\["\\\/bfnrt]|\\u[0-9a-fA-F]{4})*)"/s,
+        /"scene"\s*:\s*"([^"]*)"/s, // Более простой паттерн
+        /"scene"\s*:\s*"([\s\S]*?)(?:"|$)/s // Максимально агрессивный
+    ];
     
-    const inventoryAllMatch = text.match(/"inventory_all"\s*:\s*(\[.*?\])/s);
-    if (inventoryAllMatch) {
-        try {
-            fallback.inventory_all = JSON.parse(inventoryAllMatch[1]);
-        } catch (e) {
-            fallback.inventory_all = [];
+    for (const pattern of scenePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            result.scene = match[1]
+                .replace(/\\"/g, '"')
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\\r/g, '\r')
+                .replace(/\\\\/g, '\\');
+            console.log(`✅ [Robust Parse] Scene извлечена (длина: ${result.scene.length})`);
+            break;
         }
-    } else {
-        fallback.inventory_all = [];
     }
     
-    const relationsAllMatch = text.match(/"relations_all"\s*:\s*(\{.*?\})/s);
-    if (relationsAllMatch) {
-        try {
-            fallback.relations_all = JSON.parse(relationsAllMatch[1]);
-        } catch (e) {
-            fallback.relations_all = {};
+    if (!result.scene) {
+        console.error('❌ [Robust Parse] Не удалось извлечь scene - это критическая ошибка');
+        result.scene = '<p><b>Критическая ошибка:</b> Не удалось извлечь сцену из ответа ИИ.</p>';
+    }
+    
+    // 3.2. Извлекаем остальные текстовые поля
+    const extractTextField = (fieldName, defaultValue = "") => {
+        const pattern = new RegExp(`"${fieldName}"\\s*:\\s*"([^"]*)"`, 's');
+        const match = text.match(pattern);
+        if (match && match[1]) {
+            return match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
         }
-    } else {
-        fallback.relations_all = {};
-    }
+        return defaultValue;
+    };
     
-    const thoughtsMatch = text.match(/"thoughtsOfHero"\s*:\s*\[(.*?)\]/s);
-    if (thoughtsMatch) {
-        try {
-            fallback.thoughtsOfHero = JSON.parse(`[${thoughtsMatch[1]}]`);
-        } catch (e) {
-            fallback.thoughtsOfHero = thoughtsMatch[1].split(',').map(s => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
-        }
-    } else {
-        fallback.thoughtsOfHero = [];
-    }
+    result.design_notes = extractTextField('design_notes');
+    result.reflection = extractTextField('reflection');
+    result.typology = extractTextField('typology');
+    result.summary = extractTextField('summary');
     
-    // Специальный парсинг для массива choices в новом формате
-    // Агрессивный парсинг для нового формата
-    console.warn('⚠️ Агрессивный парсинг для нового формата choices...');
-    const choicesStartMatch = text.match(/"choices"\s*:\s*\[/);
-    if (choicesStartMatch) {
-        const startIdx = choicesStartMatch.index + choicesStartMatch[0].length;
-        let choicesText = '';
-        let bracketCount = 1;
-        let inString = false;
-        let escapeNext = false;
-        
-        // Извлекаем содержимое массива choices
-        for (let i = startIdx; i < text.length; i++) {
-            const char = text[i];
+    // 3.3. Извлекаем choices (МАКСИМАЛЬНО АГРЕССИВНО)
+    console.log('🔍 [Robust Parse] Извлечение choices...');
+    
+    // Ищем начало массива choices
+    const choicesStart = text.indexOf('"choices"');
+    if (choicesStart !== -1) {
+        const arrayStart = text.indexOf('[', choicesStart);
+        if (arrayStart !== -1) {
+            // Пытаемся найти конец массива
+            let depth = 0;
+            let inString = false;
+            let escapeNext = false;
+            let arrayEnd = -1;
             
-            if (escapeNext) {
-                choicesText += char;
-                escapeNext = false;
-                continue;
-            }
-            
-            if (char === '\\') {
-                choicesText += char;
-                escapeNext = true;
-                continue;
-            }
-            
-            if (char === '"') {
-                inString = !inString;
-            }
-            
-            if (!inString) {
-                if (char === '[') {
-                    bracketCount++;
-                } else if (char === ']') {
-                    bracketCount--;
-                    if (bracketCount === 0) {
-                        break;
+            for (let i = arrayStart; i < text.length; i++) {
+                const char = text[i];
+                
+                if (escapeNext) {
+                    escapeNext = false;
+                    continue;
+                }
+                
+                if (char === '\\') {
+                    escapeNext = true;
+                    continue;
+                }
+                
+                if (char === '"') {
+                    inString = !inString;
+                    continue;
+                }
+                
+                if (!inString) {
+                    if (char === '[') depth++;
+                    if (char === ']') {
+                        depth--;
+                        if (depth === 0) {
+                            arrayEnd = i;
+                            break;
+                        }
                     }
                 }
             }
             
-            choicesText += char;
-        }
-        
-        // Парсим объекты choices из извлеченного текста
-        const choiceObjects = extractChoiceObjects(choicesText);
-        fallback.choices = choiceObjects;
-    }
-    
-    // Парсим stat_changes
-    const statChangesMatch = text.match(/"stat_changes"\s*:\s*(\{[^}]*\})/);
-    if (statChangesMatch) {
-        try {
-            fallback.stat_changes = JSON.parse(statChangesMatch[1]);
-        } catch (e) {
-            // Ручной парсинг stat_changes
-            const statRegex = /"(\w+)"\s*:\s*(-?\d+)/g;
-            let match;
-            while ((match = statRegex.exec(statChangesMatch[1])) !== null) {
-                fallback.stat_changes[match[1]] = parseInt(match[2]);
+            // Если нашли конец, пытаемся парсить массив
+            if (arrayEnd > arrayStart) {
+                const choicesText = text.substring(arrayStart, arrayEnd + 1);
+                console.log(`📋 [Robust Parse] Найден массив choices (длина: ${choicesText.length})`);
+                
+                try {
+                    const choicesArray = JSON.parse(choicesText);
+                    if (Array.isArray(choicesArray)) {
+                        // Фильтруем и нормализуем каждый choice
+                        choicesArray.forEach((choice, idx) => {
+                            if (choice && typeof choice === 'object' && choice.text) {
+                                result.choices.push({
+                                    text: choice.text,
+                                    difficulty_level: typeof choice.difficulty_level === 'number' ?
+                                        Math.max(1, Math.min(10, choice.difficulty_level)) : 5,
+                                    requirements: Array.isArray(choice.requirements) ?
+                                        choice.requirements.filter(r => typeof r === 'string' && r.includes(':')) : [],
+                                    success_rewards: Array.isArray(choice.success_rewards) ?
+                                        choice.success_rewards.filter(op => op && op.operation && op.id) : [],
+                                    fail_penalties: Array.isArray(choice.fail_penalties) ?
+                                        choice.fail_penalties.filter(op => op && op.operation && op.id) : []
+                                });
+                            }
+                        });
+                        console.log(`✅ [Robust Parse] Извлечено ${result.choices.length} choices из массива`);
+                    }
+                } catch (e) {
+                    console.warn(`⚠️ [Robust Parse] Парсинг массива choices не удался: ${e.message}`);
+                }
+            } else {
+                console.warn('⚠️ [Robust Parse] Не найден конец массива choices');
+            }
+            
+            // Если парсинг массива не удался, пытаемся извлечь хотя бы text полей
+            if (result.choices.length === 0) {
+                console.log('🔍 [Robust Parse] Попытка извлечь choices через regex поиск text полей...');
+                const textMatches = text.matchAll(/"text"\s*:\s*"([^"]+)"/g);
+                let count = 0;
+                for (const match of textMatches) {
+                    if (match[1] && count < 10) { // Ограничиваем 10 choices
+                        result.choices.push({
+                            text: match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'),
+                            difficulty_level: 5,
+                            requirements: [],
+                            success_rewards: [],
+                            fail_penalties: []
+                        });
+                        count++;
+                    }
+                }
+                console.log(`✅ [Robust Parse] Извлечено ${result.choices.length} choices через regex`);
             }
         }
     }
     
-    return validateAndFixStructure(fallback);
+    // Если choices пустой, добавляем дефолтные
+    if (result.choices.length === 0) {
+        console.warn('⚠️ [Robust Parse] Choices пустой, добавляем дефолтные');
+        result.choices = [
+        {
+            text: "Осмотреться",
+            difficulty_level: 3,
+            requirements: [],
+            success_rewards: [],
+            fail_penalties: []
+        },
+        {
+            text: "Подумать",
+            difficulty_level: 2,
+            requirements: [],
+            success_rewards: [],
+            fail_penalties: []
+        },
+        {
+            text: "Действовать",
+            difficulty_level: 5,
+            requirements: [],
+            success_rewards: [],
+            fail_penalties: []
+        }];
+    }
+    
+    // 3.4. Извлекаем thoughts
+    console.log('🔍 [Robust Parse] Извлечение thoughts...');
+    const thoughtsStart = text.indexOf('"thoughts"');
+    if (thoughtsStart !== -1) {
+        const arrayStart = text.indexOf('[', thoughtsStart);
+        if (arrayStart !== -1) {
+            // Ищем строки в массиве thoughts
+            const thoughtMatches = text.substring(arrayStart).matchAll(/"([^"]+)"/g);
+            for (const match of thoughtMatches) {
+                if (match[1] && result.thoughts.length < 20) {
+                    const thought = match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').trim();
+                    if (thought.length > 0) {
+                        result.thoughts.push(thought);
+                    }
+                }
+            }
+            console.log(`✅ [Robust Parse] Извлечено ${result.thoughts.length} thoughts`);
+        }
+    }
+    
+    // Добавляем дефолтные thoughts если мало
+    if (result.thoughts.length < 5) {
+        console.warn(`⚠️ [Robust Parse] Мало thoughts (${result.thoughts.length}), добавляем дефолтные`);
+        const defaultThoughts = [
+            "Что здесь происходит?",
+            "Нужно разобраться в ситуации",
+            "Каждое решение имеет последствия",
+            "Я чувствую странное напряжение",
+            "Что-то здесь не так"
+        ];
+        result.thoughts = result.thoughts.concat(defaultThoughts).slice(0, 10);
+    }
+    
+    // 3.5. Извлекаем events (если есть)
+    console.log('🔍 [Robust Parse] Извлечение events...');
+    const eventsStart = text.indexOf('"events"');
+    if (eventsStart !== -1) {
+        const arrayStart = text.indexOf('[', eventsStart);
+        if (arrayStart !== -1) {
+            try {
+                // Пытаемся найти конец массива events
+                let depth = 0;
+                let inString = false;
+                let escapeNext = false;
+                let arrayEnd = -1;
+                
+                for (let i = arrayStart; i < text.length; i++) {
+                    const char = text[i];
+                    
+                    if (escapeNext) {
+                        escapeNext = false;
+                        continue;
+                    }
+                    
+                    if (char === '\\') {
+                        escapeNext = true;
+                        continue;
+                    }
+                    
+                    if (char === '"') {
+                        inString = !inString;
+                        continue;
+                    }
+                    
+                    if (!inString) {
+                        if (char === '[') depth++;
+                        if (char === ']') {
+                            depth--;
+                            if (depth === 0) {
+                                arrayEnd = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (arrayEnd > arrayStart) {
+                    const eventsText = text.substring(arrayStart, arrayEnd + 1);
+                    const eventsArray = JSON.parse(eventsText);
+                    if (Array.isArray(eventsArray)) {
+                        eventsArray.forEach((event, idx) => {
+                            if (event && typeof event === 'object' && event.description) {
+                                result.events.push({
+                                    type: event.type || "world_event",
+                                    description: event.description,
+                                    effects: Array.isArray(event.effects) ?
+                                        event.effects.filter(op => op && op.operation && op.id) : [],
+                                    reason: event.reason || ""
+                                });
+                            }
+                        });
+                        console.log(`✅ [Robust Parse] Извлечено ${result.events.length} events`);
+                    }
+                }
+            } catch (e) {
+                console.warn(`⚠️ [Robust Parse] Парсинг events не удался: ${e.message}`);
+            }
+        }
+    }
+    
+    // 3.6. Извлекаем aiMemory (если есть)
+    const memoryMatch = text.match(/"aiMemory"\s*:\s*\{([^}]*)\}/s);
+    if (memoryMatch) {
+        try {
+            result.aiMemory = JSON.parse(`{${memoryMatch[1]}}`);
+            console.log('✅ [Robust Parse] Извлечена aiMemory');
+        } catch (e) {
+            console.warn('⚠️ [Robust Parse] Парсинг aiMemory не удался');
+        }
+    }
+    
+    // Генерируем summary если пустой
+    if (!result.summary && result.scene) {
+        result.summary = result.scene.replace(/<[^>]*>/g, ' ').substring(0, 200).trim() + '...';
+    }
+    
+    console.log('✅ [Robust Parse] Агрессивное извлечение завершено');
+    console.log(`📊 [Robust Parse] Результат: scene=${!!result.scene}, choices=${result.choices.length}, events=${result.events.length}, thoughts=${result.thoughts.length}`);
+    
+    return result;
 }
 
-
-/**
- * Проверяет структуру и добавляет дефолтные значения (Safety Layer)
- * Только новый формат: requirements, success_changes, failure_changes
- * @param {Object} data - Распарсенный объект
- * @returns {Object} - Валидный игровой объект
- */
-function validateAndFixStructure(data) {
-    if (typeof data !== 'object' || data === null) {
-        throw new Error('Результат парсинга не является объектом');
-    }
-    
-    // 1. Гарантируем обязательные текстовые поля
-    data.scene = data.scene || "Сцена не сгенерирована (Ошибка данных).";
-    data.short_summary = data.short_summary || "";
-    
-    // 2. Пробрасываем поля изменений, если они есть
-    // Если ИИ решил изменить личность, сохраняем это, иначе null
-    data.personality_change = data.personality_change || null;
-    
-    // 3. Инвентарь
-    if (data.inventory_all) {
-        if (!Array.isArray(data.inventory_all)) {
-            data.inventory_all = [];
-        }
-    } else {
-        data.inventory_all = [];
-    }
-    
-    // Отношенич
-    if (data.relations_all) {
-        if (typeof data.relations_all !== 'object') {
-            data.relations_all = {};
-        }
-    } else {
-        data.relations_all = {};
-    }
-    
-    // Личность
-    if (!data.personality) {
-        data.personality = null;
-    }
-    
-    // Мысли
-    if (data.thoughtsOfHero) {
-        if (!Array.isArray(data.thoughtsOfHero)) {
-            data.thoughtsOfHero = [data.thoughtsOfHero.toString()];
-        }
-    } else {
-        data.thoughtsOfHero = [];
-    }
-    
-    // 4. Валидация выборов (choices)
-    if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
-        data.choices = [{
-            text: "Продолжить...",
-            requirements: {},
-            success_changes: {},
-            failure_changes: {}
-        }];
-    } else {
-        data.choices = data.choices.map(choice => {
-            // Создаем безопасную копию объекта выбора
-            const safeChoice = {
-                text: (typeof choice === 'string') ? choice : (choice.text || "Действие"),
-                requirements: choice.requirements || {},
-                success_changes: choice.success_changes || {},
-                failure_changes: choice.failure_changes || {}
-            };
-            
-            // Гарантируем вложенную структуру для рендера
-            if (!safeChoice.requirements.stats) safeChoice.requirements.stats = {};
-            // Inventory в требованиях может быть строкой или null
-            
-            if (!safeChoice.success_changes.stats) safeChoice.success_changes.stats = {};
-            if (!safeChoice.success_changes.inventory_add) safeChoice.success_changes.inventory_add = [];
-            if (!safeChoice.success_changes.inventory_remove) safeChoice.success_changes.inventory_remove = [];
-            
-            if (!safeChoice.failure_changes.stats) safeChoice.failure_changes.stats = {};
-            if (!safeChoice.failure_changes.inventory_add) safeChoice.failure_changes.inventory_add = [];
-            if (!safeChoice.failure_changes.inventory_remove) safeChoice.failure_changes.inventory_remove = [];
-            
-            return safeChoice;
-        });
-    }
-    
-    data.stat_changes = data.stat_changes || {};
-    data.progress_change = data.progress_change || 0;
-    
-    // Исправление мыслей героя (иногда ИИ возвращает строку вместо массива)
-    if (data.thoughtsOfHero && !Array.isArray(data.thoughtsOfHero)) {
-        data.thoughtsOfHero = [String(data.thoughtsOfHero)];
-    } else if (!data.thoughtsOfHero) {
-        data.thoughtsOfHero = [];
-    }
-    
-    return data;
+function createDefaultChoice() {
+    return {
+        text: "Продолжить...",
+        difficulty_level: 5,
+        requirements: [],
+        success_rewards: [],
+        fail_penalties: []
+    };
 }
 
 /**
@@ -397,12 +642,12 @@ function safeParseAIResponse(text) {
                     stats: {},
                     inventory: null
                 },
-                success_changes: {
+                success_rewards: {
                     stats: {},
                     inventory_add: [],
                     inventory_remove: []
                 },
-                failure_changes: {
+                fail_penalties: {
                     stats: {},
                     inventory_add: [],
                     inventory_remove: []
@@ -653,7 +898,7 @@ function parseHeroPhrases(text) {
                 const parsed = JSON.parse(jsonMatch[0]);
                 if (parsed.thoughtsOfHero && Array.isArray(parsed.thoughtsOfHero)) {
                     return parsed.thoughtsOfHero;
-                }
+            }
             } catch (jsonError) {
                 // Ignore
             }
@@ -683,12 +928,378 @@ function parseHeroPhrases(text) {
     }
 }
 
+/**
+ * Декодирует Unicode escape-последовательности в читаемые символы
+ * @param {string} text - Текст с escape-последовательностями
+ * @returns {string} Декодированный текст
+ */
+function decodeUnicodeEscapes(text) {
+    if (!text || typeof text !== 'string') return text;
+    
+    return text.replace(/\\u[\dA-F]{4}/gi, function(match) {
+            try {
+                return String.fromCharCode(parseInt(match.replace(/\\u/g, ''), 16));
+            } catch (e) {
+                return match;
+            }
+        }).replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, '\\');
+}
+
+/**
+ * Предварительная обработка JSON: экранирует неэкранированные символы внутри строк
+ * @param {string} jsonText - JSON текст
+ * @returns {string} Обработанный JSON текст
+ */
+function preprocessJson(jsonText) {
+    let result = '';
+    let inString = false;
+    let escapeNext = false;
+    
+    for (let i = 0; i < jsonText.length; i++) {
+        const char = jsonText[i];
+        
+        if (escapeNext) {
+            result += char;
+            escapeNext = false;
+            continue;
+        }
+        
+        if (char === '\\') {
+            escapeNext = true;
+            result += char;
+            continue;
+        }
+        
+        if (char === '"') {
+            inString = !inString;
+            result += char;
+            continue;
+        }
+        
+        if (inString) {
+            // Экранируем проблемные символы
+            if (char === '\n') {
+                result += '\\n';
+            } else if (char === '\r') {
+                result += '\\r';
+            } else if (char === '\t') {
+                result += '\\t';
+            } else if (char === '"') {
+                result += '\\"';
+            } else if (char === '\\') {
+                result += '\\\\';
+            } else {
+                result += char;
+            }
+        } else {
+            result += char;
+        }
+    }
+    
+    return result;
+}
+
+/**
+ * Безопасное форматирование JSON с отказоустойчивостью
+ * @param {string} jsonString - JSON строка
+ * @returns {string} Безопасно отформатированная строка
+ */
+function safeFormatJsonWithUnicode(jsonString) {
+    if (!jsonString) return '';
+    
+    try {
+        // Сначала декодируем Unicode escapes
+        const decoded = decodeUnicodeEscapes(jsonString);
+        
+        // Пытаемся распарсить JSON
+        try {
+            const obj = JSON.parse(decoded);
+            return JSON.stringify(obj, null, 2);
+        } catch (parseError) {
+            // Если не JSON, возвращаем декодированный текст
+            console.warn('⚠️ Не удалось распарсить JSON, возвращаем декодированный текст');
+            return decoded;
+        }
+    } catch (e) {
+        // В случае полного провала возвращаем исходную строку
+        console.error('❌ Ошибка безопасного форматирования JSON:', e);
+        return String(jsonString);
+    }
+}
+
+/**
+ * Красиво форматирует JSON с декодированием Unicode
+ * @param {string} jsonString - JSON строка
+ * @returns {string} Форматированная и декодированная строка
+ */
+function formatJsonWithUnicode(jsonString) {
+    if (!jsonString) return '';
+    
+    try {
+        // Сначала декодируем Unicode escapes
+        const decoded = decodeUnicodeEscapes(jsonString);
+        
+        // Пытаемся распарсить JSON
+        const obj = JSON.parse(decoded);
+        
+        // Форматируем с красивыми отступами
+        return JSON.stringify(obj, null, 2);
+    } catch (e) {
+        // Если не JSON, возвращаем декодированный текст
+        return decodeUnicodeEscapes(jsonString);
+    }
+}
+
+
+    /**
+     * Экранирует HTML-спецсимволы для безопасной вставки в DOM.
+     * @param {string} unsafe - Неэкранированная строка
+     * @returns {string} Экранированная строка
+     */
+   function escapeHtml(unsafe) {
+        if (unsafe === null || unsafe === undefined) {
+            return '';
+        }
+        return String(unsafe)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');  // апостроф (важно для атрибутов)
+    }
+    
+/**
+ * Показывает всплывающее уведомление (toast)
+ * @param {string} message - Сообщение для показа
+ * @param {string} type - Тип уведомления: 'success', 'error', 'warning', 'info'
+ * @param {number} duration - Время показа в миллисекундах
+ */
+function showToast(message, type = 'info', duration = 3000) {
+    try {
+        // Удаляем существующие toast, чтобы не накапливались
+        const existingToasts = document.querySelectorAll('.utils-toast');
+        existingToasts.forEach(toast => {
+            if (toast.parentNode) {
+                document.body.removeChild(toast);
+            }
+        });
+        
+        // Создаем новый toast элемент
+        const toast = document.createElement('div');
+        toast.className = `utils-toast utils-toast-${type}`;
+        toast.textContent = message;
+        
+        // Устанавливаем стили
+        const toastStyles = `
+            .utils-toast {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 5px;
+                z-index: 999999;
+                font-size: 0.9em;
+                font-weight: 500;
+                color: #fff;
+                background: #333;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                max-width: 400px;
+                word-wrap: break-word;
+                opacity: 0;
+                transform: translateY(-20px);
+                transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+                backdrop-filter: blur(5px);
+                border: 1px solid rgba(255,255,255,0.1);
+            }
+            
+            .utils-toast-success {
+                background: linear-gradient(135deg, #4cd137 0%, #2d8b57 100%);
+                border-color: #4cd137;
+            }
+            
+            .utils-toast-error {
+                background: linear-gradient(135deg, #e84118 0%, #c23616 100%);
+                border-color: #e84118;
+            }
+            
+            .utils-toast-warning {
+                background: linear-gradient(135deg, #fbc531 0%, #e1b12c 100%);
+                border-color: #fbc531;
+                color: #333;
+            }
+            
+            .utils-toast-info {
+                background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+                border-color: #3498db;
+            }
+            
+            .utils-toast::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 5px;
+                height: 100%;
+                border-radius: 5px 0 0 5px;
+            }
+            
+            .utils-toast-success::before {
+                background: #fff;
+            }
+            
+            .utils-toast-error::before {
+                background: #fff;
+            }
+            
+            .utils-toast-warning::before {
+                background: #333;
+            }
+            
+            .utils-toast-info::before {
+                background: #fff;
+            }
+            
+            @keyframes utils-toast-show {
+                0% {
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }
+                100% {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            @keyframes utils-toast-hide {
+                0% {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+                100% {
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }
+            }
+        `;
+        
+        // Добавляем стили, если их еще нет
+        if (!document.getElementById('utils-toast-styles')) {
+            const styleEl = document.createElement('style');
+            styleEl.id = 'utils-toast-styles';
+            styleEl.textContent = toastStyles;
+            document.head.appendChild(styleEl);
+        }
+        
+        // Добавляем иконку в зависимости от типа
+        let icon = 'ℹ️';
+        switch (type) {
+            case 'success':
+                icon = '✅';
+                break;
+            case 'error':
+                icon = '❌';
+                break;
+            case 'warning':
+                icon = '⚠️';
+                break;
+            case 'info':
+                icon = 'ℹ️';
+                break;
+        }
+        
+        toast.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.1em;">${icon}</span>
+                <span>${message}</span>
+            </div>
+        `;
+        
+        // Добавляем в DOM
+        document.body.appendChild(toast);
+        
+        // Анимация появления
+        setTimeout(() => {
+            toast.style.animation = 'utils-toast-show 0.3s forwards';
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+        }, 10);
+        
+        // Автоматическое скрытие через указанное время
+        const hideToast = () => {
+            toast.style.animation = 'utils-toast-hide 0.3s forwards';
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    document.body.removeChild(toast);
+                }
+            }, 300);
+        };
+        
+        // Устанавливаем таймер скрытия
+        const timer = setTimeout(hideToast, duration);
+        
+        // Закрытие по клику
+        toast.onclick = () => {
+            clearTimeout(timer);
+            hideToast();
+        };
+        
+        // Возвращаем объект для ручного управления
+        return {
+            element: toast,
+            hide: hideToast,
+            updateMessage: (newMessage) => {
+                const textSpan = toast.querySelector('span:last-child');
+                if (textSpan) {
+                    textSpan.textContent = newMessage;
+                }
+            },
+            updateType: (newType) => {
+                const classList = toast.classList;
+                classList.remove('utils-toast-success', 'utils-toast-error', 'utils-toast-warning', 'utils-toast-info');
+                classList.add(`utils-toast-${newType}`);
+                
+                // Обновляем иконку
+                let newIcon = 'ℹ️';
+                switch (newType) {
+                    case 'success':
+                        newIcon = '✅';
+                        break;
+                    case 'error':
+                        newIcon = '❌';
+                        break;
+                    case 'warning':
+                        newIcon = '⚠️';
+                        break;
+                    case 'info':
+                        newIcon = 'ℹ️';
+                        break;
+                }
+                
+                const iconSpan = toast.querySelector('span:first-child');
+                if (iconSpan) {
+                    iconSpan.textContent = newIcon;
+                }
+            }
+        };
+        
+    } catch (error) {
+        console.error('❌ Ошибка при показе toast-уведомления:', error);
+        // Резервный вариант - простой alert
+        alert(`${type.toUpperCase()}: ${message}`);
+    }
+}
+
 // Публичный интерфейс модуля
 export const Utils = {
     repairTruncatedJSON,
-    validateAndFixStructure,
     robustJsonParse,
     getStatusEmoji,
+    getGameItemIcon,
+    getRussianStatName,
     formatErrorDetails,
     exportToFile,
     generateUniqueId,
@@ -700,5 +1311,11 @@ export const Utils = {
     saveFileWithFolderPicker,
     vibrate,
     parseHeroPhrases,
-    safeParseAIResponse
+    safeParseAIResponse,
+    decodeUnicodeEscapes,
+    safeFormatJsonWithUnicode,
+    formatJsonWithUnicode,
+    escapeHtml,
+    getOperationDetails,
+    showToast
 };

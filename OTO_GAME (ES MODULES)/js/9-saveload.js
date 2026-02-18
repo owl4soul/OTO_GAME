@@ -1,169 +1,38 @@
-// Модуль 9: SAVELOAD - Сохранение/загрузка данных (9-saveload.js)
+// Модуль 9: SAVELOAD - Сохранение/загрузка данных (ФОРМАТ 4.1)
 'use strict';
 
-import { CONFIG, aiModels } from './1-config.js';
 import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
 
 /**
- * Сохранение состояния игры в localStorage
+ * Принудительный сброс к начальному состоянию
  */
-function saveState() {
-    const state = State.getState();
-    state.lastSaveTime = new Date().toISOString();
+function forceResetToInitial() {
+    console.warn('⚠️ Принудительный сброс к начальному состоянию');
     
-    // Собираем данные для сохранения
-    const saveData = {
-        stats: state.stats,
-        progress: state.progress,
-        degreeIndex: state.degreeIndex,
-        personality: state.personality,
-        isRitualActive: state.isRitualActive,
-    skills: state.skills,
-    ritualProgress: state.ritualProgress || 0,
-    ritualTarget: state.ritualTarget || null,
-        currentScene: state.currentScene,
-        history: state.history,
-        summary: state.summary,
-        selectedChoices: state.selectedChoices,
-        freeMode: state.freeMode,
-        freeModeText: state.freeModeText,
-        turnCount: state.turnCount,
-        thoughtsOfHero: state.thoughtsOfHero,
-        settings: state.settings,
-        gameId: state.gameId,
-        lastSaveTime: state.lastSaveTime,
-        // Сохранение памяти (инвентарь) и изменений за ход
-        aiMemory: state.aiMemory,
-        inventory: state.inventory,
-        relations: state.relations,
-        lastTurnUpdates: state.lastTurnUpdates
-    };
+    if (!confirm("Вы уверены, что хотите полностью сбросить игру? Все данные будут потеряны.")) {
+        return { success: false, error: 'Отменено пользователем' };
+    }
     
-    // Сохраняем все в localStorage
-localStorage.setItem('oto_skills', JSON.stringify(state.skills));
-    localStorage.setItem('oto_v3_state', JSON.stringify(saveData));
-    localStorage.setItem('oto_audit_log', JSON.stringify(state.auditLog));
-    localStorage.setItem('oto_models_status', JSON.stringify(state.models));
-    localStorage.setItem('oto_game_id', state.gameId);
-    localStorage.setItem('oto_last_save_time', state.lastSaveTime);
-    localStorage.setItem('oto_scale', state.settings.scale.toString());
-    localStorage.setItem('oto_scale_index', state.settings.scaleIndex.toString());
-    localStorage.setItem('oto_turn_count', state.turnCount.toString());
-    localStorage.setItem('oto_thoughts_of_hero', JSON.stringify(state.thoughtsOfHero));
-    
-    console.log('Игра сохранена в localStorage');
-}
-
-/**
- * Загрузка состояния игры из localStorage
- */
-function loadState() {
-    const saved = localStorage.getItem('oto_v3_state');
-    if (saved) {
-        try {
-            const p = JSON.parse(saved);
-            const state = State.getState();
-            
-            // Восстанавливаем состояние игры
-            state.stats = p.stats || state.stats;
-            state.progress = p.progress || state.progress;
-            state.degreeIndex = p.degreeIndex || state.degreeIndex;
-            state.personality = p.personality || state.personality;
-            state.isRitualActive = p.isRitualActive || false;
-            state.currentScene = p.currentScene || state.currentScene;
-            state.history = p.history || state.history;
-            state.inventory = p.inventory || state.inventory;
-            state.relations = p.relations || state.relations;
-            state.skills = p.skills || state.relations || [],
-state.ritualProgress = p.ritualProgress || state.ritualProgress || 0;
-state.ritualTarget = p.ritualTarget || state.ritualTarget || null;
-
-            state.selectedChoices = p.selectedChoices || state.selectedChoices;
-            state.freeMode = p.freeMode || state.freeMode;
-            state.freeModeText = p.freeModeText || state.freeModeText;
-            state.turnCount = p.turnCount || state.turnCount;
-            state.thoughtsOfHero = p.thoughtsOfHero || state.thoughtsOfHero;
-            state.settings = p.settings || state.settings;
-            state.gameId = p.gameId || state.gameId;
-            state.lastSaveTime = p.lastSaveTime || state.lastSaveTime;
-            
-            // Восстановление памяти (Инвентарь) и Лога изменений
-            // Если в сохранении нет aiMemory, инициализируем пустым объектом
-            state.aiMemory = p.aiMemory || state.aiMemory;
-            
-            // Восстанавливаем строку изменений за ход
-            state.lastTurnUpdates = p.lastTurnUpdates || state.lastTurnUpdates;
-            
-            // Загружаем аудит-логи
-            const savedAudit = localStorage.getItem('oto_audit_log');
-            if (savedAudit) {
-                try {
-                    state.auditLog = JSON.parse(savedAudit);
-                } catch (e) {
-                    console.error('Ошибка загрузки аудит-лога:', e);
-                    state.auditLog = [];
-                }
-            }
-            
-            // Загружаем статусы моделей
-            const savedModels = localStorage.getItem('oto_models_status');
-            if (savedModels) {
-                try {
-                    state.models = JSON.parse(savedModels);
-                    console.log('Модели загружены из localStorage');
-                } catch (e) {
-                    console.error('Ошибка загрузки моделей из localStorage:', e);
-                    state.models = aiModels;
-                    console.log('Модели загружены из кода');
-                }
-                if (savedModels.ength !== aiModels.length) {
-                    console.log('Модели загружены из кода');
-                    state.models = aiModels;
-                }
-            } else {
-                state.models = aiModels;
-                console.log('Модели загружены из кода');
-            }
-            
-            // Загружаем масштаб
-            const savedScale = localStorage.getItem('oto_scale');
-            if (savedScale) {
-                state.settings.scale = parseFloat(savedScale) || CONFIG.scaleSteps[CONFIG.defaultScaleIndex];
-            } else {
-                state.settings.scale = CONFIG.scaleSteps[CONFIG.defaultScaleIndex];
-            }
-            
-            const savedScaleIndex = localStorage.getItem('oto_scale_index');
-            if (savedScaleIndex) {
-                state.settings.scaleIndex = parseInt(savedScaleIndex) || CONFIG.defaultScaleIndex;
-            } else {
-                state.settings.scaleIndex = CONFIG.defaultScaleIndex;
-            }
-            
-            // Загружаем счетчик ходов
-            const savedTurnCount = localStorage.getItem('oto_turn_count');
-            if (savedTurnCount) {
-                state.turnCount = parseInt(savedTurnCount) || 0;
-            }
-            
-            // Загружаем фразы героя
-            const savedThoughtsOfHero = localStorage.getItem('oto_thoughts_of_hero');
-            if (savedThoughtsOfHero) {
-                try {
-                    state.thoughtsOfHero = JSON.parse(savedThoughtsOfHero);
-                } catch (e) {
-                    console.error('Ошибка загрузки списка фраз героя:', e);
-                    state.thoughtsOfHero = [];
-                }
-            }
-            
-            State.setState(state);
-            console.log('Игра загружена из localStorage');
-        } catch (e) {
-            console.error('Ошибка загрузки состояния:', e);
-            localStorage.removeItem('oto_v3_state');
-        }
+    try {
+        // Полностью очищаем localStorage
+        localStorage.clear();
+        
+        // Перезагружаем страницу
+        setTimeout(() => {
+            location.reload();
+        }, 500);
+        
+        return {
+            success: true,
+            message: 'Игра сброшена к начальному состоянию. Страница перезагружается...'
+        };
+    } catch (error) {
+        console.error('❌ Ошибка при принудительном сбросе:', error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
 }
 
@@ -171,6 +40,8 @@ state.ritualTarget = p.ritualTarget || state.ritualTarget || null;
  * Сохранение игры в файл с выбором папки
  */
 async function saveGameToFile() {
+    console.log('💾 Сохранение игры в файл...');
+    
     try {
         // Получаем полное состояние игры
         const fullState = State.exportFullState();
@@ -191,13 +62,33 @@ async function saveGameToFile() {
             };
             
             State.addAuditLogEntry(auditEntry);
-            return { success: true, fileName: result.fileName };
+            
+            // Эмитим событие экспорта
+            State.emit(State.EVENTS.STATE_EXPORTED, {
+                fileName: result.fileName,
+                gameId: fullState.gameId,
+                turnCount: fullState.turnCount
+            });
+            
+            console.log(`✅ Игра сохранена в файл: ${result.fileName}`);
+            return {
+                success: true,
+                fileName: result.fileName,
+                gameId: fullState.gameId
+            };
         }
         
-        return { success: false, error: 'Не удалось сохранить файл' };
+        console.error('❌ Не удалось сохранить файл');
+        return {
+            success: false,
+            error: 'Не удалось сохранить файл'
+        };
     } catch (error) {
-        console.error('Ошибка при сохранении игры:', error);
-        return { success: false, error: error.message };
+        console.error('❌ Ошибка при сохранении игры:', error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
 }
 
@@ -205,12 +96,20 @@ async function saveGameToFile() {
  * Загрузка игры из файла с выбором файла
  */
 async function loadGameFromFile() {
+    console.log('📂 Загрузка игры из файла...');
+    
     try {
         // Выбираем файл
         const file = await Utils.selectFile('.json');
         if (!file) {
-            return { success: false, error: 'Файл не выбран' };
+            console.log('📂 Файл не выбран');
+            return {
+                success: false,
+                error: 'Файл не выбран'
+            };
         }
+        
+        console.log(`📂 Выбран файл: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
         
         // Читаем файл
         const reader = new FileReader();
@@ -221,11 +120,24 @@ async function loadGameFromFile() {
                     const content = e.target.result;
                     const importData = JSON.parse(content);
                     
+                    // Проверяем версию
+                    if (importData.version !== '4.1.0') {
+                        const errorMsg = `Неподдерживаемая версия файла: ${importData.version}. Требуется версия 4.1.0`;
+                        console.error('❌', errorMsg);
+                        resolve({
+                            success: false,
+                            error: errorMsg
+                        });
+                        return;
+                    }
+                    
+                    console.log(`📂 Импорт игры ${importData.gameId}, ход ${importData.turnCount}`);
+                    
                     // Импортируем состояние
                     State.importFullState(importData);
                     
                     // Сохраняем в localStorage
-                    saveState();
+                    State.saveStateToLocalStorage();
                     
                     // Добавляем запись в аудит-лог
                     const auditEntry = {
@@ -233,26 +145,49 @@ async function loadGameFromFile() {
                         request: 'Загрузка игры из файла',
                         timestamp: Utils.formatMoscowTime(new Date()),
                         status: 'success',
-                        fullResponse: `Игра загружена из файла: ${file.name}`
+                        fullResponse: `Игра загружена из файла: ${file.name}\nID: ${importData.gameId}\nХод: ${importData.turnCount}`
                     };
                     
                     State.addAuditLogEntry(auditEntry);
-                    resolve({ success: true, fileName: file.name });
+                    
+                    // Эмитим событие импорта
+                    State.emit(State.EVENTS.STATE_IMPORTED, {
+                        fileName: file.name,
+                        gameId: importData.gameId,
+                        turnCount: importData.turnCount
+                    });
+                    
+                    console.log(`✅ Игра загружена из файла: ${file.name}`);
+                    resolve({
+                        success: true,
+                        fileName: file.name,
+                        gameId: importData.gameId
+                    });
                 } catch (error) {
-                    console.error('Ошибка при загрузке игры:', error);
-                    resolve({ success: false, error: 'Ошибка чтения файла: ' + error.message });
+                    console.error('❌ Ошибка при загрузке игры:', error);
+                    resolve({
+                        success: false,
+                        error: 'Ошибка чтения файла: ' + error.message
+                    });
                 }
             };
             
             reader.onerror = () => {
-                resolve({ success: false, error: 'Ошибка чтения файла' });
+                console.error('❌ Ошибка чтения файла');
+                resolve({
+                    success: false,
+                    error: 'Ошибка чтения файла'
+                });
             };
             
             reader.readAsText(file);
         });
     } catch (error) {
-        console.error('Ошибка при выборе файла:', error);
-        return { success: false, error: error.message };
+        console.error('❌ Ошибка при выборе файла:', error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
 }
 
@@ -260,6 +195,8 @@ async function loadGameFromFile() {
  * Экспорт всех данных приложения с выбором папки
  */
 async function exportAllDataToFile() {
+    console.log('📤 Экспорт всех данных приложения...');
+    
     try {
         // Получаем все данные приложения
         const allData = State.exportAllAppData();
@@ -280,13 +217,26 @@ async function exportAllDataToFile() {
             };
             
             State.addAuditLogEntry(auditEntry);
-            return { success: true, fileName: result.fileName };
+            
+            console.log(`✅ Все данные экспортированы в файл: ${result.fileName}`);
+            return {
+                success: true,
+                fileName: result.fileName,
+                exportTime: new Date().toISOString()
+            };
         }
         
-        return { success: false, error: 'Не удалось экспортировать данные' };
+        console.error('❌ Не удалось экспортировать данные');
+        return {
+            success: false,
+            error: 'Не удалось экспортировать данные'
+        };
     } catch (error) {
-        console.error('Ошибка при экспорте данных:', error);
-        return { success: false, error: error.message };
+        console.error('❌ Ошибка при экспорте данных:', error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
 }
 
@@ -294,12 +244,20 @@ async function exportAllDataToFile() {
  * Импорт всех данных приложения с выбором файла
  */
 async function importAllDataFromFile() {
+    console.log('📥 Импорт всех данных приложения...');
+    
     try {
         // Выбираем файл
         const file = await Utils.selectFile('.json');
         if (!file) {
-            return { success: false, error: 'Файл не выбран' };
+            console.log('📂 Файл не выбран');
+            return {
+                success: false,
+                error: 'Файл не выбран'
+            };
         }
+        
+        console.log(`📂 Выбран файл: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
         
         // Читаем файл
         const reader = new FileReader();
@@ -310,11 +268,24 @@ async function importAllDataFromFile() {
                     const content = e.target.result;
                     const importData = JSON.parse(content);
                     
+                    // Проверяем версию
+                    if (importData.version !== '4.1.0') {
+                        const errorMsg = `Неподдерживаемая версия файла: ${importData.version}. Требуется версия 4.1.0`;
+                        console.error('❌', errorMsg);
+                        resolve({
+                            success: false,
+                            error: errorMsg
+                        });
+                        return;
+                    }
+                    
+                    console.log(`📥 Импорт данных из файла: ${file.name}`);
+                    
                     // Импортируем все данные
                     State.importAllAppData(importData);
                     
                     // Сохраняем в localStorage
-                    saveState();
+                    State.saveStateToLocalStorage();
                     
                     // Добавляем запись в аудит-лог
                     const auditEntry = {
@@ -326,22 +297,42 @@ async function importAllDataFromFile() {
                     };
                     
                     State.addAuditLogEntry(auditEntry);
-                    resolve({ success: true, fileName: file.name });
+                    
+                    // Эмитим события
+                    State.emit(State.EVENTS.SETTINGS_CHANGED);
+                    State.emit(State.EVENTS.MODEL_CHANGED);
+                    
+                    console.log(`✅ Все данные импортированы из файла: ${file.name}`);
+                    resolve({
+                        success: true,
+                        fileName: file.name,
+                        importTime: new Date().toISOString()
+                    });
                 } catch (error) {
-                    console.error('Ошибка при импорте данных:', error);
-                    resolve({ success: false, error: 'Ошибка чтения файла: ' + error.message });
+                    console.error('❌ Ошибка при импорте данных:', error);
+                    resolve({
+                        success: false,
+                        error: 'Ошибка чтения файла: ' + error.message
+                    });
                 }
             };
             
             reader.onerror = () => {
-                resolve({ success: false, error: 'Ошибка чтения файла' });
+                console.error('❌ Ошибка чтения файла');
+                resolve({
+                    success: false,
+                    error: 'Ошибка чтения файла'
+                });
             };
             
             reader.readAsText(file);
         });
     } catch (error) {
-        console.error('Ошибка при выборе файла:', error);
-        return { success: false, error: error.message };
+        console.error('❌ Ошибка при выборе файла:', error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
 }
 
@@ -349,54 +340,164 @@ async function importAllDataFromFile() {
  * Скачивание аудит-лога с выбором папки
  */
 async function downloadAuditLogToFile() {
+    console.log('📊 Скачивание аудит-лога...');
+    
     try {
         const state = State.getState();
         if (state.auditLog.length === 0) {
-            return { success: false, error: 'Аудит-лог пуст' };
+            Utils.showToast('Аудит-лог пуст', 'warning', 3000);
+            return {
+                success: false,
+                error: 'Аудит-лог пуст'
+            };
         }
         
-        // Формируем данные для экспорта
+        console.log(`📊 Записей в аудит-логе: ${state.auditLog.length}`);
+        
         const auditData = {
+            version: '4.1.0',
             gameId: state.gameId,
             exportTime: new Date().toISOString(),
             auditLog: state.auditLog,
-            totalEntries: state.auditLog.length
+            totalEntries: state.auditLog.length,
+            metadata: {
+                gameType: state.gameType,
+                lastSaveTime: state.lastSaveTime,
+                totalPlayTime: calculateTotalPlayTime()
+            }
         };
         
         const fileName = `oto-audit-log-${state.gameId}-${Date.now()}.json`;
         const dataStr = JSON.stringify(auditData, null, 2);
         
-        // Используем функцию с выбором папки
         const result = await Utils.saveFileWithFolderPicker(dataStr, fileName);
         
         if (result.success) {
-            // Добавляем запись в аудит-лог
             const auditEntry = {
                 id: Date.now(),
                 request: 'Скачивание аудит-лога',
                 timestamp: Utils.formatMoscowTime(new Date()),
                 status: 'success',
-                fullResponse: `Аудит-лог скачан в файл: ${result.fileName}`
+                fullResponse: `Аудит-лог скачан в файл: ${result.fileName}\nЗаписей: ${state.auditLog.length}`
             };
-            
             State.addAuditLogEntry(auditEntry);
-            return { success: true, fileName: result.fileName };
+            
+            Utils.showToast(`Аудит-лог сохранён в файл: ${result.fileName}`, 'success', 3000);
+            console.log(`✅ Аудит-лог скачан в файл: ${result.fileName}`);
+            return {
+                success: true,
+                fileName: result.fileName,
+                entries: state.auditLog.length
+            };
         }
         
-        return { success: false, error: 'Не удалось скачать аудит-лог' };
+        Utils.showToast('Не удалось сохранить файл', 'error', 3000);
+        return {
+            success: false,
+            error: 'Не удалось скачать аудит-лог'
+        };
     } catch (error) {
-        console.error('Ошибка при скачивании аудит-лога:', error);
-        return { success: false, error: error.message };
+        console.error('❌ Ошибка при скачивании аудит-лога:', error);
+        Utils.showToast('Ошибка при сохранении файла', 'error', 3000);
+        return {
+            success: false,
+            error: error.message
+        };
+    }
+}
+
+/**
+ * Вспомогательная функция для расчета общего времени игры
+ */
+function calculateTotalPlayTime() {
+    const startTime = localStorage.getItem('oto_first_play_time');
+    if (!startTime) return 0;
+    
+    try {
+        const start = new Date(startTime);
+        const now = new Date();
+        const diffMs = now - start;
+        return Math.floor(diffMs / 1000); // В секундах
+    } catch (error) {
+        console.error('❌ Ошибка расчета времени игры:', error);
+        return 0;
+    }
+}
+
+/**
+ * Быстрое сохранение (для кнопки Quick Save)
+ */
+function quickSave() {
+    console.log('⚡ Быстрое сохранение...');
+    
+    const success = State.saveStateToLocalStorage();
+    
+    if (success) {
+        console.log('✅ Быстрое сохранение выполнено');
+        return {
+            success: true,
+            message: 'Игра сохранена',
+            timestamp: new Date().toISOString()
+        };
+    } else {
+        console.error('❌ Ошибка быстрого сохранения');
+        return {
+            success: false,
+            error: 'Не удалось сохранить игру'
+        };
+    }
+}
+
+/**
+ * Экспорт истории игры
+ */
+function exportHistory() {
+    console.log('📜 Экспорт истории...');
+    
+    try {
+        const state = State.getState();
+        
+        if (!state.gameState.history || state.gameState.history.length === 0) {
+            return {
+                success: false,
+                error: 'История пуста'
+            };
+        }
+        
+        const exportData = {
+            gameId: state.gameId,
+            exportTime: new Date().toISOString(),
+            history: state.gameState.history,
+            totalTurns: state.turnCount,
+            currentScene: state.gameState.currentScene?.scene || "Нет текущей сцены"
+        };
+        
+        const fileName = `oto-history-${state.gameId}.json`;
+        Utils.exportToFile(JSON.stringify(exportData, null, 2), fileName);
+        
+        console.log(`✅ История экспортирована в файл: ${fileName}`);
+        return {
+            success: true,
+            fileName: fileName,
+            entries: state.gameState.history.length
+        };
+    } catch (error) {
+        console.error('❌ Ошибка экспорта истории:', error);
+        return {
+            success: false,
+            error: error.message
+        };
     }
 }
 
 // Публичный интерфейс модуля
 export const Saveload = {
-    saveState,
-    loadState,
+    quickSave,
     saveGameToFile,
     loadGameFromFile,
     exportAllDataToFile,
     importAllDataFromFile,
-    downloadAuditLogToFile
+    downloadAuditLogToFile,
+    exportHistory,
+    forceResetToInitial
 };

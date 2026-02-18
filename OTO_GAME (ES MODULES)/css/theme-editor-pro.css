@@ -1,0 +1,402 @@
+/* === БАЗОВЫЕ СТИЛИ THEME EDITOR PRO === */
+:root {
+  --te-gold: #d4af37;
+  --te-bg-dark: #0e0e0e;
+  --te-bg-panel: #111;
+  --te-bg-header: #161616;
+  --te-border: #1e1e1e;
+  --te-text: #ccc;
+  --te-text-muted: #777;
+  --te-input-bg: #0a0a0a;
+  --te-input-border: #222;
+}
+
+/* Оверлей */
+.te-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 11000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(6px);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  padding: 0;
+}
+
+/* Окно редактора */
+.te-window {
+  width: 99%;
+  height: 97%;
+  background: var(--te-bg-dark);
+  border: 1px solid var(--te-gold);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 80px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+/* Верхняя панель */
+.te-topbar {
+  padding: 3px 4px;
+  background: #000;
+  border-bottom: 1px solid #222;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.te-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.te-logo {
+  color: var(--te-gold);
+  font-weight: 900;
+  font-size: 1.05em;
+  letter-spacing: 2px;
+  white-space: nowrap;
+}
+
+.te-preset-label {
+  color: #555;
+  font-size: 0.75em;
+  font-weight: 700;
+}
+
+.te-preset-select {
+  background: #1a1a1a;
+  color: var(--te-gold);
+  border: 1px solid #444;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-weight: 700;
+  outline: none;
+  font-size: 0.85em;
+}
+
+.te-topbar-right {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.te-btn-icon {
+  background: #1a1a1a;
+  color: #ccc;
+  border: 1px solid #333;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 0.8em;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.te-btn-icon:hover:not(:disabled) {
+  background: #2a2a2a;
+  color: var(--te-gold);
+  border-color: var(--te-gold);
+}
+
+.te-btn-icon:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.te-separator {
+  width: 1px;
+  height: 10px;
+  background: #333;
+  margin: 0 2px;
+}
+
+/* Панель вкладок */
+.te-tabbar {
+  display: flex;
+  background: #0a0a0a;
+  border-bottom: 1px solid #222;
+  flex-shrink: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.te-tab {
+  padding: 4px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  color: #555;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.te-tab.active {
+  color: var(--te-gold);
+  background: rgba(212, 175, 55, 0.08);
+  border-bottom-color: var(--te-gold);
+}
+
+.te-tab-icon {
+  font-size: 1.3em;
+  line-height: 1;
+}
+
+.te-tab-label {
+  font-size: 0.65em;
+  margin-top: 2px;
+  letter-spacing: 0.5px;
+}
+
+/* Основная область (вертикальный контейнер) */
+.te-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Панель настроек */
+.te-settings-panel {
+  width: 100%;
+  background: #111;
+  border-bottom: 1px solid var(--te-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 0 0 auto; /* начальная высота, будет меняться через JS */
+  min-height: 100px;
+}
+
+/* Заголовок секции */
+.te-section-title {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  background: var(--te-bg-header);
+  border-bottom: 1px solid #222;
+}
+
+.te-section-title span {
+  color: var(--te-gold);
+  font-weight: 700;
+  font-size: 0.85em;
+}
+
+/* Контент настроек (скроллируемый) */
+.te-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #333 #111;
+}
+
+/* Разделитель */
+.te-splitter {
+  height: 4px;
+  background: #1a1a1a;
+  cursor: ns-resize;
+  border-top: 1px solid #333;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+  user-select: none;
+  transition: background 0.2s;
+  z-index: 10;
+  position: relative;
+}
+
+.te-splitter:hover {
+  background: #2a2a2a;
+}
+
+.te-splitter:active {
+  background: var(--te-gold);
+}
+
+/* Панель предпросмотра */
+.te-preview-panel {
+  flex: 1 1 auto;
+  width: 100%;
+  background: #080808;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 50px;
+}
+
+.te-preview-header {
+  padding: 8px 14px;
+  background: #050505;
+  border-bottom: 1px solid #1a1a1a;
+  color: var(--te-gold);
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 1px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.te-preview-header span:last-child {
+  color: #333;
+}
+
+.te-preview-container {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  background-image: radial-gradient(#181818 1px, transparent 1px);
+  background-size: 24px 24px;
+  word-break: break-word;
+}
+
+/* Футер */
+.te-footer {
+  padding: 8px 14px;
+  background: #090909;
+  border-top: 1px solid #222;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.te-footer-btn {
+  background: transparent;
+  border: 1px solid #444;
+  color: #888;
+  padding: 5px 16px;
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 0.8em;
+  transition: all 0.2s;
+}
+
+.te-footer-btn.primary {
+  background: var(--te-gold);
+  border: none;
+  color: #000;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+}
+
+.te-footer-btn.primary:hover {
+  background: #e5c04b;
+}
+
+.te-footer-btn:hover {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: var(--te-gold);
+}
+
+/* Стили для внутренних элементов настроек (они задаются инлайн, но для уплотнения можно добавить) */
+.te-content .te-row {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 10px 3px 14px;
+  gap: 8px;
+  border-top: 1px solid #1a1a1a;
+  background: #111;
+}
+
+.te-content .te-row:nth-child(even) {
+  background: #121212;
+}
+
+.te-content .te-label {
+  color: #777;
+  font-size: 0.72em;
+  font-weight: 600;
+  min-width: 130px;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.te-content .te-input-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Адаптация под мобильные */
+@media (max-width: 768px) {
+  .te-window {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .te-topbar {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+
+  .te-preset-select {
+    max-width: 130px;
+    font-size: 12px;
+    padding: 3px 6px;
+  }
+
+  .te-tab {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .te-content .te-label {
+    min-width: 110px;
+    max-width: 110px;
+    font-size: 0.7em;
+  }
+
+  .te-preview-container {
+    padding: 10px;
+  }
+
+  .te-footer {
+    padding: 8px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .te-content .te-label {
+    min-width: 80px;
+    max-width: 80px;
+    font-size: 0.65em;
+  }
+
+  .te-tab {
+    padding: 6px 8px;
+  }
+
+  .te-tab-label {
+    font-size: 0.6em;
+  }
+}
