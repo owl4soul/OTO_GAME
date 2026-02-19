@@ -1,10 +1,12 @@
 // Модуль: GAMEITEM UI MANAGER - Универсальный менеджер отображения различных game_item
+// ИСПРАВЛЕННАЯ ВЕРСИЯ: использует общий TooltipUI для тултипов.
 'use strict';
 
 import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
 import { Render } from './5-render.js';
 import { GAME_ITEM_UI_CONFIG } from './gameitem-config.js';
+import { TooltipUI } from './tooltip-ui.js';
 
 // ============================================================================
 // КЛАСС GAMEITEM UI MANAGER
@@ -146,13 +148,12 @@ class GameItemUIManager {
         console.log('🎮 Инициализация GameItemUIManager...');
         this.importFonts();
         this.cacheContainers();
-        this.addTooltipStyles();
+        this.addTooltipStyles(); // добавляем общие стили (кроме тултипа)
+        // Глобальные функции для обратного вызова из HTML
         if (!window.showOrganizationHierarchy) {
             window.showOrganizationHierarchy = (orgId) => this.showOrganizationHierarchy(orgId);
         }
-        if (!window.showGameItemTooltip) {
-            window.showGameItemTooltip = (element, gameItem) => this.showGameItemTooltip(element, gameItem);
-        }
+        window.showGameItemTooltip = (element, gameItem) => this.showGameItemTooltip(element, gameItem);
         this.setupEventListeners();
         this.renderAll();
         this.initialized = true;
@@ -178,7 +179,7 @@ class GameItemUIManager {
     }
 
     /**
-     * Добавление общих стилей
+     * Добавление общих стилей (кроме тултипа)
      */
     addTooltipStyles() {
         if (document.getElementById('gameitem-ui-styles')) return;
@@ -235,7 +236,6 @@ class GameItemUIManager {
                 position: relative;
                 overflow: hidden;
                 line-height: 1.3;
-                /* Принудительный перенос текста */
                 overflow-wrap: break-word;
                 word-wrap: break-word;
                 word-break: break-word;
@@ -249,7 +249,7 @@ class GameItemUIManager {
                 white-space: normal;
                 max-width: 100%;
                 box-sizing: border-box;
-                min-width: 0; /* позволяет flex-элементам сжиматься */
+                min-width: 0;
                 hyphens: auto;
             }
 
@@ -278,17 +278,6 @@ class GameItemUIManager {
                 animation: badgeGlow 2s infinite;
             }
 
-            .game-item-tooltip {
-                animation: tooltipFadeIn ${config.ANIMATIONS.TOOLTIP_FADE_IN};
-                pointer-events: none;
-                z-index: 10000;
-                position: fixed;
-            }
-
-            .game-item-tooltip.fade-out {
-                animation: tooltipFadeOut ${config.ANIMATIONS.TOOLTIP_FADE_OUT};
-            }
-
             .industrial-border {
                 border-image: linear-gradient(45deg, #8b4513, #d4af37, #8b4513) 1;
                 border-width: 2px;
@@ -310,7 +299,7 @@ class GameItemUIManager {
             }
         `;
         document.head.appendChild(style);
-        console.log('🎨 Стили для GameItemUI добавлены (с усиленным переносом текста)');
+        console.log('🎨 Стили для GameItemUI добавлены');
     }
 
     /**
@@ -470,7 +459,6 @@ class GameItemUIManager {
             if (!this.containers[config.containerId].parentNode) {
                 this.mainContainer.appendChild(this.containers[config.containerId]);
             }
-            // Все блоки всегда показываем, даже пустые
             this.containers[config.containerId].style.display = 'block';
         } catch (error) {
             console.error(`❌ Ошибка рендеринга ${config.containerId}:`, error);
@@ -493,7 +481,6 @@ class GameItemUIManager {
             let html;
             if (val && val.trim() !== '' && val !== 'true') {
                 const item = { id: 'personality:hero', value: val, description: '' };
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(item).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 html = `
                     <div class="game-item-badge" data-game-item='${dataAttr}' onclick="window.showGameItemTooltip(this, JSON.parse(this.dataset.gameItem))"
@@ -562,7 +549,6 @@ class GameItemUIManager {
             let html;
             if (val.trim()) {
                 const item = { id: 'typology:currentScene', value: val, description: '' };
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(item).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 html = `
                     <div class="game-item-badge" data-game-item='${dataAttr}' onclick="window.showGameItemTooltip(this, JSON.parse(this.dataset.gameItem))"
@@ -707,7 +693,6 @@ class GameItemUIManager {
                 const color = this.getStatColor((value + 100) / 2);
                 const emoji = value >= 75 ? '😍' : value >= 50 ? '😊' : value >= 25 ? '🙂' : value >= -25 ? '😐' : value >= -50 ? '😠' : value >= -75 ? '😡' : '💀';
                 const desc = rel.description ? `<div style="font-size:0.75em; color:#aaa; margin-top:2px;">${rel.description}</div>` : '';
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(rel).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 html += `
                     <div class="game-item-badge" data-game-item='${dataAttr}' onclick="window.showGameItemTooltip(this, JSON.parse(this.dataset.gameItem))"
@@ -759,7 +744,6 @@ class GameItemUIManager {
             items.forEach(skill => {
                 const name = skill.value || skill.id.split(':')[1];
                 const desc = skill.description ? `<div style="font-size:0.75em; color:#aaa; margin-top:2px;">${skill.description}</div>` : '';
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(skill).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 html += `
                     <div class="game-item-badge" data-game-item='${dataAttr}' onclick="window.showGameItemTooltip(this, JSON.parse(this.dataset.gameItem))"
@@ -824,7 +808,6 @@ class GameItemUIManager {
                 const icon = isBuff ? '⬆️' : '⬇️';
                 const duration = item.duration !== undefined ? `[${item.duration}]` : '';
                 const desc = item.description ? `<div style="font-size:0.75em; color:#aaa; margin-top:2px;">${item.description}</div>` : '';
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(item).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 const badgeBg = isBuff ? colors.BADGE_BG_BUFF : colors.BADGE_BG_DEBUFF;
                 html += `
@@ -879,7 +862,6 @@ class GameItemUIManager {
                 const name = bless.value || bless.id.split(':')[1];
                 const duration = bless.duration !== undefined ? `[${bless.duration}]` : '';
                 const desc = bless.description ? `<div style="font-size:0.75em; color:#aaa; margin-top:2px;">${bless.description}</div>` : '';
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(bless).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 html += `
                     <div class="game-item-badge" data-game-item='${dataAttr}' onclick="window.showGameItemTooltip(this, JSON.parse(this.dataset.gameItem))"
@@ -932,7 +914,6 @@ class GameItemUIManager {
                 const name = curse.value || curse.id.split(':')[1];
                 const duration = curse.duration !== undefined ? `[${curse.duration}]` : '';
                 const desc = curse.description ? `<div style="font-size:0.75em; color:#aaa; margin-top:2px;">${curse.description}</div>` : '';
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(curse).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 html += `
                     <div class="game-item-badge" data-game-item='${dataAttr}' onclick="window.showGameItemTooltip(this, JSON.parse(this.dataset.gameItem))"
@@ -999,7 +980,6 @@ class GameItemUIManager {
                 const icon = isBuff ? '⬆️' : '⬇️';
                 const duration = item.duration !== undefined ? `[${item.duration}]` : '';
                 const desc = item.description ? `<div style="font-size:0.75em; color:#aaa; margin-top:2px;">${item.description}</div>` : '';
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(item).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 const badgeBg = isBuff ? colors.BADGE_BG_BUFF : colors.BADGE_BG_DEBUFF;
                 html += `
@@ -1062,7 +1042,6 @@ class GameItemUIManager {
                 const icon = Utils.getGameItemIcon(item.id);
                 const duration = item.duration !== undefined ? `[${item.duration}]` : '';
                 const desc = item.description ? `<div style="font-size:0.75em; color:#aaa; margin-top:2px;">${item.description}</div>` : '';
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(item).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 html += `
                     <div class="game-item-badge" data-game-item='${dataAttr}' onclick="window.showGameItemTooltip(this, JSON.parse(this.dataset.gameItem))"
@@ -1114,7 +1093,6 @@ class GameItemUIManager {
             items.forEach(item => {
                 const name = item.value || item.id.split(':')[1];
                 const desc = item.description ? `<div style="font-size:0.75em; color:#aaa; margin-top:2px;">${item.description}</div>` : '';
-                // Исправление: экранируем и двойные, и одинарные кавычки
                 const dataAttr = JSON.stringify(item).replace(/"/g, '&quot;').replace(/'/g, '&apos;');
                 html += `
                     <div class="game-item-badge" data-game-item='${dataAttr}' onclick="window.showGameItemTooltip(this, JSON.parse(this.dataset.gameItem))"
@@ -1370,19 +1348,22 @@ class GameItemUIManager {
         }
     }
 
+    /**
+     * НОВЫЙ МЕТОД: показывает тултип через общий TooltipUI.
+     * @param {HTMLElement} element - элемент, вызвавший тултип.
+     * @param {Object} gameItem - объект game_item для отображения.
+     */
     showGameItemTooltip(element, gameItem) {
-        const existingTooltip = document.querySelector('.game-item-tooltip');
-        if (existingTooltip) existingTooltip.remove();
         if (!gameItem || !gameItem.id) {
             console.warn('showGameItemTooltip: Нет данных об объекте');
             return;
         }
+
         const config = this.config.TOOLTIPS;
         const fontConfig = this.config.FONTS;
-        const tooltip = document.createElement('div');
-        tooltip.className = 'game-item-tooltip';
         const icon = Utils.getGameItemIcon(gameItem.id);
         const [type, name] = gameItem.id.split(':');
+
         let content = `
             <div style="
                 font-weight: bold; 
@@ -1401,6 +1382,7 @@ class GameItemUIManager {
                 <span>${name || type}</span>
             </div>
         `;
+
         if (gameItem.value !== undefined && gameItem.value !== name) {
             content += `
                 <div style="margin-bottom:4px; color:#ccc; font-size:0.85em;">
@@ -1408,6 +1390,7 @@ class GameItemUIManager {
                 </div>
             `;
         }
+
         if (gameItem.description) {
             content += `
                 <div style="margin-bottom:4px; color:#ccc; font-size:0.8em; font-style:italic; padding:4px; background:rgba(0,0,0,0.3); border-left:2px solid #fbc531;">
@@ -1415,6 +1398,7 @@ class GameItemUIManager {
                 </div>
             `;
         }
+
         if (gameItem.duration !== undefined) {
             content += `
                 <div style="margin-bottom:3px; color:#fbc531; font-size:0.85em; display:flex; align-items:center; gap:4px;">
@@ -1422,6 +1406,7 @@ class GameItemUIManager {
                 </div>
             `;
         }
+
         const extra = Object.keys(gameItem).filter(k => !['id','value','description','duration'].includes(k));
         if (extra.length) {
             content += '<div style="margin-top:4px; padding-top:4px; border-top:1px solid #333;">';
@@ -1431,46 +1416,9 @@ class GameItemUIManager {
             });
             content += '</div>';
         }
-        tooltip.innerHTML = content;
-        tooltip.style.cssText = `
-            position: fixed;
-            background: ${config.BACKGROUND};
-            border: ${config.BORDER};
-            border-radius: ${config.BORDER_RADIUS};
-            padding: ${config.PADDING};
-            max-width: ${config.MAX_WIDTH};
-            z-index: 10000;
-            pointer-events: none;
-            box-shadow: ${config.BOX_SHADOW};
-            animation: tooltipFadeIn ${this.config.ANIMATIONS.TOOLTIP_FADE_IN};
-            font-family: ${fontConfig.FAMILY};
-            letter-spacing: ${fontConfig.LETTER_SPACING};
-            font-size: ${config.FONT_SIZE};
-            line-height: ${config.LINE_HEIGHT};
-            backdrop-filter: blur(5px);
-        `;
-        document.body.appendChild(tooltip);
-        const rect = element.getBoundingClientRect();
-        const tooltipRect = tooltip.getBoundingClientRect();
-        let left = rect.left + window.scrollX;
-        let top = rect.bottom + window.scrollY + 8;
-        if (left + tooltipRect.width > window.innerWidth) left = window.innerWidth - tooltipRect.width - 10;
-        if (left < 10) left = 10;
-        if (top + tooltipRect.height > window.innerHeight + window.scrollY) {
-            top = rect.top + window.scrollY - tooltipRect.height - 8;
-        }
-        if (top < window.scrollY) top = window.scrollY + 10;
-        tooltip.style.left = left + 'px';
-        tooltip.style.top = top + 'px';
-        const remove = () => {
-            if (tooltip && tooltip.parentNode) {
-                tooltip.classList.add('fade-out');
-                setTimeout(() => tooltip.remove(), 200);
-            }
-            document.removeEventListener('click', remove);
-        };
-        setTimeout(() => document.addEventListener('click', remove), 100);
-        setTimeout(remove, 7000);
+
+        // Вызываем общий тултип, передавая элемент и опции
+        TooltipUI.show(element, content, { autoHide: true, offsetY: 8 });
     }
 
     forceUpdate() {

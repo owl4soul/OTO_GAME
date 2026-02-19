@@ -1,7 +1,5 @@
 // Модуль 6: GAME - Игровая логика (ФОРМАТ 4.1 - УНИФИЦИРОВАННАЯ СИСТЕМА GAME_ITEM)
-// ИСПРАВЛЕННАЯ ВЕРСИЯ: полный отказ от инлайн-стилей в пользу классов для настройки через тему.
-// Все HTML-блоки, создаваемые для отображения изменений за ход, теперь используют классы,
-// что позволяет теме полностью контролировать внешний вид.
+// ИСПРАВЛЕННАЯ ВЕРСИЯ: удалены функции создания HTML, теперь они в turn-updates-ui.js
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -14,6 +12,7 @@ import { Saveload } from './9-saveload.js';
 import { UI } from './ui.js';
 import { OperationsServiceInstance, OPERATIONS } from './operations-service.js';
 import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js';
+import { TurnUpdatesUI } from './turn-updates-ui.js'; // Импортируем модуль
 
 const dom = DOM.getDOM();
 
@@ -55,7 +54,6 @@ function createOrganizationsHTML() {
         <div class="organization-description">${org.description}</div>
     `;
         
-        // Показываем иерархию организации
         if (org.hierarchy && org.hierarchy.description) {
             html += `
         <div class="organization-hierarchy">
@@ -85,285 +83,7 @@ function createOrganizationsHTML() {
     return html;
 }
 
-// Функция для создания HTML изменений за ход
-function createTurnUpdatesHTML(actionResults, events, turnNumber) {
-    log.debug(LOG_CATEGORIES.TURN_PROCESSING, `createTurnUpdatesHTML called for turn ${turnNumber}`, { actionResults, events });
-    
-    // ВСЕГДА возвращаем блок, даже если нет изменений
-    let html = `
-        <div class="turn-updates-container">
-            <div class="turn-updates-header">
-                <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД ${turnNumber}
-            </div>
-    `;
-    
-    // Проверяем, есть ли данные
-    const hasActions = actionResults && actionResults.length > 0;
-    const hasEvents = events && events.length > 0;
-    
-    if (!hasActions && !hasEvents) {
-        html += `
-            <div class="turn-updates-empty">
-                Нет изменений за этот ход
-            </div>
-        `;
-        html += `</div>`;
-        return html;
-    }
-    
-    if (actionResults && actionResults.length > 0) {
-        html += `
-            <div class="turn-updates-actions-section">
-                <div class="turn-updates-subheader actions-subheader">
-                    <i class="fas fa-user-check"></i> По результатам действий
-                </div>
-                <div class="turn-updates-list actions-list">
-        `;
-        
-        actionResults.forEach((result, idx) => {
-            const operations = result.operations || [];
-            if (operations.length === 0 && !result.reason) return;
-            
-            const statusClass = result.success 
-                ? (result.partial ? 'action-partial' : 'action-success')
-                : 'action-failure';
-            
-            html += `
-                <div class="turn-update-action ${statusClass}">
-                    <div class="action-header">
-                        <i class="fas ${result.success ? 'fa-check-circle' : 'fa-times-circle'}"></i>
-                        <span class="action-title">Действие ${idx + 1}${result.partial ? ' (частично)' : ''}</span>
-                    </div>
-                    <div class="action-text">${result.choice_text || 'Действие'}</div>
-                    <div class="action-details">
-                        <span class="action-difficulty">🎯 Сложность: ${result.difficulty}</span>
-                        <span class="action-d10">🎲 d10: ${result.d10}</span>
-                        <span class="action-reason">${result.reason || ''}</span>
-                    </div>
-            `;
-            
-            if (operations.length > 0) {
-                html += `<div class="action-operations">`;
-                operations.forEach(op => {
-                    html += createCompactOperationHTML(op, 'action');
-                });
-                html += `</div>`;
-            }
-            
-            html += `</div>`;
-        });
-        
-        html += `</div></div>`;
-    }
-    
-    if (events && events.length > 0) {
-        html += `
-            <div class="turn-updates-events-section">
-                <div class="turn-updates-subheader events-subheader">
-                    <i class="fas fa-bolt"></i> По результатам событий
-                </div>
-                <div class="turn-updates-list events-list">
-        `;
-        
-        events.forEach((event, idx) => {
-            const effects = event.effects || [];
-            
-            const eventTypeIcons = {
-                discovery: 'fa-search',
-                character_interaction: 'fa-comments',
-                world_event: 'fa-globe',
-                ritual: 'fa-fire',
-                twist: 'fa-random'
-            };
-            
-            const icon = eventTypeIcons[event.type] || 'fa-star';
-            const eventDesc = event.description || 'Событие';
-            
-            html += `
-                <div class="turn-update-event">
-                    <div class="event-header">
-                        <i class="fas ${icon}"></i>
-                        <span class="event-type">${event.type ? event.type.toUpperCase() : 'СОБЫТИЕ'}</span>
-                    </div>
-                    <div class="event-description">${eventDesc}</div>
-                    <div class="event-reason">${event.reason || 'Нет описания'}</div>
-            `;
-            
-            if (effects.length > 0) {
-                html += `<div class="event-effects">`;
-                effects.forEach(effect => {
-                    html += createCompactOperationHTML(effect, 'event');
-                });
-                html += `</div>`;
-            }
-            
-            html += `</div>`;
-        });
-        
-        html += `</div></div>`;
-    }
-    
-    html += `</div>`;
-    return html;
-}
-
-// Компактное отображение операции
-function createCompactOperationHTML(operation, source) {
-    if (!operation || !operation.id || !operation.operation) {
-        log.warn(LOG_CATEGORIES.VALIDATION, 'Некорректная операция', operation);
-        return '';
-    }
-    
-    const sourceClass = source === 'action' ? 'action-operation' : 'event-operation';
-    const [type, name] = operation.id.split(':');
-    
-    let displayName = name;
-    let icon = 'fa-question';
-    let colorClass = 'operation-default';
-    let valueDisplay = '';
-    
-    // Используем value для отображения, а не id
-    let displayValue = operation.value || '';
-    
-    // Унифицируем отображение длительности
-    let displayDuration = '';
-    if (operation.duration !== undefined) {
-        displayDuration = `[${operation.duration} ход.]`;
-    }
-    
-    switch (type) {
-        case 'stat':
-            icon = 'fa-chart-line';
-            colorClass = 'operation-stat';
-            displayName = Utils.getRussianStatName(name);
-            break;
-        case 'skill':
-            icon = 'fa-scroll';
-            colorClass = 'operation-skill';
-            displayName = displayValue || name;
-            break;
-        case 'inventory':
-            icon = 'fa-box-open';
-            colorClass = 'operation-inventory';
-            displayName = displayValue || name;
-            break;
-        case 'relations':
-            icon = 'fa-handshake';
-            colorClass = 'operation-relations';
-            displayName = name.replace(/_/g, ' ');
-            break;
-        case 'bless':
-            icon = 'fa-star';
-            colorClass = 'operation-bless';
-            displayName = displayValue || name;
-            break;
-        case 'curse':
-            icon = 'fa-skull-crossbones';
-            colorClass = 'operation-curse';
-            displayName = displayValue || name;
-            break;
-        case 'buff':
-            icon = 'fa-arrow-up';
-            colorClass = 'operation-buff';
-            displayName = Utils.getRussianStatName(name);
-            break;
-        case 'debuff':
-            icon = 'fa-arrow-down';
-            colorClass = 'operation-debuff';
-            displayName = Utils.getRussianStatName(name);
-            break;
-        case 'progress':
-            icon = 'fa-chart-line';
-            colorClass = 'operation-progress';
-            displayName = displayValue || name;
-            break;
-        case 'personality':
-            icon = 'fa-brain';
-            colorClass = 'operation-personality';
-            displayName = displayValue || name;
-            break;
-        case 'initiation_degree':
-            icon = 'fa-graduation-cap';
-            colorClass = 'operation-degree';
-            displayName = displayValue || name;
-            break;
-        case 'organization_rank':
-            icon = 'fa-users';
-            colorClass = 'operation-organization';
-            displayName = displayValue || name || 'Организация';
-            break;
-    }
-    
-    // Форматируем значение в зависимости от типа операции
-    switch (operation.operation) {
-        case OPERATIONS.ADD:
-            if (type === 'buff' || type === 'debuff') {
-                const sign = operation.value > 0 ? '+' : '';
-                valueDisplay = `<span class="operation-value ${sign > 0 ? 'positive' : 'negative'}">
-                    ${displayName} ${sign}${operation.value} ${displayDuration}
-                </span>`;
-            } else {
-                const addedValue = displayValue ? `: "${displayValue}"` : '';
-                valueDisplay = `<span class="operation-add">
-                    Добавить ${displayName}${addedValue}
-                </span>`;
-            }
-            break;
-            
-        case OPERATIONS.REMOVE:
-            valueDisplay = `<span class="operation-remove">
-                Удалить: ${displayName}
-            </span>`;
-            break;
-            
-        case OPERATIONS.SET:
-            valueDisplay = `<span class="operation-set">
-                Установить ${displayName}: "${String(displayValue).substring(0, 50)}"
-            </span>`;
-            break;
-            
-        case OPERATIONS.MODIFY:
-            const sign = operation.delta > 0 ? '+' : '';
-            const deltaClass = operation.delta > 0 ? 'positive' : 'negative';
-            valueDisplay = `<span class="operation-modify ${deltaClass}">
-                ${displayName} ${sign}${operation.delta}
-            </span>`;
-            break;
-    }
-    
-    // Добавляем описание, если есть
-    let description = '';
-    if (operation.description) {
-        description = `<div class="operation-description">${operation.description}</div>`;
-    }
-    
-    // ОТОБРАЖЕНИЕ ВСЕХ НЕПУСТЫХ ПОЛЕЙ
-    let extraFields = '';
-    const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta'];
-    
-    Object.keys(operation).forEach(key => {
-        if (!ignoredKeys.includes(key)) {
-            const val = operation[key];
-            if (val !== undefined && val !== null && val !== '') {
-                extraFields += `<div class="operation-extra">${key}: ${val}</div>`;
-            }
-        }
-    });
-    
-    return `
-        <div class="operation-item ${sourceClass} ${colorClass}">
-            <div class="operation-icon"><i class="fas ${icon}"></i></div>
-            <div class="operation-content">
-                <div class="operation-main">
-                    ${valueDisplay}
-                </div>
-                ${description}
-                ${extraFields}
-            </div>
-        </div>
-    `;
-}
-
+// Функция calculateChoiceResult (без изменений, улучшенная версия)
 function calculateChoiceResult(choice, d10) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'calculateChoiceResult', { choice, d10 });
     
@@ -385,56 +105,84 @@ function calculateChoiceResult(choice, d10) {
     
     const requirementsCheck = checkRequirements(choice.requirements || []);
     
-    let success = false;
-    let partial = false;
-    let reason = '';
-    
-    if (requirementsCheck.stats.length === 0) {
-        const difficulty = choice.difficulty_level || 5;
-        success = d10 >= difficulty;
-        reason = success ? 'Успех: ${d10} ≥ ${difficulty}' : 'Провал: ${d10} < ${difficulty}';
-        
+    if (!requirementsCheck.success) {
         return {
-            success: success,
+            success: false,
             partial: false,
-            reason: reason,
+            reason: `Провал: отсутствуют требования: ${requirementsCheck.missing.join(', ')}`,
             d10: d10,
-            difficulty: difficulty,
-            operations: success ?
-                (choice.success_rewards || []) : (choice.fail_penalties || [])
+            difficulty: choice.difficulty_level,
+            operations: choice.fail_penalties || []
         };
     }
     
+    const stats = requirementsCheck.stats;
     const difficulty = choice.difficulty_level || 5;
-    const statValues = requirementsCheck.stats.map(s => s.value);
-    const averageStat = statValues.reduce((a, b) => a + b, 0) / statValues.length;
-    const threshold = averageStat + difficulty;
     
-    const statChecks = requirementsCheck.stats.map(stat => {
-        const valueWithLuck = stat.value + d10;
+    if (d10 === 10) {
+        return {
+            success: true,
+            partial: false,
+            reason: 'Критический успех! Бросок 10.',
+            d10: d10,
+            difficulty: difficulty,
+            operations: choice.success_rewards || []
+        };
+    }
+    if (d10 === 1) {
+        return {
+            success: false,
+            partial: false,
+            reason: 'Критический провал! Бросок 1.',
+            d10: d10,
+            difficulty: difficulty,
+            operations: choice.fail_penalties || []
+        };
+    }
+    
+    if (stats.length === 0) {
+        const success = d10 >= difficulty;
+        return {
+            success: success,
+            partial: false,
+            reason: success ? `Успех: ${d10} ≥ ${difficulty}` : `Провал: ${d10} < ${difficulty}`,
+            d10: d10,
+            difficulty: difficulty,
+            operations: success ? (choice.success_rewards || []) : (choice.fail_penalties || [])
+        };
+    }
+    
+    const TARGET_MULTIPLIER = 10;
+    const target = difficulty * TARGET_MULTIPLIER;
+    
+    const statChecks = stats.map(stat => {
+        const total = stat.value + d10;
+        const passed = total >= target;
         return {
             id: stat.id,
             base: stat.value,
-            withLuck: valueWithLuck,
-            passed: valueWithLuck >= threshold
+            withLuck: total,
+            passed: passed,
+            target: target
         };
     });
     
     const passedCount = statChecks.filter(s => s.passed).length;
     const totalStats = statChecks.length;
     
+    let success, partial, reason;
     if (passedCount === totalStats) {
         success = true;
         partial = false;
-        reason = 'Полный успех: все статы прошли проверку';
+        reason = `Полный успех: все статы прошли проверку (цель ${target})`;
     } else if (passedCount === 0) {
         success = false;
         partial = false;
-        reason = 'Полный провал: ни один стат не прошел проверку';
+        reason = `Полный провал: ни один стат не прошёл проверку (цель ${target})`;
     } else {
         success = true;
         partial = true;
-        reason = `Частичный успех: ${passedCount}/${totalStats} статов прошли проверку`;
+        reason = `Частичный успех: ${passedCount}/${totalStats} статов прошли проверку (цель ${target})`;
     }
     
     let operations = [];
@@ -446,7 +194,7 @@ function calculateChoiceResult(choice, d10) {
         operations = choice.fail_penalties || [];
     }
     
-    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результат расчета', { success, partial, operationsCount: operations.length });
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результат расчета', { success, partial, operationsCount: operations.length, target });
     
     return {
         success: success,
@@ -455,7 +203,7 @@ function calculateChoiceResult(choice, d10) {
         d10: d10,
         difficulty: difficulty,
         statChecks: statChecks,
-        threshold: threshold,
+        threshold: target,
         operations: operations
     };
 }
@@ -536,7 +284,7 @@ function toggleChoice(idx) {
     UI.updateActionButtons();
 }
 
-// Завершение и отправка хода
+// Завершение и отправка хода (без изменений, кроме вызова TurnUpdatesUI)
 async function submitTurn(retries = CONFIG.maxRetries) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'submitTurn called');
     
@@ -553,7 +301,6 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     });
     
     console.log('🔍 submitTurn called');
-    
     console.log(`🎯 Отправка ХОДА ${state.turnCount} к ИИ...`);
     
     if (activeAbortController) {
@@ -810,7 +557,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }
 }
 
-// Обработка результатов хода
+// Обработка результатов хода (изменён вызов создания HTML)
 function processTurn(data) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'processTurn called with pending data');
     Render.stopThoughtsOfHeroDisplay();
@@ -964,7 +711,6 @@ function processTurn(data) {
     
     // 7. Проверяем операции с организациями
     const organizationOperations = [];
-    
     pendingActionResults.forEach(result => {
         if (result.operations && Array.isArray(result.operations)) {
             result.operations.forEach(op => {
@@ -1007,8 +753,8 @@ function processTurn(data) {
         });
     }
     
-    // 8. Создаем блок изменений за ход (используем обновленную функцию)
-    const updatesHTML = createTurnUpdatesHTML(pendingActionResults, data.events || [], completedTurn);
+    // ========== ВЫЗОВ МЕТОДА ДЛЯ ГЕНЕРАЦИИ И СОХРАНЕНИЯ HTML ==========
+    TurnUpdatesUI.generateUpdatesHTML(pendingActionResults, data.events || [], completedTurn);
     
     // 9. Увеличиваем счетчик ходов
     const nextTurn = State.incrementTurnCount();
@@ -1031,7 +777,7 @@ function processTurn(data) {
         },
         thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
         lastTurnStatChanges: statChanges,
-        lastTurnUpdates: updatesHTML,
+        // lastTurnUpdates уже обновлён в TurnUpdatesUI.generateUpdatesHTML
     });
     
     // 11. Очищаем pending данные
@@ -1310,7 +1056,7 @@ export const Game = {
     handleClear,
     handleFreeModeToggle,
     checkRequirements,
-    createTurnUpdatesHTML,
+    // createTurnUpdatesHTML больше не экспортируется
     createOrganizationsHTML,
     setupGameObservers
 };
