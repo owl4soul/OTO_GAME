@@ -32,9 +32,7 @@ function constructUniversalInstructionsPrompt() {
         PROMPTS.choicesProtocol,
         PROMPTS.eventsProtocol,
         PROMPTS.outputFormat,
-        `### СТРУКТУРА JSON ОТВЕТА:
-    \n${PROMPTS.jsonStructure}`,
-        PROMPTS.additionalComponents.universalInstructions
+        `### ПРИДУМАЙ СЦЕНАРИЙ ИГРЫ:\n`
     ].join('\n\n');
 }
 
@@ -45,8 +43,7 @@ function constructUniversalInstructionsPrompt() {
  */
 function constructScenarioWriterPrompt() {
     return [
-        PROMPTS.system.scenarioWriter,
-        PROMPTS.additionalComponents.scenarioWriterInstructions
+        PROMPTS.customGameOTO.system.gameMaster
     ].join('\n\n');
 }
 

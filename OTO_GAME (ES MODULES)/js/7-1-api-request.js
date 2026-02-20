@@ -1,4 +1,4 @@
-// Модуль 7.1: API REQUEST - Построение и отправка запросов (ФОРМАТ 4.1)
+// Модуль 7.1: API REQUEST - Построение и отправка запросов (v5.0)
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -6,361 +6,197 @@ import { State } from './3-state.js';
 import { PROMPTS } from './prompts.js';
 
 // ============================================================================
-// КОНСТРУКТОР ПОЛНОГО СИСТЕМНОГО ПРОМПТА
+// КОНСТРУКТОР СИСТЕМНОГО ПРОМПТА
 // ============================================================================
 
 /**
- * Конструирует полный системный промт на основе типа игры
- * @param {Object} state - Текущее состояние игры
- * @returns {string} Полный системный промт для отправки в API
+ * Конструирует системный промпт в зависимости от типа игры:
+ * - 'standard'  → универсальный + контекст мира ОТО
+ * - другие      → универсальный + worldContext из настроек (если задан)
  */
 function constructFullSystemPrompt(state) {
-  // Определяем основной системный промпт в зависимости от типа игры
-  const mainSystemPrompt = state.gameType === 'standard' ?
-    PROMPTS.standardGameOTO.system.gameMaster :
-    PROMPTS.system.gameMaster;
-  
-  // Собираем полный системный промт из модульных компонентов
-  /*
-  ### РАСЧЁТ УСПЕХА/ПРОВАЛА ДЕЙСТВИЯ:
-${PROMPTS.calculationsExplanation}
-  */
-  const fullSystemPrompt = `
-${mainSystemPrompt}
-
-${PROMPTS.corePrinciples}
-
-${PROMPTS.absoluteProhibitions}
-
-${PROMPTS.fundamentalProtocols}
-
-${PROMPTS.heroStateDescription}
-
-### ПРОТОКОЛ РАБОТЫ С ОРГАНИЗАЦИЯМИ И РАНГАМИ:
-${PROMPTS.organizationsProtocol}
-
-### ТИПЫ GAME_ITEM И ИХ ФОРМАТЫ:
-${PROMPTS.gameItemProtocol}
-
-### ОПЕРАЦИИ НАД GAME_ITEM:
-${PROMPTS.operationsProtocol}
-
-### СТРУКТУРА CHOICE (ВАРИАНТА ВЫБОРА):
-${PROMPTS.choicesProtocol}
-
-### СТРУКТУРА EVENT (СОБЫТИЯ):
-${PROMPTS.eventsProtocol}
-
-### ПОШАГОВЫЙ АЛГОРИТМ ГЕНЕРАЦИИ ОТВЕТА:
-${PROMPTS.workflowAlgorithm}
-
-### ПРОВЕРОЧНЫЙ СПИСОК:
-${PROMPTS.validationChecklist}
-
-### ФОРМАТ ВХОДНЫХ ДАННЫХ:
-${PROMPTS.inputFormat}
-
-### ФОРМАТ ВЫХОДНЫХ ДАННЫХ:
-${PROMPTS.outputFormat}
-
-### СТРУКТУРА JSON ОТВЕТА:
-${PROMPTS.jsonStructure}
-
-### ПРИМЕР CHOICE СО ВСЕМИ ТИПАМИ ТРЕБОВАНИЙ:
-${PROMPTS.exampleChoiceWithAllTypes}
-
-### ЧАСТЫЕ ОШИБКИ:
-${PROMPTS.commonErrors}`;
-  
-  return fullSystemPrompt;
+  if (state.gameType === 'standard') {
+    return PROMPTS.standardGameOTO.system.gameMaster;
+  }
+  const base = PROMPTS.system.gameMaster;
+  const worldCtx = state.settings?.worldContext || '';
+  return worldCtx ? base + '\n\n' + worldCtx : base;
 }
 
 // ============================================================================
-// ДИНАМИЧЕСКИЕ ИНЪЕКЦИИ ДЛЯ ФОРМАТА 4.1
+// ДИНАМИЧЕСКИЕ ИНЪЕКЦИИ
 // ============================================================================
 
-/**
- * Формирует динамические системные инъекции на основе текущего состояния игры
- * @param {Object} state - Текущее состояние игры
- * @returns {string} Динамические инъекции для промпта
- */
 function getDynamicSystemInjections(state) {
   const injections = [];
   const turn = state.turnCount;
   
-  // 1. ИНЪЕКЦИЯ СЮЖЕТНОГО ПОВОРОТА (каждые 10 ходов)
   if (turn > 0 && turn % 15 === 0) {
-    console.log(`🌀 [Client Director] Turn ${turn}: Injecting Narrative Twist.`);
-    injections.push(`>>> [TRIGGER: TURN ${turn}] ${PROMPTS.injections.twist}`);
+    injections.push(`>>> [TURN ${turn}] ${PROMPTS.injections.twist}`);
   }
   
-  // 2. ИНЪЕКЦИЯ БЕЗУМИЯ (при низком уровне рассудка)
   const sanityItem = State.getGameItem('stat:sanity');
   if (sanityItem && sanityItem.value < 20) {
-    console.log(`🌀 [Client Director] Sanity Low (${sanityItem.value}): Injecting Insanity.`);
-    injections.push(`>>> [TRIGGER: LOW SANITY] ${PROMPTS.injections.insanity}`);
+    injections.push(`>>> [LOW SANITY: ${sanityItem.value}] ${PROMPTS.injections.insanity}`);
   }
   
-  // 3. ИНЪЕКЦИЯ ЗАЩИТЫ ОТ СЮЖЕТНЫХ ПЕТЕЛЬ
-  /*
-  if (state.gameState.history.length > 0) {
-    const lastHistory = state.gameState.history[state.gameState.history.length - 1];
-    const lastSceneText = lastHistory.fullText || '';
-    const currentSceneText = state.gameState.currentScene.scene || '';
-    const comparisonLength = 50;
-    
-    if (lastSceneText.length >= comparisonLength && currentSceneText.length >= comparisonLength) {
-      const startOfLastScene = lastSceneText.substring(0, comparisonLength).trim();
-      const startOfCurrentScene = currentSceneText.substring(0, comparisonLength).trim();
-      
-      if (startOfLastScene === startOfCurrentScene ||
-        lastSceneText.includes(startOfCurrentScene) ||
-        currentSceneText.includes(startOfLastScene))
-      {
-        console.log(`🌀 [Client Director] Loop/Repetition Detected: Injecting Anti-Loop.`);
-        injections.push(`>>> [TRIGGER: LOOP DETECTED] ${PROMPTS.injections.antiLoop}`);
-      }
-    }
-  }
-  */
-  
-  // 4. ИНЪЕКЦИЯ РИТУАЛА (только для стандартной игры О.Т.О.)
   if (state.gameType === 'standard' && state.isRitualActive) {
-    console.log(`🕯️ [Client Director] RITUAL MODE ACTIVE (О.Т.О.).`);
     injections.push(PROMPTS.injections.otoRitual);
   }
   
-  // 5. ИНЪЕКЦИЯ КОНФЛИКТА ОРГАНИЗАЦИЙ (если игрок состоит в конфликтующих организациях)
-  const heroOrganizations = State.getHeroOrganizations();
-  if (heroOrganizations.length >= 2) {
-    console.log(`🏛️ [Client Director] Player in ${heroOrganizations.length} organizations.`);
-    injections.push(`>>> [TRIGGER: MULTIPLE ORGANIZATIONS] ${PROMPTS.injections.organizationConflict}`);
+  const heroOrgs = State.getHeroOrganizations();
+  if (heroOrgs.length >= 2) {
+    injections.push(`>>> [${heroOrgs.length} ORGS] ${PROMPTS.injections.organizationConflict}`);
   }
   
-  // 6. БАЗОВЫЕ ИНСТРУКЦИИ (всегда добавляются)
   injections.push(PROMPTS.injections.coreMovement);
   
-  
-  return injections.join('\n\n');
+  return injections.join('\n');
 }
 
 // ============================================================================
-// КОНТЕКСТ И ПОДГОТОВКА ЗАПРОСА
+// ПОСТРОЕНИЕ КОНТЕКСТА
 // ============================================================================
 
 /**
- * Собирает блок контекста для USER-промпта из истории и состояния игры
- * @param {Object} state - Текущее состояние игры
- * @returns {string} Отформатированный блок контекста
+ * Обрезает HTML-текст сцены до краткого читаемого отрывка.
+ */
+function truncateScene(text, maxChars = 400) {
+  if (!text) return '(нет текста)';
+  const stripped = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (stripped.length <= maxChars) return stripped;
+  return stripped.substring(0, maxChars) + '…';
+}
+
+/**
+ * Собирает контекстный блок для user-промпта.
+ *
+ * ОПТИМИЗАЦИЯ ТОКЕНОВ:
+ * - Старые ходы истории → только summary (или усечённый текст до 400 символов)
+ * - Последний ход истории → полный текст (важно для непрерывности)
+ * - Текущая сцена передаётся отдельно и всегда полностью
  */
 function buildContextBlock(state) {
-  let parts = [];
+  const parts = [];
   
-  // А. ГЛОБАЛЬНАЯ ЛЕТОПИСЬ (общая сводка сюжета)
-  if (state.gameState.summary && state.gameState.summary.length > 0) {
+  // А. Глобальная летопись
+  if (state.gameState.summary?.length > 0) {
     parts.push(`### ГЛОБАЛЬНАЯ ЛЕТОПИСЬ\n${state.gameState.summary}`);
   }
   
-  // Б. ДИНАМИЧЕСКАЯ ПАМЯТЬ ИИ (aiMemory) - контекст для Гейм-мастера
+  // Б. Память гейм-мастера
   if (state.gameState.aiMemory && Object.keys(state.gameState.aiMemory).length > 0) {
-    const memoryForPrompt = { ...state.gameState.aiMemory };
-    parts.push(`### ТВОЯ ДИНАМИЧЕСКАЯ ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(memoryForPrompt, null, 2)}`);
+    parts.push(`### ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(state.gameState.aiMemory, null, 2)}`);
   }
   
-  // В. ИЕРАРХИИ ОРГАНИЗАЦИЙ, В КОТОРЫХ СОСТОИТ ГЕРОЙ (НОВОЕ)
-  const heroOrganizationHierarchies = State.getHeroOrganizationHierarchies();
-  if (Object.keys(heroOrganizationHierarchies).length > 0) {
-    const hierarchiesText = Object.entries(heroOrganizationHierarchies).map(([orgId, hierarchy]) => {
-      return `organization_rank_hierarchy:${orgId}: ${JSON.stringify(hierarchy, null, 2)}`;
-    }).join('\n\n');
-    
-    parts.push(`### ИЕРАРХИИ ОРГАНИЗАЦИЙ, В КОТОРЫХ СОСТОИТ ГЕРОЙ\n${hierarchiesText}`);
+  // В. Иерархии организаций героя
+  const heroOrgHierarchies = State.getHeroOrganizationHierarchies();
+  if (Object.keys(heroOrgHierarchies).length > 0) {
+    const hierarchiesText = Object.entries(heroOrgHierarchies)
+      .map(([orgId, hierarchy]) => `organization_rank_hierarchy:${orgId}: ${JSON.stringify(hierarchy)}`)
+      .join('\n');
+    parts.push(`### ИЕРАРХИИ ОРГАНИЗАЦИЙ ГЕРОЯ\n${hierarchiesText}`);
   }
   
-  // Г. КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ходы)
-  const turnsToTake = state.gameState.summary ? CONFIG.activeContextTurns : CONFIG.fullTurnsToSendInContext;
+  // Г. История (сжатая для старых ходов, полная для последнего)
+  const turnsToTake = state.gameState.summary
+    ? CONFIG.activeContextTurns
+    : CONFIG.fullTurnsToSendInContext;
   const historySlice = state.gameState.history.slice(-turnsToTake);
   
   if (historySlice.length > 0) {
-    const historyString = historySlice.map(entry => {
-      // Извлечение текста выбора из массива actionResults или fallback к старому полю choice
-      const choiceText = entry.actionResults ?
-        entry.actionResults.map(a => `${a.text}${a.success ? '' : ' (Провал)'}`).join(', ') :
-        (entry.choice || 'Нет выбора');
+    const historyString = historySlice.map((entry, idx) => {
+      const isLast = idx === historySlice.length - 1;
+      const choiceText = entry.actionResults
+        ? entry.actionResults.map(a => `${a.text}${a.success ? '' : ' ❌'}`).join(' | ')
+        : (entry.choice || '—');
       
-      return `СЦЕНА: ${entry.fullText}\nВЫБОР: ${choiceText}\n(Изменения состояния: ${entry.changes || 'Нет явных изменений'})`;
+      // Старые ходы: только summary (или усечение)
+      // Последний ход: полный текст для живого нарратива
+      const sceneContent = isLast
+        ? (entry.fullText || entry.summary || '(нет текста)')
+        : (entry.summary || truncateScene(entry.fullText, 400));
+      
+      return `СЦЕНА: ${sceneContent}\nВЫБОР: ${choiceText}\n(Изменения: ${entry.changes || 'нет'})`;
     }).join('\n---\n');
-    parts.push(`### КРАТКОСРОЧНАЯ ИСТОРИЯ (последние ${historySlice.length} ходов)\n${historyString}`);
+    
+    parts.push(`### ИСТОРИЯ (${historySlice.length} ходов)\n${historyString}`);
   }
   
-  return parts.length > 0 ? parts.join('\n\n') : "История: Это начало пути. Предыдущих событий нет.";
+  return parts.join('\n\n') || "История: Начало. Предыдущих событий нет.";
 }
 
-/**
- * Форматирует выбранные действия для отображения в промпте
- * @param {Array} selectedActions - Массив выбранных действий
- * @returns {string} Отформатированная строка с результатами действий
- */
+// ============================================================================
+// ФОРМАТИРОВАНИЕ ДАННЫХ
+// ============================================================================
+
 function formatSelectedActionsForPrompt(selectedActions) {
-  if (!selectedActions || selectedActions.length === 0) {
-    return "Действия не выбраны";
-  }
-  
+  if (!selectedActions?.length) return "Действия не выбраны";
   return selectedActions.map(action => {
-    const status = action.success ? '✅ УСПЕХ' :
-      action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ' : '❌ ПРОВАЛ';
+    const status = action.success ? '✅ УСПЕХ'
+      : action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ'
+      : '❌ ПРОВАЛ';
     return `"${action.text}" → ${status} (Сложность: ${action.difficulty_level})`;
   }).join('\n');
 }
 
-/**
- * Форматирует состояние героя для промпта с учетом организаций
- * @param {Array} heroState - Массив game_items героя
- * @returns {string} Отформатированное состояние героя
- */
 function formatHeroStateForPrompt(heroState) {
   if (!Array.isArray(heroState) || heroState.length === 0) {
     return "Состояние героя: Нет данных";
   }
   
   const sections = {
-    stats: [],
-    organizations: [],
-    skills: [],
-    inventory: [],
-    relations: [],
-    buffs: [],
-    debuffs: [],
-    blessings: [],
-    curses: [],
-    other: []
+    stats: [], organizations: [], skills: [], inventory: [],
+    relations: [], buffs: [], debuffs: [], blessings: [], curses: [], other: []
   };
   
-  // Группируем game_items по типам
   heroState.forEach(item => {
     const [type] = item.id.split(':');
-    
-    let displayValue = item.value;
-    let extraInfo = '';
-    
-    if (item.description) {
-      extraInfo += ` (${item.description})`;
-    }
-    
-    if (item.duration !== undefined) {
-      extraInfo += ` [длительность: ${item.duration}]`;
-    }
-    
-    const line = `• ${item.id}: ${displayValue}${extraInfo}`;
+    let extra = '';
+    if (item.description) extra += ` (${item.description})`;
+    if (item.duration !== undefined) extra += ` [длит.: ${item.duration}]`;
+    const line = `• ${item.id}: ${item.value}${extra}`;
     
     switch (type) {
-      case 'stat':
-        sections.stats.push(line);
-        break;
-      case 'organization_rank':
-        sections.organizations.push(line);
-        break;
-      case 'skill':
-        sections.skills.push(line);
-        break;
-      case 'inventory':
-        sections.inventory.push(line);
-        break;
-      case 'relations':
-        sections.relations.push(line);
-        break;
-      case 'buff':
-        sections.buffs.push(line);
-        break;
-      case 'debuff':
-        sections.debuffs.push(line);
-        break;
-      case 'bless':
-        sections.blessings.push(line);
-        break;
-      case 'curse':
-        sections.curses.push(line);
-        break;
-      default:
-        sections.other.push(line);
+      case 'stat':               sections.stats.push(line); break;
+      case 'organization_rank':  sections.organizations.push(line); break;
+      case 'skill':              sections.skills.push(line); break;
+      case 'inventory':          sections.inventory.push(line); break;
+      case 'relations':          sections.relations.push(line); break;
+      case 'buff':               sections.buffs.push(line); break;
+      case 'debuff':             sections.debuffs.push(line); break;
+      case 'bless':              sections.blessings.push(line); break;
+      case 'curse':              sections.curses.push(line); break;
+      default:                   sections.other.push(line);
     }
   });
   
-  // Собираем итоговый текст
-  let result = '';
+  const labels = {
+    stats: 'СТАТЫ', organizations: 'ОРГАНИЗАЦИИ', skills: 'НАВЫКИ',
+    inventory: 'ИНВЕНТАРЬ', relations: 'ОТНОШЕНИЯ', buffs: 'БАФФЫ',
+    debuffs: 'ДЕБАФФЫ', blessings: 'БЛАГОСЛОВЕНИЯ', curses: 'ПРОКЛЯТИЯ', other: 'ПРОЧЕЕ'
+  };
   
-  if (sections.stats.length > 0) {
-    result += `### ОСНОВНЫЕ ХАРАКТЕРИСТИКИ:\n${sections.stats.join('\n')}\n\n`;
-  }
-  
-  if (sections.organizations.length > 0) {
-    result += `### ОРГАНИЗАЦИИ И РАНГИ:\n${sections.organizations.join('\n')}\n\n`;
-  }
-  
-  if (sections.skills.length > 0) {
-    result += `### НАВЫКИ:\n${sections.skills.join('\n')}\n\n`;
-  }
-  
-  if (sections.inventory.length > 0) {
-    result += `### ИНВЕНТАРЬ:\n${sections.inventory.join('\n')}\n\n`;
-  }
-  
-  if (sections.relations.length > 0) {
-    result += `### ОТНОШЕНИЯ С ПЕРСОНАЖАМИ:\n${sections.relations.join('\n')}\n\n`;
-  }
-  
-  if (sections.buffs.length > 0) {
-    result += `### ВРЕМЕННЫЕ УСИЛЕНИЯ (БАФФЫ):\n${sections.buffs.join('\n')}\n\n`;
-  }
-  
-  if (sections.debuffs.length > 0) {
-    result += `### ВРЕМЕННЫЕ ОСЛАБЛЕНИЯ (ДЕБАФФЫ):\n${sections.debuffs.join('\n')}\n\n`;
-  }
-  
-  if (sections.blessings.length > 0) {
-    result += `### БЛАГОСЛОВЕНИЯ:\n${sections.blessings.join('\n')}\n\n`;
-  }
-  
-  if (sections.curses.length > 0) {
-    result += `### ПРОКЛЯТИЯ:\n${sections.curses.join('\n')}\n\n`;
-  }
-  
-  if (sections.other.length > 0) {
-    result += `### ДРУГОЕ:\n${sections.other.join('\n')}\n\n`;
-  }
-  
-  return result.trim();
+  return Object.entries(sections)
+    .filter(([, items]) => items.length > 0)
+    .map(([key, items]) => `### ${labels[key]}:\n${items.join('\n')}`)
+    .join('\n\n');
 }
 
-/**
- * Подготавливает полное тело запроса для формата 4.1
- * @param {Object} state - Текущее состояние игры
- * @param {Array} selectedActions - Выбранные игроком действия
- * @param {number} d10 - Результат броска d10 для хода
- * @returns {Object} Полный payload для отправки в API
- */
+// ============================================================================
+// СБОРКА PAYLOAD
+// ============================================================================
+
 function prepareRequestPayload(state, selectedActions, d10) {
-  // 1. Формируем ПОЛНЫЙ СИСТЕМНЫЙ ПРОМПТ
-  const systemPromptFull = constructFullSystemPrompt(state);
-  
-  // 2. Формируем ПОЛЬЗОВАТЕЛЬСКИЙ ПРОМПТ
+  const systemPrompt = constructFullSystemPrompt(state);
   const contextBlock = buildContextBlock(state);
-  
-  // Собираем геройское состояние в читаемом формате
   const heroStateSummary = formatHeroStateForPrompt(state.heroState);
+  const needsThoughts = State.needsHeroPhrases();
+  const dynamicInjections = getDynamicSystemInjections(state);
   
-  // Проверяем, нужно ли запросить новые "мысли героя"
-  const needsHeroPhrases = State.needsHeroPhrases();
-  
-  // Получаем динамические инъекции на основе состояния игры
-  const dynamicSystemPart = getDynamicSystemInjections(state);
-  
-  const userPrompt = `## ПРОМТ ПОЛЬЗОВАТЕЛЯ
+  const userPrompt = `${dynamicInjections}
 
-${dynamicSystemPart}
-
-### БРОСОК УДАЧИ НА ХОД:
-d10 = ${d10}
+### БРОСОК d10: ${d10}
 
 ### КОНТЕКСТ ИГРЫ:
 ${contextBlock}
@@ -368,102 +204,67 @@ ${contextBlock}
 ### ТЕКУЩАЯ СЦЕНА:
 ${state.gameState.currentScene.scene}
 
-### СОСТОЯНИЕ ГЕРОЯ (GAME_ITEMS):
+### СОСТОЯНИЕ ГЕРОЯ:
 ${heroStateSummary}
 
-### ВЫБРАННЫЕ ДЕЙСТВИЯ И ИХ РЕЗУЛЬТАТЫ:
+### ВЫБРАННЫЕ ДЕЙСТВИЯ:
 ${formatSelectedActionsForPrompt(selectedActions)}
+${needsThoughts ? '\n### Сгенерируй 10+ мыслей героя (thoughts).' : ''}
 
-${needsHeroPhrases ? '### ДОПОЛНИТЕЛЬНО: Пожалуйста, сгенерируй 10+ мыслей героя (thoughts).' : ''}
-
-
-### ТРЕБОВАНИЯ К ОТВЕТУ:
-Продолжи игру, сгенерировав валидный JSON, согласно инструкциям`;
+### Продолжи игру — верни валидный JSON.`;
   
-  // 3. Формируем финальный payload
   return {
     messages: [
-      { role: "system", content: systemPromptFull },
+      { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt }
     ],
     model: state.settings.model,
     temperature: 0.9,
-    max_tokens: 100000
+    max_tokens: 10000
   };
 }
 
 // ============================================================================
-// HTTP-ЗАПРОСЫ И СЕТЕВЫЕ ОПЕРАЦИИ
+// HTTP ЗАПРОС
 // ============================================================================
 
-/**
- * Выполняет сетевой запрос и возвращает сырой текст ответа (без парсинга JSON)
- * @param {string} url - URL для запроса
- * @param {Object} headers - HTTP-заголовки
- * @param {Object} payload - Тело запроса
- * @param {AbortController} abortController - Контроллер для отмены запроса
- * @returns {Promise<string>} Сырой текст ответа (для аудита и отладки)
- * @throws {Error} При превышении попыток или критической ошибке
- */
-/**
- * Выполняет сетевой запрос и возвращает сырой текст ответа (без парсинга JSON)
- * @param {string} url - URL для запроса
- * @param {Object} headers - HTTP-заголовки
- * @param {Object} payload - Тело запроса
- * @param {AbortController} abortController - Контроллер для отмены запроса
- * @returns {Promise<string>} Сырой текст ответа (для аудита и отладки)
- * @throws {Error} При превышении попыток или критической ошибке
- */
 async function executeFetchRaw(url, headers, payload, abortController) {
-  console.log(`🚀 [API Request] ${url}`);
+  console.log(`🚀 [API] ${url} | model: ${payload.model}`);
   
   try {
     const response = await fetch(url, {
       method: 'POST',
-      headers: headers,
+      headers,
       body: JSON.stringify(payload),
-      signal: abortController ? abortController.signal : null
+      signal: abortController?.signal ?? null
     });
     
     if (!response.ok) {
-      // Читаем тело ошибки
       const errorText = await response.text();
-      console.error(`❌ HTTP Error ${response.status}:`, errorText.substring(0, 200));
-      
+      console.error(`❌ HTTP ${response.status}:`, errorText.substring(0, 200));
       const error = new Error(`HTTP Error ${response.status}: ${errorText}`);
-      // ВАЖНО: Сохраняем тело ошибки
       error.rawResponse = errorText;
       error.status = response.status;
       throw error;
     }
     
     const rawText = await response.text();
-    console.log(`✅ [API Response] Получено ${rawText.length} символов`);
+    console.log(`✅ [API] Получено ${rawText.length} символов`);
     return rawText;
     
   } catch (error) {
-    console.error('🔥 Ошибка при выполнении запроса:', error.message);
-    
-    // Если у ошибки еще нет rawResponse, устанавливаем пустую строку
-    // НЕ перезаписываем существующий rawResponse!
-    if (!error.rawResponse) {
-      error.rawResponse = '';
-    }
-    
-    // Добавляем информацию о статусе, если её нет
+    console.error('🔥 Ошибка запроса:', error.message);
+    if (!error.rawResponse) error.rawResponse = '';
     if (!error.status && error.message.includes('HTTP Error')) {
       const match = error.message.match(/HTTP Error (\d+):/);
-      if (match) {
-        error.status = parseInt(match[1]);
-      }
+      if (match) error.status = parseInt(match[1]);
     }
-    
     throw error;
   }
 }
 
 // ============================================================================
-// ЭКСПОРТ ПУБЛИЧНОГО ИНТЕРФЕЙСА МОДУЛЯ
+// ЭКСПОРТ
 // ============================================================================
 
 export const API_Request = {
@@ -473,5 +274,6 @@ export const API_Request = {
   formatSelectedActionsForPrompt,
   formatHeroStateForPrompt,
   prepareRequestPayload,
-  executeFetchRaw
+  executeFetchRaw,
+  truncateScene
 };
