@@ -1,6 +1,13 @@
 /**
  * Модуль: SCENE UI - Рендеринг мета-блоков сцены (заметки, память ГМ, сводка, рефлексия, личность, типология)
  * Все стили берутся из темы через CSS-классы. Инлайн-стили не используются.
+ *
+ * ИСПРАВЛЕНИЯ:
+ * 1. renderSceneText – теперь корректно вставляет HTML, полученный от ИИ, без экранирования,
+ *    но с использованием санитайзера DOMPurify для защиты от XSS.
+ *    Убрана замена переносов строк на <br>, так как HTML-разметка сама управляет форматированием.
+ * 2. Вспомогательные функции для отображения памяти ГМ оставлены без изменений,
+ *    они используют экранирование, так как показывают отладочную информацию.
  */
 
 'use strict';
@@ -8,6 +15,20 @@
 import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
 import { themeManagerPro } from './theme/theme-pro.js';
+
+// Попытка импортировать DOMPurify (если установлен как модуль) или использовать глобальную переменную
+let DOMPurify;
+try {
+    DOMPurify = (await import('dompurify')).default;
+} catch (e) {
+    // DOMPurify не доступен как модуль – возможно, он определён глобально
+    if (typeof window !== 'undefined' && window.DOMPurify) {
+        DOMPurify = window.DOMPurify;
+    } else {
+        console.warn('DOMPurify не найден. HTML-санитизация отключена.');
+        DOMPurify = { sanitize: (html) => html }; // заглушка
+    }
+}
 
 // ====================================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РЕНДЕРИНГА ПАМЯТИ ГМ
@@ -95,7 +116,7 @@ function renderAiMemoryRecursive(obj, depth = 0) {
             color = obj ? '#4cd137' : '#e84118';
             value = obj ? 'true' : 'false';
             displayValue = `<span style="color: ${color}; font-weight: bold;">${value}</span>`;
-        } 
+        }
         else if (typeof obj === 'number') {
             color = '#fbc531';
             displayValue = `<span style="color: ${color};">${value}</span>`;
@@ -139,11 +160,11 @@ function renderAiMemoryRecursive(obj, depth = 0) {
         
         const keyHtml = `<span style="color: #fbc531; font-weight: bold;">${Utils.escapeHtml(key)}:</span>`;
         
-        const isValuePrimitive = (value === null || value === undefined || 
-                                 typeof value !== 'object' || 
-                                 (typeof value === 'object' && 
-                                  !Array.isArray(value) && 
-                                  Object.keys(value).length === 0));
+        const isValuePrimitive = (value === null || value === undefined ||
+            typeof value !== 'object' ||
+            (typeof value === 'object' &&
+                !Array.isArray(value) &&
+                Object.keys(value).length === 0));
         
         if (isValuePrimitive) {
             html += `<div style="margin-left: ${(depth + 1) * 20}px;">
@@ -254,10 +275,10 @@ function makeAiMemoryCollapsible() {
  */
 export function renderDesignNotes(container, designNotes) {
     if (!designNotes || designNotes.trim() === '') return;
-
+    
     const block = document.createElement('div');
     block.className = 'scene-meta-block design-notes-block';
-
+    
     block.innerHTML = `
         <div class="design-notes-title">
             <i class="fas fa-pencil-alt"></i> Заметки дизайнера
@@ -266,7 +287,7 @@ export function renderDesignNotes(container, designNotes) {
             ${Utils.escapeHtml(designNotes).replace(/\n/g, '<br>')}
         </div>
     `;
-
+    
     container.appendChild(block);
 }
 
@@ -288,12 +309,12 @@ export function renderAiMemory(container, aiMemory) {
         container.appendChild(emptyBlock);
         return;
     }
-
+    
     const memoryContent = formatAiMemory(aiMemory);
-
+    
     const block = document.createElement('div');
     block.className = 'scene-meta-block ai-memory-block';
-
+    
     block.innerHTML = `
         <div class="ai-memory-header">
             <i class="fas fa-brain"></i> ПАМЯТЬ ГМ:
@@ -303,9 +324,9 @@ export function renderAiMemory(container, aiMemory) {
             ${memoryContent}
         </div>
     `;
-
+    
     container.appendChild(block);
-
+    
     // Добавляем возможность сворачивания после рендеринга
     setTimeout(() => makeAiMemoryCollapsible(), 200);
 }
@@ -317,10 +338,10 @@ export function renderAiMemory(container, aiMemory) {
  */
 export function renderSummary(container, summary) {
     if (!summary || summary.trim() === '') return;
-
+    
     const block = document.createElement('div');
     block.className = 'scene-meta-block summary-block';
-
+    
     block.innerHTML = `
         <div class="summary-title">
             <i class="fas fa-file-alt"></i> Сводка сцены
@@ -329,35 +350,55 @@ export function renderSummary(container, summary) {
             ${Utils.escapeHtml(summary).replace(/\n/g, '<br>')}
         </div>
     `;
-
+    
     container.appendChild(block);
 }
 
 /**
  * Рендерит основной текст сцены
  * @param {HTMLElement} container - родительский контейнер
- * @param {string} sceneText - текст сцены
+ * @param {string} sceneText - текст сцены (может содержать HTML)
  */
 export function renderSceneText(container, sceneText) {
     const block = document.createElement('div');
     block.className = 'scene-text-block';
     block.id = 'sceneText';
-
+    
     if (sceneText && sceneText.trim() !== '') {
         // Получаем текущую тему (активную или редактируемую)
         const currentTheme = themeManagerPro.getCurrentTheme();
+        
+        // Разрешено ли использование HTML? По умолчанию true, так как ИИ может генерировать разметку.
+        // Если в будущем понадобится выключить – можно брать из настроек.
         const allowHtml = true;
-
+        
         let contentHtml;
         if (allowHtml) {
-            // Если разрешён HTML, не экранируем, но заменяем переносы строк на <br>
-            // (предполагаем, что HTML уже корректный)
-            contentHtml = sceneText.replace(/\n/g, '<br>');
+            // Санитизируем HTML, чтобы избежать XSS-атак, но разрешаем базовые теги форматирования
+            if (DOMPurify && typeof DOMPurify.sanitize === 'function') {
+                contentHtml = DOMPurify.sanitize(sceneText, {
+                    ALLOWED_TAGS: [
+                        'p', 'br', 'b', 'i', 'em', 'strong', 'div', 'span',
+                        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li',
+                        'a', 'img', 'blockquote', 'pre', 'code', 'hr', 'table',
+                        'thead', 'tbody', 'tr', 'th', 'td', 'caption'
+                    ],
+                    ALLOWED_ATTR: [
+                        'href', 'target', 'src', 'alt', 'title', 'class', 'id',
+                        'style', 'width', 'height', 'align', 'valign', 'border',
+                        'cellpadding', 'cellspacing'
+                    ]
+                });
+            } else {
+                // Если DOMPurify недоступен – используем исходный текст (риск XSS)
+                console.warn('DOMPurify не найден. HTML вставляется без санитизации!');
+                contentHtml = sceneText;
+            }
         } else {
-            // По умолчанию – экранируем и заменяем переносы
+            // Режим только текст – экранируем всё
             contentHtml = Utils.escapeHtml(sceneText).replace(/\n/g, '<br>');
         }
-
+        
         block.innerHTML = `
             <div class="scene-text-content">
                 ${contentHtml}
@@ -370,7 +411,7 @@ export function renderSceneText(container, sceneText) {
             </div>
         `;
     }
-
+    
     container.appendChild(block);
 }
 
@@ -381,11 +422,11 @@ export function renderSceneText(container, sceneText) {
  */
 export function renderReflection(container, reflection) {
     if (!reflection || reflection.trim() === '') return;
-
+    
     const block = document.createElement('div');
     block.className = 'scene-meta-block reflection-block';
     block.id = 'sceneReflection';
-
+    
     block.innerHTML = `
         <div class="reflection-title">
             <i class="fas fa-eye"></i> Рефлексия ГМ
@@ -394,7 +435,7 @@ export function renderReflection(container, reflection) {
             ${Utils.escapeHtml(reflection).replace(/\n/g, '<br>')}
         </div>
     `;
-
+    
     container.appendChild(block);
 }
 
@@ -405,10 +446,10 @@ export function renderReflection(container, reflection) {
  */
 export function renderPersonality(container, personality) {
     if (!personality || personality.trim() === '') return;
-
+    
     const block = document.createElement('div');
     block.className = 'scene-meta-block personality-block';
-
+    
     block.innerHTML = `
         <div class="personality-title">
             <i class="fas fa-user-circle"></i> Изменение личности персонажа
@@ -417,7 +458,7 @@ export function renderPersonality(container, personality) {
             ${Utils.escapeHtml(personality).replace(/\n/g, '<br>')}
         </div>
     `;
-
+    
     container.appendChild(block);
 }
 
@@ -428,10 +469,10 @@ export function renderPersonality(container, personality) {
  */
 export function renderTypology(container, typology) {
     if (!typology || typology.trim() === '') return;
-
+    
     const block = document.createElement('div');
     block.className = 'scene-meta-block typology-block';
-
+    
     block.innerHTML = `
         <div class="typology-title">
             <i class="fas fa-fingerprint"></i> Типология персонажа
@@ -440,7 +481,7 @@ export function renderTypology(container, typology) {
             ${Utils.escapeHtml(typology).replace(/\n/g, '<br>')}
         </div>
     `;
-
+    
     container.appendChild(block);
 }
 
@@ -451,24 +492,24 @@ export function renderTypology(container, typology) {
  * @param {Array<string>} knownFields - список известных полей (не рендерятся как дополнительные)
  */
 export function renderAdditionalFields(container, currentScene, knownFields) {
-    const additionalFields = Object.keys(currentScene).filter(key => 
-        !knownFields.includes(key) && 
-        currentScene[key] !== null && 
-        currentScene[key] !== undefined && 
+    const additionalFields = Object.keys(currentScene).filter(key =>
+        !knownFields.includes(key) &&
+        currentScene[key] !== null &&
+        currentScene[key] !== undefined &&
         currentScene[key] !== ''
     );
-
+    
     additionalFields.forEach(field => {
         const value = currentScene[field];
-
+        
         // Пропускаем массивы и сложные объекты (они уже обработаны в aiMemory)
         if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
             return;
         }
-
+        
         const block = document.createElement('div');
         block.className = 'scene-meta-block additional-field-block';
-
+        
         block.innerHTML = `
             <div class="additional-field-title">
                 <i class="fas fa-info-circle"></i> ${Utils.escapeHtml(field)}
@@ -477,7 +518,7 @@ export function renderAdditionalFields(container, currentScene, knownFields) {
                 ${Utils.escapeHtml(String(value)).replace(/\n/g, '<br>')}
             </div>
         `;
-
+        
         container.appendChild(block);
     });
 }

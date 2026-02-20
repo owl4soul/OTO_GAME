@@ -369,7 +369,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     const actionResults = [];
     
     selectedChoicesData.forEach((choice, idx) => {
-        const result = calculateChoiceResult(choice, d10);
+        const result = OperationsServiceInstance.calculateChoiceResult(choice, d10, state.heroState);
         if (result) {
             actionResults.push({
                 ...result,
@@ -558,6 +558,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
 }
 
 // Обработка результатов хода (изменён вызов создания HTML)
+// Обработка результатов хода (исправленная версия)
 function processTurn(data) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'processTurn called with pending data');
     Render.stopThoughtsOfHeroDisplay();
@@ -578,6 +579,10 @@ function processTurn(data) {
     
     const previousScene = state.gameState.currentScene;
     
+    // ========== НОВЫЕ МАССИВЫ ДЛЯ РЕЗУЛЬТАТОВ ОПЕРАЦИЙ ==========
+    const actionOperationResults = []; // для каждого действия массив результатов операций
+    const eventOperationResults = []; // для каждого события массив результатов эффектов
+    
     // 1. Уменьшаем длительность эффектов в реальном состоянии
     const buffResult = OperationsServiceInstance.decreaseBuffDurations(state.heroState);
     log.info(LOG_CATEGORIES.OPERATIONS, `🕐 Уменьшена длительность эффектов`, {
@@ -585,44 +590,50 @@ function processTurn(data) {
         removed: buffResult.removed
     });
     
-    // 2. Применяем операции от действий к реальному состоянию
-    let totalActionOperations = 0;
-    pendingActionResults.forEach(result => {
+    // 2. Применяем операции от действий к реальному состоянию и сохраняем результаты
+    pendingActionResults.forEach((result, idx) => {
         if (result.operations && Array.isArray(result.operations)) {
-            totalActionOperations += result.operations.length;
-            log.debug(LOG_CATEGORIES.OPERATIONS, `Применяем операции от действия`, {
-                operationsCount: result.operations.length,
-                actionText: result.choice_text
-            });
-            
             const operationResult = OperationsServiceInstance.applyOperations(result.operations, state.heroState);
             if (!operationResult.success) {
                 log.warn(LOG_CATEGORIES.OPERATIONS, 'Некоторые операции от действий не были применены', operationResult);
             }
+            actionOperationResults[idx] = operationResult.results || []; // сохраняем массив результатов
+        } else {
+            actionOperationResults[idx] = [];
         }
     });
     
-    // 3. Применяем операции от событий
-    let totalEventOperations = 0;
+    // 3. Применяем операции от событий и сохраняем результаты
     if (data.events && Array.isArray(data.events)) {
-        const eventOperations = [];
+        // Собираем все эффекты событий в один массив для применения
+        const eventEffects = [];
         data.events.forEach(event => {
             if (event.effects && Array.isArray(event.effects)) {
-                eventOperations.push(...event.effects);
+                eventEffects.push(...event.effects);
             }
         });
         
-        totalEventOperations = eventOperations.length;
-        if (eventOperations.length > 0) {
-            log.info(LOG_CATEGORIES.OPERATIONS, 'Применяем операции от событий', {
-                operationsCount: eventOperations.length,
-                eventsCount: data.events.length
-            });
-            
-            const eventResult = OperationsServiceInstance.applyOperations(eventOperations, state.heroState);
+        if (eventEffects.length > 0) {
+            const eventResult = OperationsServiceInstance.applyOperations(eventEffects, state.heroState);
             if (!eventResult.success) {
                 log.warn(LOG_CATEGORIES.OPERATIONS, 'Некоторые операции от событий не были применены', eventResult);
             }
+            
+            // Разбиваем результаты обратно по событиям
+            let effectIndex = 0;
+            data.events.forEach((event, evIdx) => {
+                if (event.effects && event.effects.length) {
+                    eventOperationResults[evIdx] = eventResult.results.slice(effectIndex, effectIndex + event.effects.length);
+                    effectIndex += event.effects.length;
+                } else {
+                    eventOperationResults[evIdx] = [];
+                }
+            });
+        } else {
+            // Если эффектов нет, заполняем пустыми массивами
+            data.events.forEach((_, evIdx) => {
+                eventOperationResults[evIdx] = [];
+            });
         }
     }
     
@@ -753,8 +764,20 @@ function processTurn(data) {
         });
     }
     
+    
+    let totalActionOperations = 0;
+pendingActionResults.forEach(result => {
+    if (result.operations) totalActionOperations += result.operations.length;
+});
+let totalEventOperations = 0;
+if (data.events) {
+    data.events.forEach(event => {
+        if (event.effects) totalEventOperations += event.effects.length;
+    });
+}
+    
     // ========== ВЫЗОВ МЕТОДА ДЛЯ ГЕНЕРАЦИИ И СОХРАНЕНИЯ HTML ==========
-    TurnUpdatesUI.generateUpdatesHTML(pendingActionResults, data.events || [], completedTurn);
+    TurnUpdatesUI.generateUpdatesHTML(pendingActionResults, data.events || [], completedTurn, actionOperationResults, eventOperationResults);
     
     // 9. Увеличиваем счетчик ходов
     const nextTurn = State.incrementTurnCount();

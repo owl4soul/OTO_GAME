@@ -1,6 +1,6 @@
-// Файл: turn-updates-ui.js (ПОЛНАЯ ВЕРСИЯ С ТУЛТИПОМ ЧЕРЕЗ INLINE ONCLICK)
-// Модуль отображения блока "Изменения за ход". Теперь сам генерирует HTML и сохраняет в State.
-// Использует глобальную функцию showCalculationTooltip для вызова TooltipUI, аналогично gameitem-ui.
+// Файл: turn-updates-ui.js 
+// Модуль отображения блока "ИЗМЕНЕНИЯ ЗА ХОД". Теперь сам генерирует HTML и сохраняет в State.
+// Использует прямые обработчики для тултипов
 'use strict';
 
 import { State } from './3-state.js';
@@ -17,6 +17,31 @@ class TurnUpdatesUI {
         console.log('🔧 TurnUpdatesUI: конструктор');
         this.container = null;
         this.initialized = false;
+
+        // Единый обработчик для клика/тапа (привязан к контексту класса)
+        this.tooltipHandler = (e) => {
+            const target = e.currentTarget; // сам элемент, на который навешен обработчик
+            const encodedDetails = target.dataset.details;
+            if (!encodedDetails) return;
+
+            try {
+                const details = JSON.parse(decodeURIComponent(encodedDetails));
+                const html = TurnUpdatesUI.buildTooltipHTML(details);
+
+                if (TooltipUI && typeof TooltipUI.show === 'function') {
+                    TooltipUI.show(target, html, {
+                        autoHide: true,
+                        duration: 45000,
+                        offsetY: 8,
+                        className: 'calculation-tooltip'
+                    });
+                } else {
+                    console.error('TooltipUI не доступен');
+                }
+            } catch (err) {
+                console.error('Ошибка при показе тултипа:', err);
+            }
+        };
     }
 
     initialize() {
@@ -24,7 +49,7 @@ class TurnUpdatesUI {
         console.log('🎮 Инициализация TurnUpdatesUI...');
         this.ensureContainer();
         this.setupEventListeners();
-        this.renderFromState();
+        this.renderFromState(); // внутри будет вызван attachTooltipHandlers
         this.initialized = true;
         console.log('✅ TurnUpdatesUI готов');
     }
@@ -68,91 +93,151 @@ class TurnUpdatesUI {
         });
     }
 
-    // ========== ГЛОБАЛЬНАЯ ФУНКЦИЯ ДЛЯ ТУЛТИПА (добавляется в window) ==========
-    static registerGlobalTooltipFunction() {
-        if (window.showCalculationTooltip) return;
-        window.showCalculationTooltip = (element, detailsJson) => {
-            try {
-                const details = JSON.parse(detailsJson);
-                // Формируем HTML для тултипа
-                let html = `<div style="font-weight: bold; margin-bottom: 8px; color: #d4af37;">🔍 Детали расчёта</div>`;
-
-                html += `<div><span style="color: #888;">Результат:</span> <span style="color: ${details.success ? '#8f8' : '#f88'}">${details.success ? (details.partial ? 'ЧАСТИЧНЫЙ УСПЕХ' : 'ПОЛНЫЙ УСПЕХ') : 'ПРОВАЛ'}</span></div>`;
-                html += `<div><span style="color: #888;">Причина:</span> ${details.reason || '—'}</div>`;
-                html += `<div><span style="color: #888;">Бросок d10:</span> ${details.d10}</div>`;
-                html += `<div><span style="color: #888;">Сложность:</span> ${details.difficulty}</div>`;
-
-                if (details.threshold || details.target) {
-                    const target = details.threshold || details.target;
-                    html += `<div><span style="color: #888;">Цель (сложность×10):</span> ${target}</div>`;
-                }
-
-                if (details.statChecks && details.statChecks.length) {
-                    html += `<div style="margin-top: 8px; font-weight: bold;">📊 Проверки статов:</div>`;
-                    details.statChecks.forEach(stat => {
-                        const statName = stat.id.replace('stat:', '');
-                        const successText = stat.passed ? '✅' : '❌';
-                        html += `<div style="margin-left: 8px;">${successText} ${statName}: ${stat.base} + ${details.d10} = ${stat.withLuck} ${stat.passed ? '≥' : '<'} ${stat.target || details.threshold} </div>`;
-                    });
-                }
-
-                if (details.operations && details.operations.length) {
-                    html += `<div style="margin-top: 8px; font-weight: bold;">${details.success ? (details.partial ? '⚖️ Частичные эффекты' : '✨ Получено') : '💔 Потери'}:</div>`;
-                    details.operations.forEach(op => {
-                        let opText = `${op.operation} ${op.id}`;
-                        if (op.delta !== undefined) opText += ` ${op.delta > 0 ? '+' : ''}${op.delta}`;
-                        if (op.value !== undefined) opText += ` = "${op.value}"`;
-                        html += `<div style="margin-left: 8px;">• ${opText}</div>`;
-                    });
-                }
-
-                TooltipUI.show(element, html, { autoHide: true, offsetY: 8 });
-            } catch (err) {
-                console.error('Ошибка в showCalculationTooltip:', err);
-            }
-        };
+    /**
+     * Назначает обработчики напрямую каждому элементу с data-details
+     */
+    attachTooltipHandlers() {
+        if (!this.container) return;
+        const elements = this.container.querySelectorAll('[data-details]');
+        elements.forEach(el => {
+            // Удаляем старые обработчики, если вдруг элемент сохранился (не должно быть)
+            el.removeEventListener('click', this.tooltipHandler);
+            el.removeEventListener('touchstart', this.tooltipHandler);
+            // Добавляем новые
+            el.addEventListener('click', this.tooltipHandler);
+            el.addEventListener('touchstart', this.tooltipHandler, { passive: true });
+        });
+        console.log(`🔧 Назначены обработчики для ${elements.length} элементов`);
     }
 
-    // ========== МЕТОДЫ ГЕНЕРАЦИИ HTML ==========
-    generateUpdatesHTML(actionResults, events, turnNumber) {
+    static buildTooltipHTML(details) {
+        let html = `<div class="tooltip-calculation">`;
+        
+        let title = '';
+        if (details.type === 'event') {
+            title = '🔍 СОБЫТИЕ';
+        } else {
+            const resultColor = details.success ? (details.partial ? '#ffaa00' : '#8f8') : '#f88';
+            const resultText = details.success ?
+                (details.partial ? 'ЧАСТИЧНЫЙ УСПЕХ' : 'ПОЛНЫЙ УСПЕХ') :
+                'ПРОВАЛ';
+            title = `<span style="color:${resultColor};">${resultText}</span>`;
+        }
+        html += `<div class="tooltip-header" style="font-weight:bold; margin-bottom:10px;">${title}</div>`;
+        
+        if (details.reason) {
+            html += `<div class="tooltip-reason" style="margin-bottom:8px; font-size:0.9em;">${details.reason}</div>`;
+        }
+        
+        if (details.requirementsList && details.requirementsList.length > 0) {
+            html += `<div class="tooltip-section" style="margin-top:10px;"><span style="font-weight:bold;">📋 Требования:</span>`;
+            details.requirementsList.forEach(req => {
+                const icon = req.present ? '✅' : '❌';
+                const reqName = req.id.replace('stat:', '').replace(/_/g, ' ');
+                const valuePart = req.value !== null ? ` (${req.value})` : '';
+                html += `<div style="margin-left:10px; font-size:0.9em;">${icon} ${reqName}${valuePart}</div>`;
+            });
+            html += `</div>`;
+        }
+        
+        if (details.type !== 'event') {
+            html += `<div class="tooltip-section" style="margin-top:10px;"><span style="font-weight:bold;">🎲 Расчёт:</span>`;
+            html += `<div style="margin-left:10px; font-size:0.9em;">Бросок удачи d10: ${details.d10}</div>`;
+            html += `<div style="margin-left:10px; font-size:0.9em;">Сложность действия: ${details.difficulty}</div>`;
+            
+            let algoDescription = '';
+            if (details.d10 === 10) {
+                algoDescription = '🎉 Критический успех: бросок 10 автоматически приносит успех независимо от сложности и требований.';
+            } else if (details.d10 === 1) {
+                algoDescription = '💥 Критический провал: бросок 1 автоматически приводит к провалу независимо от сложности и требований.';
+            } else if (!details.statChecks || details.statChecks.length === 0) {
+                algoDescription = details.success ?
+                    `✅ Успех: бросок ${details.d10} ≥ сложность ${details.difficulty}.` :
+                    `❌ Провал: бросок ${details.d10} < сложность ${details.difficulty}.`;
+            } else {
+                const target = details.threshold;
+                algoDescription = `
+                    <div style="margin-left:10px; margin-top:5px;">
+                        🔢 Формула: для каждого требуемого стата считается (значение стата + d10). 
+                        Если результат ≥ целевого порога (среднее арифметическое всех требуемых статов + сложность действия), стат считается успешным.
+                    </div>
+                    <div style="margin-left:10px;">
+                        📈 Целевой порог = средний стат (${details.statChecks.map(s => s.base).join(' + ')} / ${details.statChecks.length}) + сложность ${details.difficulty} = ${details.threshold}
+                    </div>
+                    <div style="margin-left:10px; margin-top:5px;">
+                        ✅ Полный успех – все статы прошли проверку.<br>
+                        ⚖️ Частичный успех – хотя бы один стат прошёл проверку (но не все).<br>
+                        ❌ Полный провал – ни один стат не прошёл проверку.
+                    </div>
+                `;
+            }
+            html += `<div style="margin-left:10px; font-size:0.95em; background:#222; padding:5px; border-radius:4px;">${algoDescription}</div>`;
+            
+            if (details.statChecks && details.statChecks.length > 0) {
+                html += `<div style="margin-top:10px; font-weight:bold;">📊 Проверки статов:</div>`;
+                details.statChecks.forEach(stat => {
+                    const statName = stat.id.replace('stat:', '');
+                    const passedIcon = stat.passed ? '✅' : '❌';
+                    html += `<div style="margin-left:10px; font-size:0.9em;">${passedIcon} ${statName}: ${stat.base} + ${details.d10} = ${stat.withLuck} ${stat.passed ? '≥' : '<'} ${details.threshold}</div>`;
+                });
+            }
+            html += `</div>`;
+        }
+        
+        if (details.operations && details.operations.length > 0) {
+            html += `<div class="tooltip-section" style="margin-top:15px;"><span style="font-weight:bold;">⚙️ Эффекты:</span>`;
+            details.operations.forEach(op => {
+                const opSuccess = op.success !== false;
+                const opIcon = opSuccess ? '✅' : '❌';
+                
+                let opText = `${op.operation} ${op.id}`;
+                if (op.delta !== undefined) {
+                    const sign = op.delta > 0 ? '+' : '';
+                    opText += ` ${sign}${op.delta}`;
+                }
+                if (op.value !== undefined) {
+                    opText += ` = "${op.value}"`;
+                }
+                if (op.duration !== undefined) {
+                    opText += ` [${op.duration} ход.]`;
+                }
+                if (op.description) {
+                    opText += ` — ${op.description}`;
+                }
+                html += `<div style="margin-left:10px; font-size:0.9em;">${opIcon} ${opText}</div>`;
+            });
+            html += `</div>`;
+        }
+        
+        html += `</div>`;
+        return html;
+    }
+
+    generateUpdatesHTML(actionResults, events, turnNumber, actionOperationResults = [], eventOperationResults = []) {
         log.debug(LOG_CATEGORIES.TURN_PROCESSING, `TurnUpdatesUI.generateUpdatesHTML for turn ${turnNumber}`, { actionResults, events });
         
-        const html = this._createTurnUpdatesHTML(actionResults, events, turnNumber);
+        const innerHTML = this._createUpdatesInnerHTML(actionResults, events, turnNumber, actionOperationResults, eventOperationResults);
+        State.setState({ lastTurnUpdates: innerHTML });
         
-        // Сохраняем в состояние
-        State.setState({ lastTurnUpdates: html });
-        
-        // Если контейнер уже инициализирован, сразу обновляем отображение
         if (this.initialized && this.container) {
             this.renderFromState();
         }
         
-        return html;
+        return innerHTML;
     }
 
-    _createTurnUpdatesHTML(actionResults, events, turnNumber) {
-        // ВСЕГДА возвращаем блок, даже если нет изменений
-        let html = `
-            <div class="turn-updates-container">
-                <div class="turn-updates-header">
-                    <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ХОД ${turnNumber}
-                </div>
-        `;
+    _createUpdatesInnerHTML(actionResults, events, turnNumber, actionOperationResults = [], eventOperationResults = []) {
+        let html = '';
         
         const hasActions = actionResults && actionResults.length > 0;
         const hasEvents = events && events.length > 0;
         
         if (!hasActions && !hasEvents) {
-            html += `
-                <div class="turn-updates-empty">
-                    Нет изменений за этот ход
-                </div>
-            `;
-            html += `</div>`;
+            html += `<div class="turn-updates-empty">Нет изменений за этот ход</div>`;
             return html;
         }
         
-        if (actionResults && actionResults.length > 0) {
+        if (hasActions) {
             html += `
                 <div class="turn-updates-actions-section">
                     <div class="turn-updates-subheader actions-subheader">
@@ -161,13 +246,15 @@ class TurnUpdatesUI {
                     <div class="turn-updates-list actions-list">
             `;
             
-            actionResults.forEach((result, idx) => {
+            actionResults.forEach((result, actionIdx) => {
                 const operations = result.operations || [];
                 if (operations.length === 0 && !result.reason) return;
                 
                 const statusClass = result.success 
                     ? (result.partial ? 'action-partial' : 'action-success')
                     : 'action-failure';
+                
+                const opResults = actionOperationResults[actionIdx] || [];
                 
                 const details = {
                     success: result.success,
@@ -177,24 +264,20 @@ class TurnUpdatesUI {
                     difficulty: result.difficulty,
                     threshold: result.threshold,
                     statChecks: result.statChecks || [],
-                    operations: (result.operations || []).map(op => ({
-                        operation: op.operation,
-                        id: op.id,
-                        delta: op.delta,
-                        value: op.value
+                    requirementsList: result.requirementsList || [],
+                    operations: (result.operations || []).map((op, opIdx) => ({
+                        ...op,
+                        success: opResults[opIdx]?.success ?? true
                     }))
                 };
                 
-                // Экранируем двойные и одинарные кавычки для безопасной вставки в HTML-атрибут onclick
-                const detailsJson = JSON.stringify(details)
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&apos;');
+                const encodedDetails = encodeURIComponent(JSON.stringify(details));
                 
                 html += `
-                    <div class="turn-update-action ${statusClass}" onclick="window.showCalculationTooltip(this, '${detailsJson}')">
+                    <div class="turn-update-action ${statusClass}" data-details="${encodedDetails}" role="button" tabindex="0" style="cursor: pointer;">
                         <div class="action-header">
                             <i class="fas ${result.success ? 'fa-check-circle' : 'fa-times-circle'}"></i>
-                            <span class="action-title">Действие ${idx + 1}${result.partial ? ' (частично)' : ''}</span>
+                            <span class="action-title">Действие ${actionIdx + 1}${result.partial ? ' (частично)' : ''}</span>
                         </div>
                         <div class="action-text">${result.choice_text || 'Действие'}</div>
                         <div class="action-details">
@@ -218,7 +301,7 @@ class TurnUpdatesUI {
             html += `</div></div>`;
         }
         
-        if (events && events.length > 0) {
+        if (hasEvents) {
             html += `
                 <div class="turn-updates-events-section">
                     <div class="turn-updates-subheader events-subheader">
@@ -227,7 +310,7 @@ class TurnUpdatesUI {
                     <div class="turn-updates-list events-list">
             `;
             
-            events.forEach((event, idx) => {
+            events.forEach((event, eventIdx) => {
                 const effects = event.effects || [];
                 
                 const eventTypeIcons = {
@@ -241,8 +324,21 @@ class TurnUpdatesUI {
                 const icon = eventTypeIcons[event.type] || 'fa-star';
                 const eventDesc = event.description || 'Событие';
                 
+                const effectResults = eventOperationResults[eventIdx] || [];
+                
+                const eventDetails = {
+                    type: 'event',
+                    description: eventDesc,
+                    reason: event.reason,
+                    operations: (effects || []).map((eff, effIdx) => ({
+                        ...eff,
+                        success: effectResults[effIdx]?.success ?? true
+                    }))
+                };
+                const encodedEventDetails = encodeURIComponent(JSON.stringify(eventDetails));
+                
                 html += `
-                    <div class="turn-update-event">
+                    <div class="turn-update-event" data-details="${encodedEventDetails}" role="button" tabindex="0" style="cursor: pointer;">
                         <div class="event-header">
                             <i class="fas ${icon}"></i>
                             <span class="event-type">${event.type ? event.type.toUpperCase() : 'СОБЫТИЕ'}</span>
@@ -265,7 +361,6 @@ class TurnUpdatesUI {
             html += `</div></div>`;
         }
         
-        html += `</div>`;
         return html;
     }
 
@@ -420,19 +515,24 @@ class TurnUpdatesUI {
         `;
     }
 
-    // ========== РЕНДЕРИНГ ИЗ СОСТОЯНИЯ ==========
     renderFromState() {
         try {
             const state = State.getState();
             if (!this.container) return;
 
-            const content = state.lastTurnUpdates || '<div class="turn-update-empty">Ожидание хода...</div>';
+            const innerContent = state.lastTurnUpdates || '<div class="turn-update-empty">Ожидание хода...</div>';
             this.container.innerHTML = `
                 <div class="turn-updates-header">
                     <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ПОСЛЕДНИЙ ХОД
                 </div>
-                ${content}
+                <div class="turn-updates-content">
+                    ${innerContent}
+                </div>
             `;
+            
+            // Назначаем обработчики на свежесозданные элементы
+            this.attachTooltipHandlers();
+            
             this.scrollToUpdates();
             console.log('✅ TurnUpdatesUI: обновлён');
         } catch (e) {
@@ -469,9 +569,6 @@ class TurnUpdatesUI {
         this.initialized = false;
     }
 }
-
-// Регистрируем глобальную функцию сразу
-TurnUpdatesUI.registerGlobalTooltipFunction();
 
 const turnUpdatesUI = new TurnUpdatesUI();
 export { turnUpdatesUI as TurnUpdatesUI };

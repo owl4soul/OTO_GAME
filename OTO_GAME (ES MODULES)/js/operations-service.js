@@ -346,19 +346,21 @@ class OperationsService {
         // 3. Проверка обязательных полей для операций
         switch (operation.operation) {
             case OPERATIONS.ADD:
-                // Для buff/debuff обязателен duration
-                if (operation.id && (operation.id.startsWith('buff:') || operation.id.startsWith('debuff:'))) {
-                    if (operation.duration === undefined || typeof operation.duration !== 'number') {
-                        errors.push(`Для ${operation.id.split(':')[0]} обязателен числовой duration`);
+                // Для buff/debuff обязателен duration (проверяем только если id определён и корректен)
+                if (operation.id && operation.id.includes(':')) {
+                    const [type] = operation.id.split(':');
+                    if (type === GAME_ITEM_TYPES.BUFF || type === GAME_ITEM_TYPES.DEBUFF) {
+                        if (operation.duration === undefined || typeof operation.duration !== 'number') {
+                            errors.push(`Для ${type} обязателен числовой duration`);
+                        }
+                        if (operation.duration !== undefined && (operation.duration < 1 || operation.duration > 999)) {
+                            errors.push(`duration должен быть от 1 до 999, получено: ${operation.duration}`);
+                        }
+                        // Для buff/debuff value должно быть числом
+                        if (operation.value !== undefined && typeof operation.value !== 'number') {
+                            errors.push(`Для ${type} value должно быть числом`);
+                        }
                     }
-                    if (operation.duration !== undefined && (operation.duration < 1 || operation.duration > 999)) {
-                        errors.push(`duration должен быть от 1 до 999, получено: ${operation.duration}`);
-                    }
-                }
-                // Для buff/debuff value должно быть числом
-                if ((operation.id.startsWith('buff:') || operation.id.startsWith('debuff:')) &&
-                    operation.value !== undefined && typeof operation.value !== 'number') {
-                    errors.push(`Для ${operation.id.split(':')[0]} value должно быть числом`);
                 }
                 break;
                 
@@ -383,7 +385,7 @@ class OperationsService {
         
         // 4. Проверка диапазонов значений
         if (operation.value !== undefined) {
-            const [type] = operation.id.split(':');
+            const [type] = operation.id ? operation.id.split(':') : [null];
             
             switch (type) {
                 case GAME_ITEM_TYPES.STAT:
@@ -448,8 +450,9 @@ class OperationsService {
         // Для нестекуемых типов - игнорируем (не создаем дубликаты)
         log.debug(LOG_CATEGORIES.OPERATIONS, `⚠️ ADD: ${operation.id} уже существует, дубликат не создан`);
         
+        // ИСПРАВЛЕНО: возвращаем success: true, так как операция логически выполнена (игнорирование не ошибка)
         return {
-            success: false,
+            success: true,
             action: 'ignored',
             reason: 'already_exists',
             message: `${operation.id} уже существует, дубликат не создан`
@@ -565,27 +568,8 @@ class OperationsService {
         
         if (typeof oldValue === 'number') {
             newValue = oldValue + operation.delta;
-            
-            // Применение ограничений по типу
-            switch (type) {
-                case GAME_ITEM_TYPES.STAT:
-                    newValue = Math.max(0, Math.min(100, newValue));
-                    break;
-                    
-                case GAME_ITEM_TYPES.RELATIONS:
-                    newValue = Math.max(-100, Math.min(100, newValue));
-                    break;
-                    
-                case GAME_ITEM_TYPES.PROGRESS:
-                    newValue = Math.max(0, Math.min(100, newValue));
-                    break;
-                    
-                case GAME_ITEM_TYPES.ORGANIZATION_RANK:
-                    // Нет ограничений, но логируем
-                    break;
-            }
         } else {
-            // Если значение не числовое, пытаемся преобразовать
+            // Пытаемся преобразовать в число
             const numericValue = parseFloat(oldValue);
             if (!isNaN(numericValue)) {
                 newValue = numericValue + operation.delta;
@@ -598,6 +582,25 @@ class OperationsService {
                     message: `${operation.id} имеет нечисловое значение: ${oldValue}`
                 };
             }
+        }
+        
+        // Применение ограничений по типу
+        switch (type) {
+            case GAME_ITEM_TYPES.STAT:
+                newValue = Math.max(0, Math.min(100, newValue));
+                break;
+                
+            case GAME_ITEM_TYPES.RELATIONS:
+                newValue = Math.max(-100, Math.min(100, newValue));
+                break;
+                
+            case GAME_ITEM_TYPES.PROGRESS:
+                newValue = Math.max(0, Math.min(100, newValue));
+                break;
+                
+            case GAME_ITEM_TYPES.ORGANIZATION_RANK:
+                // Нет ограничений, но логируем
+                break;
         }
         
         // Обновляем значение
@@ -787,8 +790,15 @@ class OperationsService {
             updatedItem.stack = (updatedItem.stack || 1) + 1;
             changes.stack = { old: oldStack, new: updatedItem.stack };
             
-            updatedItem.description = updatedItem.description ?
-                `${updatedItem.description} (x${updatedItem.stack})` : `(x${updatedItem.stack})`;
+            // Обновляем описание: удаляем старый счетчик и добавляем новый
+            // ИСПРАВЛЕНО: более надёжное обновление описания со счётчиком
+            if (updatedItem.description) {
+                // Убираем предыдущий счетчик в формате (xN) в конце строки
+                updatedItem.description = updatedItem.description.replace(/\s*\(x\d+\)$/, '');
+                updatedItem.description = `${updatedItem.description} (x${updatedItem.stack})`;
+            } else {
+                updatedItem.description = `(x${updatedItem.stack})`;
+            }
         }
         
         targetState[index] = updatedItem;
@@ -817,29 +827,30 @@ class OperationsService {
             delete updatedItem.stack;
             
             // Убираем "(xN)" из description
-            if (updatedItem.description && updatedItem.description.includes('(x')) {
-                updatedItem.description = updatedItem.description.replace(/ \(x\d+\)$/, '');
+            if (updatedItem.description) {
+                updatedItem.description = updatedItem.description.replace(/\s*\(x\d+\)$/, '');
             }
         } else {
             // Обновляем счетчик в description
-            if (updatedItem.description && updatedItem.description.includes('(x')) {
-                updatedItem.description = updatedItem.description.replace(/\(x\d+\)$/, `(x${updatedItem.stack})`);
+            if (updatedItem.description) {
+                // Убираем старый счетчик и добавляем новый
+                updatedItem.description = updatedItem.description.replace(/\s*\(x\d+\)$/, '');
+                updatedItem.description = `${updatedItem.description} (x${updatedItem.stack})`;
             } else {
-                updatedItem.description = updatedItem.description ?
-                    `${updatedItem.description} (x${updatedItem.stack})` : `(x${updatedItem.stack})`;
+                updatedItem.description = `(x${updatedItem.stack})`;
             }
         }
         
         targetState[index] = updatedItem;
         
         if (updatedItem.stack <= 0) {
-            targetState[index] = null;
+            // Если стек стал 0 или меньше, удаляем элемент полностью
+            targetState.splice(index, 1);
             log.debug(LOG_CATEGORIES.OPERATIONS, `🧹 Дестекинг ${operation.id}: удалён стек по достижении 0`);
             return {
                 success: true,
-                action: 'destacked',
-                stack: null,
-                message: `${operation.id} удалён стек по достижении 0`
+                action: 'destacked_removed',
+                message: `${operation.id} удалён (стек обнулён)`
             };
         } else {
             log.debug(LOG_CATEGORIES.OPERATIONS, `📉 Дестекинг ${operation.id}: стек уменьшен до ${updatedItem.stack}`);
@@ -847,7 +858,7 @@ class OperationsService {
                 success: true,
                 action: 'destacked',
                 stack: updatedItem.stack,
-                message: `${operation.id} уменьшен стек до ${updatedItem.stack || 1}`
+                message: `${operation.id} уменьшен стек до ${updatedItem.stack}`
             };
         }
     }
@@ -1028,7 +1039,8 @@ class OperationsService {
                         if (item.stack && item.stack > 1) {
                             const oldStack = item.stack;
                             item.stack -= 1;
-                            item.duration = item.originalDuration || 1; // Восстанавливаем длительность
+                            // Восстанавливаем длительность из originalDuration, если есть, иначе ставим 1
+                            item.duration = item.originalDuration || 1; 
                             updated++;
                             
                             details.push({
@@ -1321,43 +1333,45 @@ class OperationsService {
     // НОВЫЕ МЕТОДЫ ДЛЯ РАСЧЕТА РЕЗУЛЬТАТОВ ДЕЙСТВИЙ
     // ====================================================================
 
-    /**
-     * Проверяет требования для действия на основе состояния героя
-     * @param {Array} requirements - Массив идентификаторов требований
-     * @param {Array} heroState - Текущее состояние героя
-     * @returns {Object} - Результат проверки {success: boolean, missing: Array, stats: Array}
-     */
-    checkRequirements(requirements, heroState) {
-        if (!Array.isArray(requirements) || requirements.length === 0) {
-            return { success: true, missing: [], stats: [] };
-        }
-        
-        const missing = [];
-        const stats = [];
-        
-        requirements.forEach(reqId => {
-            const item = heroState.find(item => item.id === reqId);
-            if (!item) {
-                missing.push(reqId);
-            }
-            
-            if (reqId.startsWith('stat:')) {
-                const statValue = item ? item.value : null;
-                if (statValue !== null) {
-                    stats.push({
-                        id: reqId,
-                        value: statValue
-                    });
-                }
-            }
-        });
-        
+/**
+ * Проверяет требования для действия на основе состояния героя (фактически - игнорируется сейчас, задел на будущее)
+ * @param {Array} requirements - Массив идентификаторов требований
+ * @param {Array} heroState - Текущее состояние героя
+ * @returns {Object} - Результат проверки {success: boolean, missing: Array, stats: Array, requirementsList: Array}
+ */
+checkRequirements(requirements, heroState) {
+    if (!Array.isArray(requirements) || requirements.length === 0) {
         return {
-            success: missing.length === 0,
-            missing: missing,
-            stats: stats
+            success: true,
+            missing: [],
+            stats: [],
+            requirementsList: []
         };
     }
+    
+    const requirementsList = requirements.map(reqId => {
+        const item = heroState.find(item => item.id === reqId);
+        const present = !!item;
+        let value = null;
+        if (present && reqId.startsWith('stat:')) {
+            value = item.value;
+        }
+        return { id: reqId, present, value };
+    });
+    
+    const stats = requirementsList
+        .filter(r => r.id.startsWith('stat:') && r.present)
+        .map(r => ({ id: r.id, value: r.value }));
+    
+    const missing = requirementsList.filter(r => !r.present).map(r => r.id);
+    
+    return {
+        success: true, // отсутствие требований больше не приводит к провалу
+        missing,
+        stats,
+        requirementsList
+    };
+}
 
     /**
      * Модифицирует операции для частичного успеха
@@ -1411,6 +1425,28 @@ class OperationsService {
             };
         }
         
+            // Критические броски
+    if (d10 === 10) {
+        return {
+            success: true,
+            partial: false,
+            reason: 'Критический успех! Бросок 10.',
+            d10: d10,
+            difficulty: choice.difficulty_level || 5,
+            operations: choice.success_rewards || []
+        };
+    }
+    if (d10 === 1) {
+        return {
+            success: false,
+            partial: false,
+            reason: 'Критический провал! Бросок 1.',
+            d10: d10,
+            difficulty: choice.difficulty_level || 5,
+            operations: choice.fail_penalties || []
+        };
+    }
+        
         const requirementsCheck = this.checkRequirements(choice.requirements || [], heroState);
         
         let success = false;
@@ -1429,6 +1465,7 @@ class OperationsService {
                 reason: reason,
                 d10: d10,
                 difficulty: difficulty,
+                      requirementsList: requirementsCheck.requirementsList, 
                 operations: success ?
                     (choice.success_rewards || []) : (choice.fail_penalties || [])
             };
