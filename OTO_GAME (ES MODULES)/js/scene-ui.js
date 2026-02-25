@@ -16,19 +16,14 @@ import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
 import { themeManagerPro } from './theme/theme-pro.js';
 
-// Попытка импортировать DOMPurify (если установлен как модуль) или использовать глобальную переменную
-let DOMPurify;
-try {
-    DOMPurify = (await import('dompurify')).default;
-} catch (e) {
-    // DOMPurify не доступен как модуль – возможно, он определён глобально
-    if (typeof window !== 'undefined' && window.DOMPurify) {
-        DOMPurify = window.DOMPurify;
-    } else {
-        console.warn('DOMPurify не найден. HTML-санитизация отключена.');
-        DOMPurify = { sanitize: (html) => html }; // заглушка
+// Используем глобальную переменную DOMPurify, подключённую через CDN
+// Если библиотека не загрузилась – возвращаем исходный html + warn
+const DOMPurify = window.DOMPurify || {
+    sanitize: (html) => {
+        console.warn('DOMPurify не загружен. Санитизация HTML отключена.');
+        return html;
     }
-}
+};
 
 // ====================================================================
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РЕНДЕРИНГА ПАМЯТИ ГМ
@@ -384,9 +379,7 @@ export function renderSceneText(container, sceneText) {
                         'thead', 'tbody', 'tr', 'th', 'td', 'caption'
                     ],
                     ALLOWED_ATTR: [
-                        'href', 'target', 'src', 'alt', 'title', 'class', 'id',
-                        'style', 'width', 'height', 'align', 'valign', 'border',
-                        'cellpadding', 'cellspacing'
+                        'href', 'target', 'src', 'alt', 'title', 'class', 'id'
                     ]
                 });
             } else {
