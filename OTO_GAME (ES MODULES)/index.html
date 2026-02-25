@@ -42,6 +42,8 @@
   <script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.10.0/dist/jsonrepair.min.js"></script>
   <!-- Yup для альтернативной валидации объектов -->
   <script src="https://cdn.jsdelivr.net/npm/yup@1.4.0/dist/yup.umd.min.js"></script>
+  <!-- DOMPurify для санитизации HTML -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.7/purify.min.js"></script>
 </head>
 
 <body>
@@ -365,11 +367,10 @@
   <script type="module" src="js/APP.js"></script>
   <!-- Команды для дебага автоматически станут доступны для вызова из консоли -->
   <script type="module">
-    import { DebugState } from './js/debug-state.js';
+    import { DebugUI } from './js/debug-state.js';
   </script>
   
 <!-- Глаз ожидания (появляется вместе с мыслями героя) -->
 <img src="./assets/images/eye.webp" id="waitingEye" class="waiting-eye" alt="глаз" style="display: none;">
 </body>
-
 </html>
