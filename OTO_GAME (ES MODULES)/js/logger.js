@@ -111,7 +111,7 @@ class GameLogger {
      */
     getLogLevelFromStorage() {
         const savedLevel = localStorage.getItem('oto_log_level');
-        return savedLevel !== null ? parseInt(savedLevel) : LOG_LEVELS.WARN;
+        return savedLevel !== null ? parseInt(savedLevel) : LOG_LEVELS.DEBUG;
     }
     
     /**

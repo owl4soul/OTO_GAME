@@ -17,7 +17,7 @@ import { Utils } from './2-utils.js';
 function generateDebugText() {
     const state = State.getState();
     const lines = [];
-
+    
     lines.push('='.repeat(60));
     lines.push('📱 ПОЛНОЕ СОСТОЯНИЕ ИГРЫ (ФОРМАТ 4.1)');
     lines.push('='.repeat(60));
@@ -28,7 +28,7 @@ function generateDebugText() {
     lines.push(`🧠 Мыслей в очереди: ${state.thoughtsOfHero.length}`);
     lines.push(`📜 История: ${state.gameState.history.length} записей`);
     lines.push('');
-
+    
     // Герой: группировка по типам
     const heroGroups = {};
     state.heroState.forEach(item => {
@@ -36,79 +36,164 @@ function generateDebugText() {
         if (!heroGroups[type]) heroGroups[type] = [];
         heroGroups[type].push(item);
     });
-
+    
     lines.push('🦸 ГЕРОЙ (game_item):');
     Object.keys(heroGroups).sort().forEach(type => {
         const items = heroGroups[type];
         lines.push(`  📁 ${type.toUpperCase()} (${items.length}):`);
         items.forEach(item => {
-            const valueStr = typeof item.value === 'object' ? JSON.stringify(item.value) : item.value;
+            const valueStr = typeof item.value === 'object' ?
+                JSON.stringify(item.value, null, 2).replace(/\n/g, '\n        ') :
+                item.value;
             lines.push(`    • ${item.id}: ${valueStr}`);
             // дополнительные поля, кроме id и value
             const extra = Object.keys(item).filter(k => !['id', 'value'].includes(k));
             if (extra.length) {
                 extra.forEach(k => {
-                    const v = typeof item[k] === 'object' ? JSON.stringify(item[k]) : item[k];
+                    const v = typeof item[k] === 'object' ?
+                        JSON.stringify(item[k], null, 2).replace(/\n/g, '\n        ') :
+                        item[k];
                     lines.push(`        ${k}: ${v}`);
                 });
             }
         });
     });
-
+    
     // Текущая сцена
     lines.push('');
     lines.push('🎭 ТЕКУЩАЯ СЦЕНА:');
     const scene = state.gameState.currentScene;
     if (scene) {
         lines.push(`  scene: ${scene.scene ? scene.scene.substring(0, 200) + '…' : 'нет'}`);
-        lines.push(`  choices: ${scene.choices?.length || 0}`);
-        lines.push(`  events: ${scene.events?.length || 0}`);
+        
+        // choices (с проверкой)
+        if (scene.choices) {
+            lines.push(`  choices: ${JSON.stringify(scene.choices, null, 2).replace(/\n/g, '\n  ')}`);
+        } else {
+            lines.push(`  choices: нет`);
+        }
+        
+        // events (с проверкой)
+        if (scene.events) {
+            lines.push(`  events: ${JSON.stringify(scene.events, null, 2).replace(/\n/g, '\n  ')}`);
+        } else {
+            lines.push(`  events: нет`);
+        }
+        
         lines.push(`  typology: ${scene.typology || 'нет'}`);
         lines.push(`  reflection: ${scene.reflection || 'нет'}`);
         lines.push(`  design_notes: ${scene.design_notes || 'нет'}`);
+        
         if (scene.aiMemory && Object.keys(scene.aiMemory).length) {
-            lines.push(`  aiMemory: ${JSON.stringify(scene.aiMemory).substring(0, 200)}…`);
+            lines.push(`  aiMemory: ${JSON.stringify(scene.aiMemory, null, 2).replace(/\n/g, '\n  ')}`);
+        } else {
+            lines.push(`  aiMemory: нет`);
         }
     } else {
         lines.push('  нет');
     }
-
-    // gameState дополнительные поля
+    
+    // gameState: полный вывод организаций и памяти
     lines.push('');
     lines.push('📁 GAME STATE:');
     lines.push(`  summary: ${state.gameState.summary || 'нет'}`);
-    lines.push(`  organizationsHierarchy: ${Object.keys(state.gameState.organizationsHierarchy || {}).length} организаций`);
+    
+    lines.push(`  organizationsHierarchy:`);
+    const orgs = state.gameState.organizationsHierarchy || {};
+    if (Object.keys(orgs).length === 0) {
+        lines.push(`    нет`);
+    } else {
+        Object.entries(orgs).forEach(([orgId, hierarchy]) => {
+            lines.push(`    ${orgId}:`);
+            if (hierarchy && hierarchy.description && Array.isArray(hierarchy.description)) {
+                hierarchy.description.forEach(rank => {
+                    lines.push(`      - lvl ${rank.lvl}: ${rank.rank} (порог: ${rank.threshold})`);
+                });
+            } else {
+                lines.push(`      ${JSON.stringify(hierarchy)}`);
+            }
+        });
+    }
+    
     lines.push(`  gameUserPrompt: ${state.gameState.gameUserPrompt || 'нет'}`);
     lines.push(`  gameScript: ${state.gameState.gameScript ? 'присутствует' : 'нет'}`);
-    lines.push(`  initLastData: ${Object.keys(state.gameState.initLastData || {}).length} полей`);
-
+    
+    if (state.gameState.initLastData) {
+        lines.push(`  initLastData: ${JSON.stringify(state.gameState.initLastData, null, 2).replace(/\n/g, '\n  ')}`);
+    } else {
+        lines.push(`  initLastData: нет`);
+    }
+    
+    if (state.gameState.aiMemory) {
+        lines.push(`  aiMemory: ${JSON.stringify(state.gameState.aiMemory, null, 2).replace(/\n/g, '\n  ')}`);
+    } else {
+        lines.push(`  aiMemory: нет`);
+    }
+    
     // Настройки
     lines.push('');
     lines.push('⚙️ НАСТРОЙКИ:');
     lines.push(`  apiProvider: ${state.settings.apiProvider}`);
     lines.push(`  model: ${state.settings.model}`);
     lines.push(`  scale: ${state.settings.scale}`);
-
-    // Последние мысли
-    if (state.thoughtsOfHero.length) {
+    
+    // Все мысли героя (полностью)
+    if (state.thoughtsOfHero && state.thoughtsOfHero.length) {
         lines.push('');
-        lines.push('💭 ПОСЛЕДНИЕ МЫСЛИ:');
-        state.thoughtsOfHero.slice(-5).forEach((t, i) => {
+        lines.push('💭 ВСЕ МЫСЛИ ГЕРОЯ:');
+        state.thoughtsOfHero.forEach((t, i) => {
             lines.push(`  [${i}] ${t}`);
         });
     }
-
-    // Последние изменения хода
+    
+    // Полные последние изменения хода
     if (state.lastTurnUpdates) {
         lines.push('');
         lines.push('🔄 ПОСЛЕДНИЕ ИЗМЕНЕНИЯ (HTML):');
-        lines.push(state.lastTurnUpdates.replace(/<[^>]+>/g, ' ').substring(0, 500) + '…');
+        lines.push(state.lastTurnUpdates);
     }
-
+    
+    // ===== НОВАЯ СЕКЦИЯ: metaGameState =====
+    lines.push('');
+    lines.push('📦 META GAME STATE:');
+    const meta = state.metaGameState || {};
+    lines.push(`  metaContext: ${meta.metaContext || '""'}`);
+    
+    // unknownFields
+    lines.push(`  unknownFields (${meta.unknownFields?.length || 0}):`);
+    if (meta.unknownFields && meta.unknownFields.length) {
+        meta.unknownFields.forEach((field, idx) => {
+            const valStr = field.value !== undefined ? JSON.stringify(field.value) : 'undefined';
+            lines.push(`    [${idx}] key: ${field.key}, value: ${valStr}`);
+        });
+    } else {
+        lines.push(`    нет`);
+    }
+    
+    // unknownArrays
+    lines.push(`  unknownArrays (${meta.unknownArrays?.length || 0}):`);
+    if (meta.unknownArrays && meta.unknownArrays.length) {
+        meta.unknownArrays.forEach((arr, idx) => {
+            lines.push(`    [${idx}] ${JSON.stringify(arr)}`);
+        });
+    } else {
+        lines.push(`    нет`);
+    }
+    
+    // unknownObjects
+    lines.push(`  unknownObjects (${meta.unknownObjects?.length || 0}):`);
+    if (meta.unknownObjects && meta.unknownObjects.length) {
+        meta.unknownObjects.forEach((obj, idx) => {
+            lines.push(`    [${idx}] ${JSON.stringify(obj)}`);
+        });
+    } else {
+        lines.push(`    нет`);
+    }
+    
     lines.push('');
     lines.push('='.repeat(60));
     lines.push('✅ КОНЕЦ ДАМПА');
-
+    
     return lines.join('\n');
 }
 
