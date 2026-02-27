@@ -104,9 +104,9 @@ function saveFullServerResponse(entry, rawResponse) {
     if (rawResponse === undefined || rawResponse === null) return entry;
     
     try {
-        entry.rawResponse = typeof rawResponse === 'string' 
-            ? rawResponse 
-            : JSON.stringify(rawResponse);
+        entry.rawResponse = typeof rawResponse === 'string' ?
+            rawResponse :
+            JSON.stringify(rawResponse);
         
         entry.fullResponse = formatServerResponse(rawResponse);
         entry.responseSize = entry.rawResponse.length;
@@ -139,9 +139,9 @@ function logToConsole(prefix, response) {
             console.log(formatServerResponse(response));
         } catch (formatError) {
             console.warn('⚠️ Не удалось отформатировать ответ, вывод в сыром виде');
-            console.log(typeof response === 'string' 
-                ? Utils.decodeUnicodeEscapes(response) 
-                : response);
+            console.log(typeof response === 'string' ?
+                Utils.decodeUnicodeEscapes(response) :
+                response);
         }
         if (typeof response === 'string') {
             console.log(`📏 Длина ответа: ${response.length} символов`);
@@ -226,7 +226,7 @@ function updateEntryError(entry, error, rawResponse = null) {
     const errorDetails = Utils.formatErrorDetails(error);
     const hasServerResponse = rawResponse !== undefined && rawResponse !== null;
     
-    console.log(`[Audit updateEntryError] rawResponse:`, 
+    console.log(`[Audit updateEntryError] rawResponse:`,
         rawResponse ? rawResponse : 'null');
     
     if (hasServerResponse) {
@@ -273,12 +273,12 @@ function updateLogCount() {
  */
 function createAuditEntryHTML(entry) {
     if (!entry) return '';
-
+    
     let statusColor = '#888';
     let borderColor = '#444';
     let bgColor = 'rgba(0,0,0,0.1)';
     let responseColor = '#4cd137';
-
+    
     if (entry.status === 'success') {
         statusColor = '#4cd137';
         borderColor = '#2d8b57';
@@ -295,7 +295,7 @@ function createAuditEntryHTML(entry) {
         bgColor = 'rgba(251, 197, 49, 0.05)';
         responseColor = '#fbc531';
     }
-
+    
     let headerText = `
         <span style="color:${statusColor}; font-weight:bold;">${entry.timestamp || 'Нет времени'}</span>: 
         [${entry.status ? entry.status.toUpperCase() : 'UNKNOWN'}] - 
@@ -304,7 +304,7 @@ function createAuditEntryHTML(entry) {
     if (entry.d10 !== undefined && entry.d10 !== null) {
         headerText += ` <span style="color:#9c88ff;">(d10=${entry.d10})</span>`;
     }
-
+    
     let requestHtml = '';
     if (entry.requestDebug && entry.requestDebug.body) {
         const displayRequest = formatJsonForDisplay(entry.requestDebug.body);
@@ -324,18 +324,18 @@ ${Utils.escapeHtml(displayRequest)}
             </pre>
         </details>`;
     }
-
+    
     let responseHtml = '';
     if (entry.rawResponse) {
-        const rawPretty = typeof entry.rawResponse === 'string'
-            ? entry.rawResponse
-            : JSON.stringify(entry.rawResponse, null, 2);
+        const rawPretty = typeof entry.rawResponse === 'string' ?
+            entry.rawResponse :
+            JSON.stringify(entry.rawResponse, null, 2);
         const sizeInfo = entry.responseSizeKB ?
             ` (${entry.responseSizeKB})` :
             ` (${rawPretty.length} символов)`;
-
+        
         const hasFullResponse = !!(entry.fullResponse);
-
+        
         if (hasFullResponse) {
             const displayFormatted = formatJsonForDisplay(entry.fullResponse);
             responseHtml += `
@@ -354,7 +354,7 @@ ${Utils.escapeHtml(displayFormatted)}
                 </pre>
             </details>`;
         }
-
+        
         const rawSummaryColor = hasFullResponse ? '#aaa' : '#e74c3c';
         responseHtml += `
         <details style="margin-top: 8px;">
@@ -376,7 +376,7 @@ ${Utils.escapeHtml(entry.rawResponse)}
                 : '<div style="margin-top: 4px; color: #e74c3c; font-size:0.7rem;">✗ Ответ НЕ является валидным JSON</div>'}
         </details>`;
     }
-
+    
     let errorHtml = '';
     if (entry.rawError) {
         const displayError = formatJsonForDisplay(entry.rawError);
@@ -396,7 +396,7 @@ ${Utils.escapeHtml(displayError)}
             </pre>
         </details>`;
     }
-
+    
     const actionButtons = `
     <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
         <button onclick="exportSingleAuditEntry('${entry.id}')" 
@@ -408,7 +408,7 @@ ${Utils.escapeHtml(displayError)}
             <i class="fas fa-copy"></i> Копировать
         </button>
     </div>`;
-
+    
     return `
     <div style="padding:12px; border-bottom:1px solid #333; border-left: 4px solid ${borderColor}; margin-bottom: 10px; background: ${bgColor}; border-radius: 4px;">
         <div style="font-size: 0.85rem; margin-bottom: 10px; line-height: 1.4;">${headerText}</div>
@@ -427,20 +427,20 @@ ${Utils.escapeHtml(displayError)}
 function appendAuditEntry(entry) {
     const list = document.getElementById('auditList');
     if (!list) return;
-
+    
     const entryHtml = createAuditEntryHTML(entry);
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = entryHtml.trim();
     const newEntryElement = tempDiv.firstChild;
-
+    
     if (list.firstChild) {
         list.insertBefore(newEntryElement, list.firstChild);
     } else {
         list.appendChild(newEntryElement);
     }
-
+    
     updateLogCount();
-
+    
     // Ограничиваем отображение до 20 последних записей
     while (list.children.length > 20) {
         list.removeChild(list.lastChild);
@@ -453,14 +453,14 @@ function appendAuditEntry(entry) {
 function renderAuditList() {
     const state = State.getState();
     const list = document.getElementById('auditList');
-
+    
     if (!list) {
         console.error('❌ renderAuditList: Элемент списка аудита не найден');
         return;
     }
-
+    
     const displayLog = state.auditLog.slice(0, 20);
-
+    
     if (displayLog.length === 0) {
         list.innerHTML = `
             <div style="color: #888; text-align: center; padding: 30px; font-style: italic;">
@@ -471,7 +471,7 @@ function renderAuditList() {
         updateLogCount();
         return;
     }
-
+    
     list.innerHTML = displayLog.map(entry => createAuditEntryHTML(entry)).join('');
     updateLogCount();
 }
@@ -488,15 +488,15 @@ function renderAuditList() {
 function copyAuditContent(entryId, type) {
     const state = State.getState();
     const entry = state.auditLog.find(e => e.id === Number(entryId));
-
+    
     if (!entry) {
         Utils.showToast('Запись не найдена', 'error', 3000);
         return;
     }
-
+    
     let textToCopy = '';
     let successMsg = '';
-
+    
     switch (type) {
         case 'request':
             if (entry.requestDebug?.body) {
@@ -518,9 +518,9 @@ function copyAuditContent(entryId, type) {
             break;
         case 'raw':
             if (entry.rawResponse) {
-                textToCopy = typeof entry.rawResponse === 'string'
-                    ? entry.rawResponse
-                    : JSON.stringify(entry.rawResponse, null, 2);
+                textToCopy = typeof entry.rawResponse === 'string' ?
+                    entry.rawResponse :
+                    JSON.stringify(entry.rawResponse, null, 2);
                 successMsg = 'Сырой ответ скопирован';
             } else {
                 Utils.showToast('Нет сырого ответа', 'error', 3000);
@@ -539,7 +539,7 @@ function copyAuditContent(entryId, type) {
         default:
             return;
     }
-
+    
     // Копирование в буфер обмена
     navigator.clipboard.writeText(textToCopy)
         .then(() => Utils.showToast(`${successMsg}`, 'success', 3000))
@@ -567,12 +567,12 @@ function copyAuditContent(entryId, type) {
 function copyAuditEntry(entryId) {
     const state = State.getState();
     const entry = state.auditLog.find(e => e.id === Number(entryId));
-
+    
     if (!entry) {
         Utils.showToast('Запись не найдена', 'error', 3000);
         return;
     }
-
+    
     let textToCopy = `=== АУДИТ ЗАПИСЬ ===\n\n`;
     textToCopy += `ID: ${entry.id}\n`;
     textToCopy += `Запрос: ${entry.request || 'Нет'}\n`;
@@ -582,14 +582,14 @@ function copyAuditEntry(entryId) {
     textToCopy += `Провайдер: ${entry.provider || 'Нет'}\n`;
     if (entry.d10 !== undefined && entry.d10 !== null) textToCopy += `d10: ${entry.d10}\n`;
     textToCopy += `Токены: ${entry.tokens || 'Нет'}\n`;
-
+    
     textToCopy += `\n=== REQUEST PAYLOAD ===\n`;
     if (entry.requestDebug?.body) {
         textToCopy += formatJsonForCopy(entry.requestDebug.body) + '\n';
     } else {
         textToCopy += 'Нет данных\n';
     }
-
+    
     textToCopy += `\n=== RESPONSE ===\n`;
     if (entry.fullResponse) {
         textToCopy += formatJsonForCopy(entry.fullResponse) + '\n';
@@ -598,13 +598,13 @@ function copyAuditEntry(entryId) {
     } else {
         textToCopy += 'Нет данных\n';
     }
-
+    
     if (entry.rawError) {
         textToCopy += `\n=== ERROR ===\n${formatJsonForCopy(entry.rawError)}\n`;
     }
-
+    
     textToCopy += `\n=== КОНЕЦ ЗАПИСИ ===`;
-
+    
     navigator.clipboard.writeText(textToCopy)
         .then(() => Utils.showToast('Запись скопирована', 'success', 3000))
         .catch(err => {
@@ -630,12 +630,12 @@ function copyAuditEntry(entryId) {
 async function exportSingleAuditEntry(entryId) {
     const state = State.getState();
     const entry = state.auditLog.find(e => e.id === Number(entryId));
-
+    
     if (!entry) {
         Utils.showToast('Запись не найдена', 'error', 3000);
         return;
     }
-
+    
     // Формируем содержимое (аналогично copyAuditEntry, но с заголовком)
     let txtLog = `=== OTO Audit Log Entry ===\n`;
     txtLog += `ID: ${entry.id}\n`;
@@ -645,13 +645,13 @@ async function exportSingleAuditEntry(entryId) {
     txtLog += `Провайдер: ${entry.provider || 'не указан'}\n`;
     txtLog += `Модель: ${entry.model || 'не указана'}\n`;
     if (entry.d10) txtLog += `d10: ${entry.d10}\n`;
-
+    
     txtLog += `\n=== REQUEST ===\n`;
     txtLog += `Заголовок: ${entry.request}\n`;
     if (entry.requestDebug && entry.requestDebug.body) {
         txtLog += `\nТело запроса (RAW):\n${entry.requestDebug.body}\n`;
     }
-
+    
     txtLog += `\n=== RESPONSE ===\n`;
     if (entry.rawResponse) {
         txtLog += `Сырой ответ:\n${entry.rawResponse}\n\n`;
@@ -662,12 +662,12 @@ async function exportSingleAuditEntry(entryId) {
     if (entry.rawError) {
         txtLog += `\n=== ERROR ===\n${entry.rawError}\n`;
     }
-
+    
     txtLog += '\n' + '='.repeat(50) + '\n';
     txtLog += `Экспортировано: ${Utils.formatMoscowTime(new Date())}\n`;
-
+    
     const fileName = `oto-audit-entry-${entry.id}-${entry.timestamp.replace(/[:.]/g, '-')}.txt`;
-
+    
     try {
         const result = await Utils.saveFileWithFolderPicker(txtLog, fileName, 'text/plain;charset=utf-8');
         if (result.success) {
@@ -690,13 +690,13 @@ async function exportFullAuditLog() {
         Utils.showToast('Аудит-лог пуст', 'warning', 3000);
         return;
     }
-
+    
     let txtLog = `=== OTO Audit Log ===\n`;
     txtLog += `Игра: ${state.gameId}\n`;
     txtLog += `Экспорт: ${Utils.formatMoscowTime(new Date())}\n`;
     txtLog += `Всего записей: ${state.auditLog.length}\n`;
     txtLog += '='.repeat(50) + '\n\n';
-
+    
     state.auditLog.forEach((entry, idx) => {
         txtLog += `=== Запись ${idx + 1} ===\n`;
         txtLog += `ID: ${entry.id}\n`;
@@ -705,13 +705,13 @@ async function exportFullAuditLog() {
         txtLog += `Провайдер: ${entry.provider || 'не указан'}\n`;
         txtLog += `Модель: ${entry.model || 'не указана'}\n`;
         if (entry.d10) txtLog += `d10: ${entry.d10}\n`;
-
+        
         txtLog += `\n=== REQUEST ===\n`;
         txtLog += `Заголовок: ${entry.request}\n`;
         if (entry.requestDebug && entry.requestDebug.body) {
             txtLog += `\nТело запроса (RAW):\n${entry.requestDebug.body}\n`;
         }
-
+        
         txtLog += `\n=== RESPONSE ===\n`;
         if (entry.rawResponse) {
             txtLog += `Сырой ответ:\n${entry.rawResponse}\n\n`;
@@ -724,9 +724,9 @@ async function exportFullAuditLog() {
         }
         txtLog += '\n' + '='.repeat(50) + '\n\n';
     });
-
+    
     const fileName = `oto-audit-full-${state.gameId}-${new Date().toISOString().split('T')[0]}.txt`;
-
+    
     try {
         const result = await Utils.saveFileWithFolderPicker(txtLog, fileName, 'text/plain;charset=utf-8');
         if (result.success) {
@@ -749,13 +749,13 @@ async function copyFullAuditLog() {
         Utils.showToast('Аудит-лог пуст', 'warning', 3000);
         return;
     }
-
+    
     let txtLog = `=== OTO Audit Log ===\n`;
     txtLog += `Игра: ${state.gameId}\n`;
     txtLog += `Экспорт: ${Utils.formatMoscowTime(new Date())}\n`;
     txtLog += `Всего записей: ${state.auditLog.length}\n`;
     txtLog += '='.repeat(50) + '\n\n';
-
+    
     state.auditLog.forEach((entry, idx) => {
         txtLog += `=== Запись ${idx + 1} ===\n`;
         txtLog += `ID: ${entry.id}\n`;
@@ -764,13 +764,13 @@ async function copyFullAuditLog() {
         txtLog += `Провайдер: ${entry.provider || 'не указан'}\n`;
         txtLog += `Модель: ${entry.model || 'не указана'}\n`;
         if (entry.d10) txtLog += `d10: ${entry.d10}\n`;
-
+        
         txtLog += `\n=== REQUEST ===\n`;
         txtLog += `Заголовок: ${entry.request}\n`;
         if (entry.requestDebug && entry.requestDebug.body) {
             txtLog += `\nТело запроса (RAW):\n${entry.requestDebug.body}\n`;
         }
-
+        
         txtLog += `\n=== RESPONSE ===\n`;
         if (entry.rawResponse) {
             txtLog += `Сырой ответ:\n${entry.rawResponse}\n\n`;
@@ -783,7 +783,7 @@ async function copyFullAuditLog() {
         }
         txtLog += '\n' + '='.repeat(50) + '\n\n';
     });
-
+    
     try {
         await navigator.clipboard.writeText(txtLog);
         Utils.showToast('Лог аудита скопирован в буфер обмена', 'success', 3000);
@@ -812,11 +812,11 @@ function clearAudit() {
         const state = State.getState();
         state.auditLog = [];
         State.setState({ auditLog: state.auditLog });
-
+        
         // Логируем сам факт очистки как системное событие
         const entry = createEntry('SYSTEM', { action: 'clear_logs' }, 'system', 'local');
         updateEntrySuccess(entry, 'Лог аудита был очищен пользователем');
-
+        
         if (document.getElementById('settingsModal')?.classList.contains('active')) {
             renderAuditList();
         }

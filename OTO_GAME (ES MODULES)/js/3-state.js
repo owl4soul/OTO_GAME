@@ -118,10 +118,10 @@ const DEFAULT_HERO_STATE = [
 
 // ===== НОВОЕ: дефолтное состояние для metaGameState =====
 const DEFAULT_META_GAME_STATE = {
-    metaContext: '',
-    unknownFields: [],      // { key, value } для примитивов
-    unknownArrays: [],      // любые массивы (кроме обработанных)
-    unknownObjects: []      // объекты без id/operation
+  metaContext: '',
+  unknownFields: [], // { key, value } для примитивов
+  unknownArrays: [], // любые массивы (кроме обработанных)
+  unknownObjects: [] // объекты без id/operation
 };
 
 export const DEFAULT_STATE = {
@@ -1087,7 +1087,7 @@ export const State = {
       log.error(LOG_CATEGORIES.ERROR_TRACKING, '⚠️ Cannot setState on undefined state');
       initializeState();
     }
-
+    
     state = { ...state, ...newState };
     
     // Сохраняем основное состояние (аудит уже не входит)

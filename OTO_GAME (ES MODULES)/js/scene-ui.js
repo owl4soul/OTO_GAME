@@ -39,10 +39,10 @@ function countKeysRecursive(obj, visited = new Set()) {
     if (obj === null || obj === undefined) return 0;
     if (visited.has(obj)) return 0;
     visited.add(obj);
-
+    
     // Примитивы – это одно значение
     if (typeof obj !== 'object') return 1;
-
+    
     if (Array.isArray(obj)) {
         let total = obj.length;
         for (let i = 0; i < obj.length; i++) {
@@ -182,17 +182,17 @@ function formatAiMemory(aiMemory) {
     if (aiMemory === null || aiMemory === undefined) {
         return '<div style="color: #888; font-style: italic; padding: 10px; text-align: center;">Нет данных в памяти ГМ</div>';
     }
-
+    
     const totalKeys = countKeysRecursive(aiMemory);
     const isComplex = totalKeys > 50;
-
+    
     const memoryInfo = `<div style="color: #aaa; font-size: 0.8em; margin-bottom: 10px; padding: 8px; background: rgba(251, 197, 49, 0.05); border-radius: 3px; border: 1px solid rgba(251, 197, 49, 0.1);">
         <i class="fas fa-info-circle"></i> Память ГМ содержит: <strong style="color: #fbc531;">${totalKeys}</strong> ключей/элементов
         ${isComplex ? '<span style="color: #ff9ff3; margin-left: 10px;"><i class="fas fa-exclamation-triangle"></i> Сложная структура</span>' : ''}
     </div>`;
-
+    
     const memoryContent = renderAiMemoryRecursive(aiMemory);
-
+    
     return memoryInfo + memoryContent;
 }
 

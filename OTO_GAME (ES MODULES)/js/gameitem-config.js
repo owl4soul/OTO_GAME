@@ -23,7 +23,7 @@ export const GAME_ITEM_UI_CONFIG = {
         LINE_HEIGHT: "1.3",
         LETTER_SPACING: "0.3px"
     },
-
+    
     // НАСТРОЙКИ АНИМАЦИЙ
     ANIMATIONS: {
         TOOLTIP_FADE_IN: "0.2s ease-out",
@@ -32,7 +32,7 @@ export const GAME_ITEM_UI_CONFIG = {
         FLY_UP: "1s ease-out",
         HOVER_TRANSITION: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
     },
-
+    
     // ОБЩИЕ ЦВЕТА
     COLORS: {
         BACKGROUNDS: {
@@ -49,7 +49,7 @@ export const GAME_ITEM_UI_CONFIG = {
             SUCCESS: "#4cd137"
         }
     },
-
+    
     // ОБЩИЕ ОТСТУПЫ ДЛЯ СЕКЦИЙ
     LAYOUT: {
         SECTION_MARGIN: "0 0 2px 0",
@@ -60,7 +60,7 @@ export const GAME_ITEM_UI_CONFIG = {
         BADGE_MARGIN: "0 0 2px 0", // только нижний отступ, чтобы не создавать горизонтальных смещений
         BADGE_PADDING: "2px 2px"
     },
-
+    
     // ОФОРМЛЕНИЕ ТЕКСТОВЫХ БЛОКОВ
     CONTENT: {
         PADDING: "2px",
@@ -70,7 +70,7 @@ export const GAME_ITEM_UI_CONFIG = {
         FONT_STYLE: "italic",
         LINE_HEIGHT: "1.05"
     },
-
+    
     // ОФОРМЛЕНИЕ ЗАГЛУШЕК (EMPTY STATES)
     EMPTY: {
         PADDING: "2px",
@@ -79,7 +79,7 @@ export const GAME_ITEM_UI_CONFIG = {
         ICON_SIZE: "1.1em",
         ICON_MARGIN_BOTTOM: "3px"
     },
-
+    
     // НАСТРОЙКИ БЕЙДЖЕЙ
     BADGES: {
         BORDER_RADIUS: "4px",
@@ -89,7 +89,7 @@ export const GAME_ITEM_UI_CONFIG = {
         HOVER_SHADOW: "0 2px 2px rgba(0,0,0,0.4)",
         // Внутренние отступы уже в LAYOUT.BADGE_PADDING
     },
-
+    
     // НАСТРОЙКИ ТУЛТИПОВ
     TOOLTIPS: {
         BACKGROUND: "linear-gradient(135deg, #1a0a0a 0%, #0d0505 100%)",
@@ -101,7 +101,7 @@ export const GAME_ITEM_UI_CONFIG = {
         FONT_SIZE: "0.8em",
         LINE_HEIGHT: "1.05"
     },
-
+    
     // НАСТРОЙКИ МОДАЛЬНЫХ ОКОН
     MODALS: {
         BACKGROUND: "rgba(0,0,0,0.97)",
@@ -113,7 +113,7 @@ export const GAME_ITEM_UI_CONFIG = {
         TITLE_SIZE: "0.9em",
         CLOSE_COLOR: "#d4af37"
     },
-
+    
     // ИНДИВИДУАЛЬНЫЕ НАСТРОЙКИ ТИПОВ (только уникальные данные)
     TYPES: {
         PERSONALITY: {

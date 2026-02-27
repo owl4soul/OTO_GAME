@@ -13,7 +13,7 @@ class ThemeManagerPro {
         
         this.initialize();
     }
-
+    
     initialize() {
         console.log('🎨 Инициализация Theme Manager Pro...');
         
@@ -37,19 +37,19 @@ class ThemeManagerPro {
         this.applyTheme(this.currentTheme);
         console.log('✅ Theme Manager Pro готов');
     }
-
+    
     startEditing() {
         this.isEditing = true;
         this.editingTheme = this._deepClone(this.currentTheme);
         console.log('✏️ Режим редактирования');
     }
-
+    
     endEditing() {
         this.isEditing = false;
         this.editingTheme = null;
         console.log('💾 Редактирование завершено');
     }
-
+    
     updateSetting(path, value, shouldLog = true) {
         if (!this.isEditing) return;
         
@@ -63,33 +63,33 @@ class ThemeManagerPro {
         this._generateAndApplyCSS(this.editingTheme);
         if (shouldLog) console.log(`🎨 Обновлено: ${path.join('.')} -> ${value}`);
     }
-
+    
     setEditingTheme(theme) {
         if (!this.isEditing) return;
         this.editingTheme = this._deepClone(theme);
         this._generateAndApplyCSS(this.editingTheme);
     }
-
+    
     saveChanges() {
         if (!this.isEditing) return;
         this.currentTheme = this._deepClone(this.editingTheme);
         this._saveTheme(this.currentTheme);
         this.endEditing();
     }
-
+    
     cancelChanges() {
         if (!this.isEditing) return;
         this.editingTheme = null;
         this._generateAndApplyCSS(this.currentTheme);
         this.endEditing();
     }
-
+    
     reset() {
         this.currentTheme = this._deepClone(DEFAULT_THEME_CONFIG);
         this.applyTheme(this.currentTheme);
         console.log('🔄 Сброс к Default Pro');
     }
-
+    
     loadPreset(key) {
         if (PRESET_THEMES[key]) {
             this.currentTheme = this._deepClone(PRESET_THEMES[key].config);
@@ -102,7 +102,7 @@ class ThemeManagerPro {
             console.log(`📦 Загружен пресет: ${key}`);
         }
     }
-
+    
     getPresets() {
         return Object.entries(PRESET_THEMES).map(([key, val]) => ({
             key,
@@ -111,11 +111,11 @@ class ThemeManagerPro {
             isCurrent: this.currentTheme.name === val.config.name
         }));
     }
-
+    
     exportTheme() {
         return JSON.stringify(this.currentTheme, null, 2);
     }
-
+    
     importTheme(json) {
         try {
             const theme = JSON.parse(json);
@@ -133,16 +133,16 @@ class ThemeManagerPro {
             return false;
         }
     }
-
+    
     getCurrentTheme() {
         return this.isEditing ? this.editingTheme : this.currentTheme;
     }
-
+    
     applyTheme(theme) {
         this._generateAndApplyCSS(theme);
         this._saveTheme(theme);
     }
-
+    
     _generateAndApplyCSS(theme) {
         const css = this._generateCSS(theme);
         this.styleElement.textContent = css;
@@ -153,7 +153,7 @@ class ThemeManagerPro {
             .replaceAll('#inventoryContainer', '#te-preview-container #inventoryContainer')
             .replaceAll('#turnUpdatesContainer', '#te-preview-container #turnUpdatesContainer')
             .replaceAll('#history', '#te-preview-container #history');
-            
+        
         this.styleElement.textContent += '\n\n/* === PREVIEW SANDBOX OVERRIDES === */\n' + previewCss;
         
         this.styleElement.textContent += `
@@ -169,7 +169,7 @@ class ThemeManagerPro {
             }
         `;
     }
-
+    
     _generateCSS(theme) {
         let css = '/* === THEME PRO GENERATED CSS === */\n\n';
         
@@ -192,7 +192,7 @@ class ThemeManagerPro {
             }
         });
         css += '\n';
-
+        
         const g = theme.global || {
             icons: { set: 'fa', emojiFilter: 'none' },
             layout: {
@@ -212,7 +212,7 @@ class ThemeManagerPro {
                 blockMargin: "15px"
             }
         };
-
+        
         const sb = g.layout.scrollbar || {};
         const width = sb.width || '4px';
         const height = sb.height || '4px';
@@ -223,7 +223,7 @@ class ThemeManagerPro {
         const thumbBorderRadius = sb.thumbBorderRadius || '4px';
         const thumbHoverBg = sb.thumbHoverBg || thumbBg;
         const thumbHoverBorder = sb.thumbHoverBorder || thumbBorder;
-
+        
         css += `/* === GLOBAL === */\n`;
         css += `
 ::selection {
@@ -257,7 +257,7 @@ body {
     scrollbar-width: thin !important;
 }
 \n`;
-
+        
         css += `/* === ICONS === */\n`;
         if (g.icons.set === 'emoji') {
             const filter = g.icons.emojiFilter || 'none';
@@ -277,7 +277,7 @@ body {
             });
         }
         css += '\n';
-
+        
         css += `/* === SCENE === */\n`;
         const s = theme.scene || DEFAULT_THEME_CONFIG.scene;
         
@@ -375,7 +375,7 @@ body {
     color: ${s.choices.btn.selectedColor} !important;
 }
 `;
-
+        
         if (s.designNotes) {
             css += `
 .design-notes-block {
@@ -401,7 +401,7 @@ body {
 }
 `;
         }
-
+        
         if (s.summary) {
             css += `
 .summary-block {
@@ -427,7 +427,7 @@ body {
 }
 `;
         }
-
+        
         if (s.reflection) {
             css += `
 .reflection-block {
@@ -454,7 +454,7 @@ body {
 }
 `;
         }
-
+        
         if (s.personality) {
             css += `
 .personality-block {
@@ -480,7 +480,7 @@ body {
 }
 `;
         }
-
+        
         if (s.typology) {
             css += `
 .typology-block {
@@ -506,7 +506,7 @@ body {
 }
 `;
         }
-
+        
         if (s.additionalField) {
             css += `
 .additional-field-block {
@@ -532,7 +532,7 @@ body {
 }
 `;
         }
-
+        
         css += `/* === GAME ITEMS === */\n`;
         const containerMap = {
             personality: 'personalityBlockContainer',
@@ -547,7 +547,7 @@ body {
             inventory: 'inventoryContainer',
             details: 'detailsContainer'
         };
-
+        
         const gameItems = theme.gameItems || DEFAULT_THEME_CONFIG.gameItems;
         Object.entries(gameItems).forEach(([type, config]) => {
             const id = containerMap[type];
@@ -588,7 +588,7 @@ body {
 `;
             }
         });
-
+        
         // ========== 6. TURN UPDATES (ПОЛНАЯ НАСТРОЙКА С РАЗДЕЛЕНИЕМ) ==========
         const tu = theme.turnUpdates || DEFAULT_THEME_CONFIG.turnUpdates;
         css += `\n/* === TURN UPDATES (action & event) === */\n`;
@@ -649,7 +649,7 @@ body {
     gap: 4px;
 }
 `;
-
+        
         // Стили для действий
         if (tu.action) {
             css += `
@@ -681,7 +681,7 @@ body {
 }
 `;
         }
-
+        
         // Стили для событий
         if (tu.event) {
             css += `
@@ -698,7 +698,7 @@ body {
 }
 `;
         }
-
+        
         // Стили для операций внутри сообщений
         css += `
 /* Операции */
@@ -748,19 +748,19 @@ body {
 .operation-modify.positive { color: #4cd137; font-weight: bold; }
 .operation-modify.negative { color: #e84118; font-weight: bold; }
 `;
-
+        
         // 7. История
         css += this._generateHistoryCSS(theme.history);
-
+        
         return css;
     }
-
+    
     _generateHistoryCSS(h) {
         const historyConfig = h || DEFAULT_THEME_CONFIG.history;
         if (!historyConfig) return '';
-
+        
         let css = '\n/* === HISTORY (CLASS-BASED) === */\n';
-
+        
         css += `
 #history {
     background: ${historyConfig.container?.background || '#050505'} !important;
@@ -770,7 +770,7 @@ body {
     overflow-x: ${historyConfig.container?.overflowX || 'hidden'} !important;
 }
 `;
-
+        
         const header = historyConfig.header || {};
         css += `
 .history-header {
@@ -789,7 +789,7 @@ body {
     color: ${header.color || '#dddddd'} !important;
 }
 `;
-
+        
         const headerButtons = historyConfig.headerButtons || {
             background: "rgba(76,209,55,0.1)",
             border: "1px solid #4cd137",
@@ -825,7 +825,7 @@ body {
     color: ${headerButtons.hover?.color || '#4cd137'} !important;
 }
 `;
-
+        
         const turnsContainer = historyConfig.turnsContainer || {
             padding: "2px 0",
             display: "flex",
@@ -840,7 +840,7 @@ body {
     gap: ${turnsContainer.gap} !important;
 }
 `;
-
+        
         const turn = historyConfig.turn || {
             background: "#0a0a0a",
             border: "0.5px solid rgba(255,255,255,0.05)",
@@ -868,7 +868,7 @@ body {
     border-left-color: var(--turn-accent-color, ${accentColors.neutral}) !important;
 }
 `;
-
+        
         const turnSummary = historyConfig.turnSummary || {
             padding: "2px 4px",
             cursor: "pointer",
@@ -930,7 +930,7 @@ body {
     width: 6px;
 }
 `;
-
+        
         const turnContent = historyConfig.turnContent || {
             padding: "3px",
             borderTop: "0.5px solid rgba(255,255,255,0.05)",
@@ -955,7 +955,7 @@ body {
     color: ${turnContent.color} !important;
 }
 `;
-
+        
         const contentBlock = historyConfig.contentBlock || {
             padding: "2px",
             marginBottom: "2px",
@@ -996,7 +996,7 @@ body {
     font-style: italic;
 }
 `;
-
+        
         const blocks = historyConfig.contentBlocks || DEFAULT_THEME_CONFIG.history.contentBlocks;
         css += `
 /* Заметки дизайнера */
@@ -1147,7 +1147,7 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
     color: ${blocks.changes?.contentColor || '#ccc'} !important;
 }
 `;
-
+        
         css += `
 :root {
     --history-accent-success: ${accentColors.success};
@@ -1156,7 +1156,7 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
     --history-accent-neutral: ${accentColors.neutral};
 }
 `;
-
+        
         const footerIndicator = historyConfig.footerIndicator || {
             background: "rgba(232,65,24,0.05)",
             borderLeft: "1px solid #e84118",
@@ -1179,7 +1179,7 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
     margin: ${footerIndicator.margin} !important;
 }
 `;
-
+        
         const emptyState = historyConfig.emptyState || {
             padding: "10px",
             textAlign: "center",
@@ -1204,7 +1204,7 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
     margin-bottom: 5px;
 }
 `;
-
+        
         css += `
 .text-paragraph {
     margin: 0;
@@ -1217,10 +1217,10 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
     margin-top: 2px;
 }
 `;
-
+        
         return css;
     }
-
+    
     _mergeMissingKeys(target, source) {
         if (!target || !source) return target;
         Object.keys(source).forEach(key => {
@@ -1234,17 +1234,17 @@ ${blocks.reflection?.italic ? '.history-block-reflection .history-block-content 
         });
         return target;
     }
-
+    
     _saveTheme(theme) {
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(theme));
     }
-
+    
     _loadTheme() {
         try {
             return JSON.parse(localStorage.getItem(this.STORAGE_KEY));
-        } catch(e) { return null; }
+        } catch (e) { return null; }
     }
-
+    
     _deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
     }

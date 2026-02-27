@@ -221,127 +221,127 @@ class GameLogger {
     }
     
     /**
- * Вывод в консоль с форматированием (исправлено)
- */
-printToConsole(entry) {
-    const time = new Date(entry.timestamp).toLocaleTimeString('ru-RU', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        fractionalSecondDigits: 3
-    });
-    
-    const icon = CATEGORY_ICONS[entry.category] || '📝';
-    const levelIcon = entry.level === LOG_LEVELS.ERROR ? '❌' :
-        entry.level === LOG_LEVELS.WARN ? '⚠️' :
-        entry.level === LOG_LEVELS.INFO ? 'ℹ️' : '🔍';
-    
-    const turnInfo = entry.turnNumber ? `[Ход ${entry.turnNumber}] ` : '';
-    
-    // Заголовок группы – всё корректно, оставляем как есть
-    console.groupCollapsed(
-        `%c${icon} ${turnInfo}${entry.category}%c %c${entry.levelName}%c ${entry.message}`,
-        CONSOLE_STYLES[entry.category],
-        CONSOLE_STYLES.reset,
-        entry.level === LOG_LEVELS.ERROR ? CONSOLE_STYLES.ERROR :
-        entry.level === LOG_LEVELS.WARN ? CONSOLE_STYLES.WARN :
-        entry.level === LOG_LEVELS.INFO ? CONSOLE_STYLES.INFO : CONSOLE_STYLES.DEBUG,
-        CONSOLE_STYLES.reset
-    );
-    
-    // Детализация – стили уже правильно расставлены
-    console.log(`%c⏰ Время: ${time}`, 'color: #636e72;');
-    console.log(`%c🎯 Уровень: ${entry.levelName} ${levelIcon}`, 'color: #dfe6e9;');
-    
-    if (entry.turnNumber) {
-        console.log(`%c🔄 Ход: ${entry.turnNumber}`, 'color: #74b9ff;');
-    }
-    
-    // Вывод данных – убран лишний заголовок, сразу вызывается printData
-    if (entry.data) {
-        this.printData(entry.data);
-    }
-    
-    if (entry.stackTrace) {
-        console.log('%c🔍 Стек вызовов:', 'color: #fd79a8; font-weight: bold;');
-        console.log(entry.stackTrace);
-    }
-    
-    console.groupEnd();
-}
-
-/**
- * Форматированный вывод данных (полностью переработан)
- * Теперь все строки используют %c, нет сырой конкатенации, цвета применяются единообразно.
- */
-printData(data, indent = 0) {
-    const indentStr = '  '.repeat(indent); // два пробела на уровень
-    
-    // Примитивы
-    if (data === null || data === undefined || typeof data !== 'object') {
-        const style = this.getStyleForValue(data);
-        console.log(`%c${indentStr}${this.formatValue(data)}`, style);
-        return;
-    }
-    
-    // Массив
-    if (Array.isArray(data)) {
-        console.log(`%c${indentStr}📋 Массив [${data.length} элементов]:`, 'color: #74b9ff;');
-        data.forEach((item, index) => {
-            const valueStr = this.formatValue(item);
-            const style = this.getStyleForValue(item);
-            // индекс — зелёный, значение — по типу
-            console.log(`%c${indentStr}  ${index}:%c ${valueStr}`, 'color: #00b894;', style);
+     * Вывод в консоль с форматированием (исправлено)
+     */
+    printToConsole(entry) {
+        const time = new Date(entry.timestamp).toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            fractionalSecondDigits: 3
         });
-        return;
+        
+        const icon = CATEGORY_ICONS[entry.category] || '📝';
+        const levelIcon = entry.level === LOG_LEVELS.ERROR ? '❌' :
+            entry.level === LOG_LEVELS.WARN ? '⚠️' :
+            entry.level === LOG_LEVELS.INFO ? 'ℹ️' : '🔍';
+        
+        const turnInfo = entry.turnNumber ? `[Ход ${entry.turnNumber}] ` : '';
+        
+        // Заголовок группы – всё корректно, оставляем как есть
+        console.groupCollapsed(
+            `%c${icon} ${turnInfo}${entry.category}%c %c${entry.levelName}%c ${entry.message}`,
+            CONSOLE_STYLES[entry.category],
+            CONSOLE_STYLES.reset,
+            entry.level === LOG_LEVELS.ERROR ? CONSOLE_STYLES.ERROR :
+            entry.level === LOG_LEVELS.WARN ? CONSOLE_STYLES.WARN :
+            entry.level === LOG_LEVELS.INFO ? CONSOLE_STYLES.INFO : CONSOLE_STYLES.DEBUG,
+            CONSOLE_STYLES.reset
+        );
+        
+        // Детализация – стили уже правильно расставлены
+        console.log(`%c⏰ Время: ${time}`, 'color: #636e72;');
+        console.log(`%c🎯 Уровень: ${entry.levelName} ${levelIcon}`, 'color: #dfe6e9;');
+        
+        if (entry.turnNumber) {
+            console.log(`%c🔄 Ход: ${entry.turnNumber}`, 'color: #74b9ff;');
+        }
+        
+        // Вывод данных – убран лишний заголовок, сразу вызывается printData
+        if (entry.data) {
+            this.printData(entry.data);
+        }
+        
+        if (entry.stackTrace) {
+            console.log('%c🔍 Стек вызовов:', 'color: #fd79a8; font-weight: bold;');
+            console.log(entry.stackTrace);
+        }
+        
+        console.groupEnd();
     }
     
-    // Объект
-    console.log(`%c${indentStr}📁 Объект:`, 'color: #a29bfe;');
-    Object.entries(data).forEach(([key, value]) => {
-        if (typeof value === 'object' && value !== null) {
-            // Вложенный объект/массив – сначала ключ, потом рекурсивно данные с увеличенным отступом
-            console.log(`%c${indentStr}  ${key}:`, 'color: #00b894;');
-            this.printData(value, indent + 2);
-        } else {
-            const valueStr = this.formatValue(value);
-            const style = this.getStyleForValue(value);
-            console.log(`%c${indentStr}  ${key}:%c ${valueStr}`, 'color: #00b894;', style);
+    /**
+     * Форматированный вывод данных (полностью переработан)
+     * Теперь все строки используют %c, нет сырой конкатенации, цвета применяются единообразно.
+     */
+    printData(data, indent = 0) {
+        const indentStr = '  '.repeat(indent); // два пробела на уровень
+        
+        // Примитивы
+        if (data === null || data === undefined || typeof data !== 'object') {
+            const style = this.getStyleForValue(data);
+            console.log(`%c${indentStr}${this.formatValue(data)}`, style);
+            return;
         }
-    });
-}
-
-/**
- * Возвращает строковое представление значения для вывода в консоль
- */
-formatValue(value) {
-    if (value === null) return 'null';
-    if (value === undefined) return 'undefined';
-    if (typeof value === 'string') return `"${value}"`;
-    if (typeof value === 'function') return `ƒ ${value.name || 'anonymous'}()`;
-    return String(value);
-}
-
-/**
- * Возвращает CSS-стиль для значения в зависимости от его типа
- */
-getStyleForValue(value) {
-    if (value === null || value === undefined) {
-        return 'color: #636e72; font-style: italic;'; // серый
+        
+        // Массив
+        if (Array.isArray(data)) {
+            console.log(`%c${indentStr}📋 Массив [${data.length} элементов]:`, 'color: #74b9ff;');
+            data.forEach((item, index) => {
+                const valueStr = this.formatValue(item);
+                const style = this.getStyleForValue(item);
+                // индекс — зелёный, значение — по типу
+                console.log(`%c${indentStr}  ${index}:%c ${valueStr}`, 'color: #00b894;', style);
+            });
+            return;
+        }
+        
+        // Объект
+        console.log(`%c${indentStr}📁 Объект:`, 'color: #a29bfe;');
+        Object.entries(data).forEach(([key, value]) => {
+            if (typeof value === 'object' && value !== null) {
+                // Вложенный объект/массив – сначала ключ, потом рекурсивно данные с увеличенным отступом
+                console.log(`%c${indentStr}  ${key}:`, 'color: #00b894;');
+                this.printData(value, indent + 2);
+            } else {
+                const valueStr = this.formatValue(value);
+                const style = this.getStyleForValue(value);
+                console.log(`%c${indentStr}  ${key}:%c ${valueStr}`, 'color: #00b894;', style);
+            }
+        });
     }
-    switch (typeof value) {
-        case 'number':
-            return 'color: #0984e3;'; // синий
-        case 'boolean':
-            return 'color: #fdcb6e;'; // жёлтый
-        case 'string':
-            return 'color: #dfe6e9;'; // светло-серый
-        case 'function':
-            return 'color: #e84393; font-style: italic;'; // розовый
-        default:
-            return 'color: #dfe6e9;';
+    
+    /**
+     * Возвращает строковое представление значения для вывода в консоль
+     */
+    formatValue(value) {
+        if (value === null) return 'null';
+        if (value === undefined) return 'undefined';
+        if (typeof value === 'string') return `"${value}"`;
+        if (typeof value === 'function') return `ƒ ${value.name || 'anonymous'}()`;
+        return String(value);
     }
-}
+    
+    /**
+     * Возвращает CSS-стиль для значения в зависимости от его типа
+     */
+    getStyleForValue(value) {
+        if (value === null || value === undefined) {
+            return 'color: #636e72; font-style: italic;'; // серый
+        }
+        switch (typeof value) {
+            case 'number':
+                return 'color: #0984e3;'; // синий
+            case 'boolean':
+                return 'color: #fdcb6e;'; // жёлтый
+            case 'string':
+                return 'color: #dfe6e9;'; // светло-серый
+            case 'function':
+                return 'color: #e84393; font-style: italic;'; // розовый
+            default:
+                return 'color: #dfe6e9;';
+        }
+    }
     
     /**
      * Начало логирования хода
@@ -455,10 +455,10 @@ getStyleForValue(value) {
         // Детализация по типам изменений
         Object.entries(changes).forEach(([id, change]) => {
             const [type, name] = id.split(':');
-            const icon = type === 'stat' ? '📈' : 
-                        type === 'skill' ? '📚' : 
-                        type === 'inventory' ? '🎒' : 
-                        type === 'buff' ? '⬆️' : '📝';
+            const icon = type === 'stat' ? '📈' :
+                type === 'skill' ? '📚' :
+                type === 'inventory' ? '🎒' :
+                type === 'buff' ? '⬆️' : '📝';
             
             this.log(LOG_CATEGORIES.GAME_STATE, `${icon} ${name}: ${change.old} → ${change.new} (Δ${change.delta})`, {
                 id,
@@ -635,7 +635,7 @@ getStyleForValue(value) {
         
         if (filter.search) {
             const searchLower = filter.search.toLowerCase();
-            filteredLogs = filteredLogs.filter(log => 
+            filteredLogs = filteredLogs.filter(log =>
                 log.message.toLowerCase().includes(searchLower) ||
                 JSON.stringify(log.data).toLowerCase().includes(searchLower)
             );

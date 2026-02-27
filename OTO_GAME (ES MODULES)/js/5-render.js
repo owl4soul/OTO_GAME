@@ -770,7 +770,7 @@ function startThoughtsOfHeroDisplay() {
         
         if (State.getHeroPhrasesCount() > 0) {
             phrase = State.getHeroPhrase();
-        } 
+        }
         else if (CONFIG.thoughtsOfHeroFakes && CONFIG.thoughtsOfHeroFakes.length > 0) {
             const fakePhrases = CONFIG.thoughtsOfHeroFakes;
             phrase = fakePhrases[Math.floor(Math.random() * fakePhrases.length)];

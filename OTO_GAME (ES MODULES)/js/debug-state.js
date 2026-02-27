@@ -202,7 +202,7 @@ function generateDebugText() {
  */
 function openDebugModal() {
     const text = generateDebugText();
-
+    
     // Создаём элементы модального окна
     const modal = document.createElement('div');
     modal.id = 'oto-debug-modal';
@@ -221,7 +221,7 @@ function openDebugModal() {
         font-size: 12px;
         line-height: 1.4;
     `;
-
+    
     const content = document.createElement('div');
     content.style.cssText = `
         background: #1a1a1a;
@@ -236,7 +236,7 @@ function openDebugModal() {
         flex-direction: column;
         overflow: hidden;
     `;
-
+    
     const header = document.createElement('div');
     header.style.cssText = `
         background: #2d2d2d;
@@ -273,7 +273,7 @@ function openDebugModal() {
             ">✕ ЗАКРЫТЬ</button>
         </div>
     `;
-
+    
     const textarea = document.createElement('textarea');
     textarea.readOnly = true;
     textarea.style.cssText = `
@@ -292,18 +292,18 @@ function openDebugModal() {
         overflow: auto;
     `;
     textarea.value = text;
-
+    
     content.appendChild(header);
     content.appendChild(textarea);
     modal.appendChild(content);
     document.body.appendChild(modal);
-
+    
     // Обработчики
     const closeBtn = document.getElementById('debug-close-btn');
     closeBtn.onclick = () => {
         document.body.removeChild(modal);
     };
-
+    
     const copyBtn = document.getElementById('debug-copy-btn');
     copyBtn.onclick = () => {
         textarea.select();
@@ -314,13 +314,13 @@ function openDebugModal() {
             console.error(err);
         });
     };
-
+    
     modal.onclick = (e) => {
         if (e.target === modal) {
             document.body.removeChild(modal);
         }
     };
-
+    
     // Фокус на textarea для удобства прокрутки
     textarea.focus();
 }
@@ -332,7 +332,7 @@ if (typeof window !== 'undefined') {
         openDebugModal();
         return State.getState(); // для консоли
     };
-
+    
     console.log(`
 📱 ГЛОБАЛЬНЫЕ КОМАНДЫ ДЛЯ ОТЛАДКИ (ОБНОВЛЕНЫ):
 • debugUI()      - открыть модальное окно с полным состоянием и копированием

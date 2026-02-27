@@ -29,88 +29,88 @@ const dom = DOM.getDOM();
 function init() {
     try {
         Logger.info('BOOT', "🚀 Инициализация O.T.O. QUEST...");
-
+        
         // 0. Инициализация темы (Самым первым шагом, чтобы избежать мигания стилей)
         themeManagerPro.initialize();
         Logger.success('THEME', "Менеджер тем инициализирован");
-
+        
         // 1. Проверяем, что DOM полностью готов
         if (!document.body || document.readyState !== 'complete') {
             Logger.info('DOM', "DOM не готов, ожидаем...");
             setTimeout(init, 50);
             return;
         }
-
+        
         Logger.success('DOM', "DOM полностью загружен");
-
+        
         // 2. Проверяем, что состояние корректно инициализировано
         const state = State.getState();
         if (!state || !state.gameState || !state.gameState.currentScene) {
             Logger.error('STATE', "Состояние игры не инициализировано корректно");
             throw new Error('Состояние игры не инициализировано корректно');
         }
-
+        
         Logger.success('STATE', `Состояние инициализировано (игра: ${state.gameId}, ход: ${state.turnCount})`);
-
+        
         // 3. Инициализируем UI модули в ПРАВИЛЬНОМ ПОРЯДКЕ:
-
+        
         // 4.1 Сначала рендерим сцену, чтобы создать все необходимые контейнеры
         Logger.info('RENDER', "Рендеринг сцены для создания контейнеров...");
         Render.renderScene();
         Render.renderChoices();
-
+        
         // 4.2 Теперь инициализируем UI модули, которые зависят от контейнеров в DOM
         Logger.info('UI', "Инициализация UI модулей...");
-
+        
         if (GameItemUI && typeof GameItemUI.initialize === 'function') {
             Logger.info('GAMEITEM', "Инициализация GameItemUI...");
             GameItemUI.initialize();
             Logger.success('GAMEITEM', "GameItemUI инициализирован");
         }
-
+        
         if (TurnUpdatesUI && typeof TurnUpdatesUI.initialize === 'function') {
             TurnUpdatesUI.initialize();
             Logger.success('UI', "TurnUpdatesUI инициализирован");
         }
-
+        
         if (StatsUI && typeof StatsUI.initialize === 'function') {
             StatsUI.initialize();
             Logger.success('UI', "StatsUI инициализирован");
         }
-
+        
         if (HistoryUI && typeof HistoryUI.initialize === 'function') {
             HistoryUI.initialize();
             Logger.success('UI', "HistoryUI инициализирован");
         }
-
+        
         // 4.3 Инициализируем основной UI
         UI.init();
         Logger.success('UI', "Основной UI инициализирован");
-
+        
         // Настраиваем события
         Logger.info('EVENTS', "Настройка обработчиков событий...");
         setupEventListeners();
         setupFullscreenListeners();
         Logger.success('EVENTS', "Обработчики событий настроены");
-
+        
         // ✅ КРИТИЧЕСКИ ВАЖНО: принудительно устанавливаем сохранённый текст в поле свободного ввода
         if (dom.freeInputText) {
             dom.freeInputText.value = state.freeModeText || '';
         }
-
+        
         // Обновляем кнопки действий
         UI.updateActionButtons();
-
+        
         // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода и т.д.)
         Render.updateUIMode();
-
+        
         // Финальная проверка: убеждаемся, что все контейнеры отображены
         setTimeout(() => {
             checkAllContainersVisible();
         }, 100);
-
+        
         Logger.success('SYSTEM', `📊 Статистика: Ход ${state.turnCount}, Организации: ${State.getHeroOrganizations().length}`);
-
+        
         // 5. Настраиваем игровые подписки ПОСЛЕ инициализации всех модулей
         Logger.info('GAME', "Настройка игровых подписок...");
         if (Game.setupGameObservers) {
@@ -119,14 +119,14 @@ function init() {
         if (Render.setupStateObservers) {
             Render.setupStateObservers();
         }
-
+        
         // Обновляем состояние четырёх иконок проверки моделей в настройках
         Render.updateModelStats();
-
+        
         Logger.success('SYSTEM', "✅ Система полностью инициализирована и готова");
     } catch (error) {
         Logger.error('FATAL', "Критическая ошибка инициализации", error);
-
+        
         const errorDetails = `
 🚨 КРИТИЧЕСКАЯ ОШИБКА ЗАПУСКА ИГРЫ:
 
@@ -143,9 +143,9 @@ ${error.stack || 'Нет информации о стеке'}
 
 Время ошибки: ${new Date().toLocaleString()}
         `;
-
+        
         console.error(errorDetails);
-
+        
         if (dom.sceneArea) {
             dom.sceneArea.innerHTML = `
                 <div style="color: #ff3838; padding: 30px; text-align: center; background: rgba(255,0,0,0.1); border: 2px solid #ff3838; border-radius: 5px;">
@@ -167,16 +167,16 @@ ${error.stack || 'Нет информации о стеке'}
 function checkAllContainersVisible() {
     try {
         console.log('🔍 Проверка видимости всех контейнеров...');
-
+        
         const requiredContainers = [
             'personalityBlockContainer',
             'typologyContainer',
             'organizationsContainer',
             'turnUpdatesContainer'
         ];
-
+        
         let allVisible = true;
-
+        
         requiredContainers.forEach(containerId => {
             const container = document.getElementById(containerId);
             if (container) {
@@ -188,7 +188,7 @@ function checkAllContainersVisible() {
                 allVisible = false;
             }
         });
-
+        
         if (allVisible) {
             console.log('✅ ВСЕ обязательные контейнеры отображены');
         } else {
@@ -207,16 +207,16 @@ function setupEventListeners() {
     if (dom.btnSubmit) {
         dom.btnSubmit.onclick = () => Game.submitTurn();
     }
-
+    
     if (dom.btnClear) {
         dom.btnClear.onclick = () => Game.handleClear();
     }
-
+    
     // ========== ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМА ==========
     if (dom.freeModeToggle) {
         dom.freeModeToggle.onchange = (e) => Game.handleFreeModeToggle(e);
     }
-
+    
     // ========== ПОЛЕ СВОБОДНОГО ВВОДА ==========
     if (dom.freeInputText) {
         let saveTimeout;
@@ -226,13 +226,13 @@ function setupEventListeners() {
             const hasText = state.freeModeText.trim().length > 0;
             dom.choicesCounter.textContent = hasText ? '✓/∞' : '0/∞';
             UI.updateActionButtons();
-
+            
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => {
                 State.saveStateToLocalStorage();
             }, 500);
         };
-
+        
         dom.freeInputText.onkeydown = (e) => {
             if (e.ctrlKey && e.key === 'Enter') {
                 e.preventDefault();
@@ -240,39 +240,39 @@ function setupEventListeners() {
             }
         };
     }
-
+    
     // ========== КНОПКА НАСТРОЕК ==========
     const btnSettings = document.getElementById('btnSettings');
     if (btnSettings) {
         btnSettings.onclick = () => UI.openSettingsModal();
     }
-
+    
     // ========== КНОПКА ПОЛНОЭКРАННОГО РЕЖИМА ==========
     const btnFullscreen = document.getElementById('btnFullscreen');
     if (btnFullscreen) {
         btnFullscreen.onclick = () => UI.toggleFullscreen();
     }
-
+    
     // ========== КНОПКИ МАСШТАБИРОВАНИЯ ==========
     const btnScaleUp = document.getElementById('btnScaleUp');
     if (btnScaleUp) {
         btnScaleUp.onclick = () => UI.scaleUp();
     }
-
+    
     const btnScaleDown = document.getElementById('btnScaleDown');
     if (btnScaleDown) {
         btnScaleDown.onclick = () => UI.scaleDown();
     }
-
+    
     // ========== НАСТРОЙКИ В МОДАЛЬНОМ ОКНЕ ==========
     setupSettingsModalEvents();
-
+    
     // ========== СОХРАНЕНИЕ/ЗАГРУЗКА ==========
     setupSaveLoadEvents();
-
+    
     // ========== АУДИТ-ЛОГ ==========
     setupAuditEvents();
-
+    
     // ========== ОБРАБОТЧИК ПРИНЯТИЯ СЮЖЕТА (переопределён) ==========
     setupAcceptPlotHandler();
 }
@@ -285,7 +285,7 @@ function setupSettingsModalEvents() {
     if (closeModalBtn) {
         closeModalBtn.onclick = () => UI.closeSettingsModal();
     }
-
+    
     const btnTheme = document.getElementById('btnOpenThemeEditor');
     if (btnTheme) {
         btnTheme.onclick = () => {
@@ -293,7 +293,7 @@ function setupSettingsModalEvents() {
             themeEditorPro.open();
         };
     }
-
+    
     // --- 1. Провайдер API ---
     const providerInput = document.getElementById('providerInput');
     if (providerInput) {
@@ -309,7 +309,7 @@ function setupSettingsModalEvents() {
         };
         providerInput.value = State.getState().settings.apiProvider;
     }
-
+    
     // --- 2. API ключи ---
     const apiKeyOpenrouterInput = document.getElementById('apiKeyOpenrouterInput');
     if (apiKeyOpenrouterInput) {
@@ -322,7 +322,7 @@ function setupSettingsModalEvents() {
         };
         apiKeyOpenrouterInput.value = State.getState().settings.apiKeyOpenrouter;
     }
-
+    
     const apiKeyVsegptInput = document.getElementById('apiKeyVsegptInput');
     if (apiKeyVsegptInput) {
         apiKeyVsegptInput.oninput = () => {
@@ -334,7 +334,7 @@ function setupSettingsModalEvents() {
         };
         apiKeyVsegptInput.value = State.getState().settings.apiKeyVsegpt;
     }
-
+    
     // --- 3. Модель ИИ ---
     const modelInput = document.getElementById('modelInput');
     if (modelInput) {
@@ -347,51 +347,51 @@ function setupSettingsModalEvents() {
             State.saveStateToLocalStorage();
         };
     }
-
+    
     // --- 4. Кнопки тестирования ---
     const testCurrentProviderBtn = document.getElementById('testCurrentProviderBtn');
     if (testCurrentProviderBtn) {
         testCurrentProviderBtn.onclick = () => API.testCurrentProvider();
     }
-
+    
     const testSelectedModelBtn = document.getElementById('testSelectedModelBtn');
     if (testSelectedModelBtn) {
         testSelectedModelBtn.onclick = () => API.testSelectedModel();
     }
-
+    
     // --- 5. ГЕНЕРАТОР СЮЖЕТА ---
     const plotInput = document.getElementById('plotInput');
     const btnGen = document.getElementById('btnGenPlot');
     const btnClear = document.getElementById('btnClearPlot');
     const btnAccept = document.getElementById('btnAcceptPlot');
-
+    
     if (plotInput) {
         plotInput.oninput = () => {
             const val = plotInput.value.trim();
             if (btnAccept) btnAccept.disabled = val.length === 0;
         };
     }
-
+    
     if (btnClear && plotInput) {
         btnClear.onclick = () => {
             plotInput.value = '';
             if (btnAccept) btnAccept.disabled = true;
         };
     }
-
+    
     if (btnGen && plotInput) {
         btnGen.onclick = async () => {
             const currentText = plotInput.value.trim();
             const promptToSend = currentText.length > 0 ? currentText + "</br>" + CONFIG.marsyasScenarioPrompt : CONFIG.marsyasScenarioPrompt;
-
+            
             btnGen.disabled = true;
             const oldBtnText = btnGen.innerHTML;
             btnGen.innerHTML = '<span class="spinner"></span> ГЕНЕРАЦИЯ...';
-
+            
             if (btnAccept) btnAccept.disabled = true;
             if (btnClear) btnClear.disabled = true;
             plotInput.disabled = true;
-
+            
             try {
                 const sceneData = await API.generateCustomScene(promptToSend);
                 plotInput.value = JSON.stringify(sceneData, null, 2);
@@ -417,17 +417,17 @@ function setupAcceptPlotHandler() {
     const btnAccept = document.getElementById('btnAcceptPlot');
     const plotInput = document.getElementById('plotInput');
     if (!btnAccept || !plotInput) return;
-
+    
     btnAccept.onclick = () => {
         const rawText = plotInput.value.trim();
         if (!rawText) return;
-
+        
         let clean = rawText
             .replace(/^```json\s*/i, '')
             .replace(/\s*```$/i, '')
             .replace(/^```\s*/i, '')
             .trim();
-
+        
         let sceneData;
         try {
             sceneData = JSON.parse(clean);
@@ -443,9 +443,9 @@ function setupAcceptPlotHandler() {
                 return;
             }
         }
-
+        
         console.log('📦 sceneData keys:', Object.keys(sceneData));
-
+        
         // Сохраняем настройки и пр.
         const state = State.getState();
         const preserved = {
@@ -456,10 +456,10 @@ function setupAcceptPlotHandler() {
             gameId: Utils.generateUniqueId(),
             lastSaveTime: new Date().toISOString()
         };
-
+        
         // 1. Начальное состояние героя (дефолтное)
         let heroState = State.getDefaultHeroState(); // [{stat:will:50}, ...]
-
+        
         // 2. Добавляем/обновляем все game_items из сцены (если есть)
         if (sceneData.game_items && Array.isArray(sceneData.game_items)) {
             sceneData.game_items.forEach(newItem => {
@@ -473,13 +473,13 @@ function setupAcceptPlotHandler() {
                 }
             });
         }
-
+        
         // 3. Применяем операции из корня, если есть
         if (sceneData.operations && Array.isArray(sceneData.operations)) {
             const normalizedOps = API_Response.normalizeOperations(sceneData.operations, 'initial');
             OperationsServiceInstance.applyOperations(normalizedOps, heroState);
         }
-
+        
         // 4. Применяем эффекты событий и сохраняем результаты для каждого события
         const eventOperationResults = [];
         if (sceneData.events && Array.isArray(sceneData.events)) {
@@ -498,12 +498,12 @@ function setupAcceptPlotHandler() {
                 sceneData.events.forEach((_, i) => { eventOperationResults[i] = []; });
             }
         }
-
+        
         // 5. Обновляем metaGameState, если есть meta_context
         if (sceneData.meta_context) {
             State.setMetaContext(JSON.stringify(sceneData.meta_context));
         }
-
+        
         // Создаём новое gameState
         const newGameState = {
             summary: sceneData.summary || "",
@@ -524,7 +524,7 @@ function setupAcceptPlotHandler() {
             selectedActions: [],
             organizationsHierarchy: {}
         };
-
+        
         // Извлекаем иерархии организаций
         if (sceneData._organizationsHierarchy) {
             newGameState.organizationsHierarchy = { ...sceneData._organizationsHierarchy };
@@ -536,7 +536,7 @@ function setupAcceptPlotHandler() {
                 }
             });
         }
-
+        
         // Первая запись в истории
         newGameState.history.push({
             fullText: newGameState.currentScene.scene,
@@ -544,7 +544,7 @@ function setupAcceptPlotHandler() {
             changes: "Загружен новый сюжет",
             turn: 1
         });
-
+        
         // Собираем новое состояние, пока без lastTurnUpdates (оставим пустым)
         const newState = {
             ...preserved,
@@ -564,39 +564,39 @@ function setupAcceptPlotHandler() {
             pendingRequest: null,
             metaGameState: { ...state.metaGameState } // уже обновлено через setMetaContext
         };
-
+        
         // Устанавливаем основное состояние
         State.setState(newState);
         State.saveStateToLocalStorage();
-
+        
         // 6. Генерируем HTML для начальных событий с результатами их применения
         if (TurnUpdatesUI && typeof TurnUpdatesUI.generateUpdatesHTML === 'function') {
             TurnUpdatesUI.generateUpdatesHTML(
-                [],                                // actionResults – пусто, хода не было
+                [], // actionResults – пусто, хода не было
                 newGameState.currentScene.events || [], // события из сцены
-                0,                                 // номер хода (можно 0)
-                [],                                // actionOperationResults – пусто
-                eventOperationResults               // результаты применения эффектов событий
+                0, // номер хода (можно 0)
+                [], // actionOperationResults – пусто
+                eventOperationResults // результаты применения эффектов событий
             );
         }
-
+        
         // Принудительно обновляем отображение панели
         if (TurnUpdatesUI && TurnUpdatesUI.initialized) {
             TurnUpdatesUI.renderFromState();
         }
-
+        
         // Эмитим события
         State.emit(State.EVENTS.GAME_TYPE_CHANGED, { oldGameType: state.gameType, newGameType: 'custom' });
         State.emit(State.EVENTS.HERO_CHANGED, { type: 'reset', heroState });
         State.emit(State.EVENTS.SCENE_CHANGED, { scene: newGameState.currentScene });
-
+        
         // Рендерим всё
         Render.renderScene();
         Render.renderChoices();
         GameItemUI?.forceUpdate?.();
         StatsUI?.render?.();
         HistoryUI?.render?.();
-
+        
         UI.closeSettingsModal();
         Utils.showToast('Новая кастомная игра запущена', 'success');
     };
@@ -615,7 +615,7 @@ function setupSaveLoadEvents() {
                 UI.init();
                 Render.renderScene();
                 Render.renderChoices();
-
+                
                 const state = State.getState();
                 if (dom.freeInputText) {
                     dom.freeInputText.value = state.freeModeText || '';
@@ -629,7 +629,7 @@ function setupSaveLoadEvents() {
             }
         };
     }
-
+    
     const saveGameBtn = document.getElementById('saveGameBtn');
     if (saveGameBtn) {
         saveGameBtn.onclick = async () => {
@@ -641,7 +641,7 @@ function setupSaveLoadEvents() {
             }
         };
     }
-
+    
     const exportAllDataBtn = document.getElementById('exportAllDataBtn');
     if (exportAllDataBtn) {
         exportAllDataBtn.onclick = async () => {
@@ -650,7 +650,7 @@ function setupSaveLoadEvents() {
             else Render.showErrorAlert("Ошибка экспорта", result.error);
         };
     }
-
+    
     const importAllDataBtn = document.getElementById('importAllDataBtn');
     if (importAllDataBtn) {
         importAllDataBtn.onclick = async () => {
@@ -662,7 +662,7 @@ function setupSaveLoadEvents() {
                 Render.updateModelDetails();
                 Audit.renderAuditList();
                 UI.init();
-
+                
                 const state = State.getState();
                 if (dom.freeInputText) {
                     dom.freeInputText.value = state.freeModeText || '';
@@ -676,7 +676,7 @@ function setupSaveLoadEvents() {
             }
         };
     }
-
+    
     const exportHistoryBtn = document.getElementById('exportHistoryBtn');
     if (exportHistoryBtn) {
         exportHistoryBtn.onclick = () => {
@@ -696,7 +696,7 @@ function setupSaveLoadEvents() {
             Render.showSuccessAlert("История экспортирована", fileName);
         };
     }
-
+    
     const quickSaveBtn = document.getElementById('quickSaveBtn');
     if (quickSaveBtn) {
         quickSaveBtn.onclick = () => {
@@ -704,22 +704,22 @@ function setupSaveLoadEvents() {
             Render.showSuccessAlert("Быстрое сохранение", "Игра сохранена в браузере.");
         };
     }
-
+    
     const btnFullReset = document.getElementById('btnFullReset');
     if (btnFullReset) {
         btnFullReset.onclick = () => State.resetFullGame();
     }
-
+    
     const btnResetGameProgress = document.getElementById('btnResetGameProgress');
     if (btnResetGameProgress) {
         btnResetGameProgress.onclick = () => State.resetGameProgress();
     }
-
+    
     const btnRestartGame = document.getElementById('btnRestartGame');
     if (btnRestartGame) {
         btnRestartGame.onclick = () => Game.restartGame();
     }
-
+    
     const btnContinueGame = document.getElementById('btnContinueGame');
     if (btnContinueGame) {
         btnContinueGame.onclick = () => Game.continueGame();
@@ -734,12 +734,12 @@ function setupAuditEvents() {
     if (clearAuditBtn) {
         clearAuditBtn.onclick = () => Audit.clearAudit();
     }
-
+    
     const exportAuditBtn = document.getElementById('exportAuditBtn');
     if (exportAuditBtn) {
         exportAuditBtn.onclick = () => Audit.copyFullAuditLog();
     }
-
+    
     const downloadAuditBtn = document.getElementById('downloadAuditBtn');
     if (downloadAuditBtn) {
         downloadAuditBtn.onclick = () => Audit.exportFullAuditLog();
@@ -799,10 +799,10 @@ function showMainInterface() {
     const mainContainer = document.getElementById('mainContainer');
     if (mainContainer) {
         mainContainer.style.display = 'flex';
-
+        
         Render.renderScene();
         Render.renderChoices();
-
+        
         const state = State.getState();
         if (dom.freeInputText) {
             dom.freeInputText.value = state.freeModeText || '';
@@ -811,7 +811,7 @@ function showMainInterface() {
         GameItemUI.forceUpdate();
         StatsUI.render();
         HistoryUI.render();
-
+        
         State.saveStateToLocalStorage();
     }
 }

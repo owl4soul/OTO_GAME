@@ -20,24 +20,24 @@ class HistoryUI {
         this.container = null;
         this.allExpanded = false;
     }
-
+    
     // =========== КОМПОНЕНТЫ ДЛЯ ОТОБРАЖЕНИЯ ===========
-
+    
     /**
      * Форматирование текста с сохранением структуры абзацев
      */
     formatTextWithParagraphs(text) {
         if (!text) return '';
         const escaped = Utils.escapeHtml(text);
-
+        
         const paragraphs = escaped.split(/(?:\r?\n){2,}/);
         const nonEmptyParagraphs = paragraphs.filter(p => p.trim().length > 0);
-
+        
         if (nonEmptyParagraphs.length === 0) return '';
         if (nonEmptyParagraphs.length === 1) {
             return `<div class="text-paragraph">${nonEmptyParagraphs[0].replace(/\r?\n/g, '<br>')}</div>`;
         }
-
+        
         let result = '';
         nonEmptyParagraphs.forEach(para => {
             const trimmed = para.trim();
@@ -45,35 +45,35 @@ class HistoryUI {
                 result += `<div class="text-paragraph">${trimmed.replace(/\r?\n/g, '<br>')}</div>`;
             }
         });
-
+        
         return result;
     }
-
+    
     initialize() {
         if (this.initialized) return;
-
+        
         console.log('📜 Инициализация HistoryUI...');
-
+        
         this.setupContainer();
         this.setupEventListeners();
         this.render();
-
+        
         this.initialized = true;
     }
-
+    
     setupContainer() {
         if (!dom.hist) return;
-
+        
         dom.hist.innerHTML = '';
         // Можно добавить класс, если нужно, но ID #history остаётся
         dom.hist.classList.add('history-container'); // добавим класс для общих стилей, если потребуется
-
+        
         this.container = dom.hist;
-
+        
         // Шапка с классом history-header
         const header = document.createElement('div');
         header.className = 'history-header';
-
+        
         header.innerHTML = `
             <div class="history-header-left">
                 <i class="fas fa-history"></i>
@@ -88,14 +88,14 @@ class HistoryUI {
                 </button>
             </div>
         `;
-
+        
         this.container.appendChild(header);
-
+        
         // Контейнер для ходов
         const turnsContainer = document.createElement('div');
         turnsContainer.id = 'historyTurnsContainer';
         this.container.appendChild(turnsContainer);
-
+        
         // Вешаем обработчики после добавления в DOM
         setTimeout(() => {
             const expandBtn = header.querySelector('.expand-all');
@@ -104,23 +104,23 @@ class HistoryUI {
             if (collapseBtn) collapseBtn.onclick = () => this.collapseAllTurns();
         }, 0);
     }
-
+    
     setupEventListeners() {
         State.on(State.EVENTS.TURN_COMPLETED, () => {
             setTimeout(() => this.render(), 100);
         });
-
+        
         State.on(State.EVENTS.SCENE_CHANGED, () => {
             setTimeout(() => this.render(), 50);
         });
-
+        
         State.on(State.EVENTS.GAME_STATE_UPDATED, (data) => {
             if (data?.historyUpdated) {
                 setTimeout(() => this.render(), 50);
             }
         });
     }
-
+    
     /**
      * Определяет акцентный цвет для хода на основе результатов действий
      */
@@ -135,7 +135,7 @@ class HistoryUI {
         if (hasSuccess && hasFailure) return 'var(--history-accent-mixed, #fbc531)';
         return 'var(--history-accent-neutral, #555)';
     }
-
+    
     /**
      * Создает элемент хода со ВСЕМИ секциями
      */
@@ -143,24 +143,24 @@ class HistoryUI {
         const turnNumber = index + 1;
         const summary = entry.summary || entry.fullText || entry.scene || 'Без сводки';
         const collapsedSummary = this.truncateForCollapsed(summary, this.COLLAPSED_CHAR_LIMIT);
-
+        
         const accentColor = this.getAccentColor(entry);
-
+        
         // Основной элемент
         const details = document.createElement('details');
         details.className = 'history-turn';
         // Устанавливаем CSS-переменную для акцентного цвета (будет использоваться в CSS)
         details.style.setProperty('--turn-accent-color', accentColor);
-
+        
         if (isCurrent) details.setAttribute('open', '');
-
+        
         // ЗАГОЛОВОК
         const summaryElem = document.createElement('summary');
-
+        
         const timestamp = entry.timestamp || '';
         const timeOnly = timestamp.split(' ')[1] || '';
         const actionCount = entry.actionResults?.length || 0;
-
+        
         summaryElem.innerHTML = `
             <div class="turn-summary-row">
                 <i class="fas fa-chevron-right turn-chevron"></i>
@@ -176,24 +176,24 @@ class HistoryUI {
             </div>
             ${timeOnly ? `<div class="turn-summary-time">${timeOnly}</div>` : ''}
         `;
-
+        
         details.addEventListener('toggle', () => {
             const icon = summaryElem.querySelector('.turn-chevron');
             icon.style.transform = details.open ? 'rotate(90deg)' : 'rotate(0deg)';
         });
-
+        
         if (isCurrent) {
             summaryElem.querySelector('.turn-chevron').style.transform = 'rotate(90deg)';
         }
-
+        
         details.appendChild(summaryElem);
-
+        
         // === ВСЕ СЕКЦИИ СОДЕРЖИМОГО ===
         const content = document.createElement('div');
         content.className = 'history-turn-content';
-
+        
         let contentHTML = '<div class="history-blocks">';
-
+        
         // 1. ЗАМЕТКИ ДИЗАЙНЕРА
         if (entry.design_notes && entry.design_notes.trim() !== '') {
             contentHTML += this.createBlock(
@@ -203,12 +203,12 @@ class HistoryUI {
                 'fa-pencil-alt'
             );
         }
-
+        
         // 2. ПАМЯТЬ ГМ
         if (entry.aiMemory && typeof entry.aiMemory === 'object' && Object.keys(entry.aiMemory).length > 0) {
             contentHTML += this.createMemoryBlock(entry.aiMemory);
         }
-
+        
         // 3. СВОДКА
         if (summary && summary.trim() !== '' && summary !== 'Без сводки') {
             contentHTML += this.createBlock(
@@ -218,7 +218,7 @@ class HistoryUI {
                 'fa-file-alt'
             );
         }
-
+        
         // 4. ТЕКСТ СЦЕНЫ
         const sceneText = entry.fullText || entry.scene;
         if (sceneText && sceneText.trim() !== '') {
@@ -229,7 +229,7 @@ class HistoryUI {
                 'fa-scroll'
             );
         }
-
+        
         // 5. РЕФЛЕКСИЯ
         if (entry.reflection && entry.reflection.trim() !== '') {
             contentHTML += this.createBlock(
@@ -240,7 +240,7 @@ class HistoryUI {
                 true
             );
         }
-
+        
         // 6. ЛИЧНОСТЬ
         if (entry.personality && entry.personality.trim() !== '') {
             contentHTML += this.createBlock(
@@ -250,7 +250,7 @@ class HistoryUI {
                 'fa-user-circle'
             );
         }
-
+        
         // 7. ТИПОЛОГИЯ
         if (entry.typology && entry.typology.trim() !== '') {
             contentHTML += this.createBlock(
@@ -260,14 +260,14 @@ class HistoryUI {
                 'fa-fingerprint'
             );
         }
-
+        
         // 8. ДЕЙСТВИЯ
         if (entry.actionResults && Array.isArray(entry.actionResults) && entry.actionResults.length > 0) {
             contentHTML += this.createActionsBlock(entry.actionResults);
         } else if (entry.choice) {
             contentHTML += this.createChoiceBlock(entry.choice);
         }
-
+        
         // 9. ИЗМЕНЕНИЯ
         if (entry.changes && entry.changes !== 'Нет явных изменений') {
             contentHTML += this.createBlock(
@@ -277,27 +277,27 @@ class HistoryUI {
                 'fa-exchange-alt'
             );
         }
-
+        
         contentHTML += '</div>';
         content.innerHTML = contentHTML;
-
+        
         details.appendChild(content);
         return details;
     }
-
+    
     /**
      * Создает блок памяти ГМ
      */
     createMemoryBlock(aiMemory) {
         const entries = Object.entries(aiMemory);
         if (entries.length === 0) return '';
-
+        
         let html = '<div class="memory-items">';
-
+        
         entries.slice(0, 4).forEach(([key, value]) => {
             let displayValue = '';
             let valueClass = 'memory-value';
-
+            
             if (value === null || value === undefined) {
                 displayValue = 'null';
                 valueClass += ' null';
@@ -318,21 +318,21 @@ class HistoryUI {
                 displayValue = `{${Object.keys(value).length}}`;
                 valueClass += ' object';
             }
-
+            
             const safeKey = Utils.escapeHtml(key);
-
+            
             html += `<span class="memory-item">
                 <span class="memory-key">${safeKey}</span>
                 <span class="${valueClass}">${displayValue}</span>
             </span>`;
         });
-
+        
         if (entries.length > 4) {
             html += `<span class="memory-more">+${entries.length-4}</span>`;
         }
-
+        
         html += '</div>';
-
+        
         return `
             <div class="history-block history-block-ai-memory">
                 <div class="history-block-title">
@@ -342,20 +342,20 @@ class HistoryUI {
             </div>
         `;
     }
-
+    
     /**
      * Создает блок действий
      */
     createActionsBlock(actions) {
         let html = '<div class="actions-list">';
-
+        
         actions.forEach(action => {
             const isSuccess = action.success;
             const isPartial = action.partial_success;
-
+            
             let statusClass;
             let icon;
-
+            
             if (isSuccess && !isPartial) {
                 statusClass = 'action-success';
                 icon = '✓';
@@ -366,10 +366,10 @@ class HistoryUI {
                 statusClass = 'action-failure';
                 icon = '✗';
             }
-
+            
             const actionText = action.text || 'Действие';
-            const shortText = actionText.length > 60 ? actionText.substring(0,60) + '...' : actionText;
-
+            const shortText = actionText.length > 60 ? actionText.substring(0, 60) + '...' : actionText;
+            
             html += `
                 <div class="action-item ${statusClass}">
                     <span class="action-icon">${icon}</span>
@@ -377,9 +377,9 @@ class HistoryUI {
                 </div>
             `;
         });
-
+        
         html += '</div>';
-
+        
         return `
             <div class="history-block history-block-actions">
                 <div class="history-block-title">
@@ -389,7 +389,7 @@ class HistoryUI {
             </div>
         `;
     }
-
+    
     /**
      * Создает блок выбора (если нет действий)
      */
@@ -405,14 +405,14 @@ class HistoryUI {
             </div>
         `;
     }
-
+    
     /**
      * Создает стандартный текстовый блок
      */
     createBlock(type, title, content, icon, italic = false) {
         const formattedContent = this.formatTextWithParagraphs(content);
         if (!formattedContent) return '';
-
+        
         return `
             <div class="history-block history-block-${type}">
                 <div class="history-block-title">
@@ -424,7 +424,7 @@ class HistoryUI {
             </div>
         `;
     }
-
+    
     /**
      * Вспомогательные методы
      */
@@ -440,30 +440,30 @@ class HistoryUI {
         }
         return truncated + '...';
     }
-
+    
     getActionWord(count) {
         if (count % 10 === 1 && count % 100 !== 11) return 'действие';
         if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return 'действия';
         return 'действий';
     }
-
+    
     expandAllTurns() {
         const turns = this.container.querySelectorAll('details.history-turn');
         turns.forEach(turn => turn.open = true);
         this.allExpanded = true;
     }
-
+    
     collapseAllTurns() {
         const turns = this.container.querySelectorAll('details.history-turn');
         turns.forEach(turn => turn.open = false);
         this.allExpanded = false;
     }
-
+    
     render() {
         const state = State.getState();
         const turnsContainer = document.getElementById('historyTurnsContainer');
         if (!turnsContainer) return;
-
+        
         if (!state.gameState.history || state.gameState.history.length === 0) {
             turnsContainer.innerHTML = `
                 <div class="history-empty">
@@ -473,20 +473,20 @@ class HistoryUI {
             `;
             return;
         }
-
+        
         turnsContainer.innerHTML = '';
-
+        
         const recentHistory = state.gameState.history.slice(-this.MAX_VISIBLE_TURNS);
         const reversedHistory = [...recentHistory].reverse();
-
+        
         reversedHistory.forEach((entry, reverseIndex) => {
             const originalIndex = recentHistory.length - 1 - reverseIndex;
             const isCurrent = (originalIndex === recentHistory.length - 1);
-
+            
             const turnElement = this.createTurnElement(entry, originalIndex, isCurrent);
             turnsContainer.appendChild(turnElement);
         });
-
+        
         const totalTurns = state.gameState.history.length;
         if (totalTurns > this.MAX_VISIBLE_TURNS) {
             const indicator = document.createElement('div');
@@ -494,11 +494,11 @@ class HistoryUI {
             indicator.textContent = `Последние ${this.MAX_VISIBLE_TURNS} из ${totalTurns} ходов`;
             turnsContainer.appendChild(indicator);
         }
-
+        
         if (this.allExpanded) {
             setTimeout(() => this.expandAllTurns(), 10);
         }
-
+        
         setTimeout(() => {
             const currentTurn = turnsContainer.querySelector('details.history-turn[open]');
             if (currentTurn) {
@@ -506,7 +506,7 @@ class HistoryUI {
             }
         }, 100);
     }
-
+    
     forceUpdate() {
         this.render();
     }

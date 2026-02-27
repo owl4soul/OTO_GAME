@@ -17,17 +17,17 @@ class TurnUpdatesUI {
         console.log('🔧 TurnUpdatesUI: конструктор');
         this.container = null;
         this.initialized = false;
-
+        
         // Единый обработчик для клика/тапа (привязан к контексту класса)
         this.tooltipHandler = (e) => {
             const target = e.currentTarget; // сам элемент, на который навешен обработчик
             const encodedDetails = target.dataset.details;
             if (!encodedDetails) return;
-
+            
             try {
                 const details = JSON.parse(decodeURIComponent(encodedDetails));
                 const html = TurnUpdatesUI.buildTooltipHTML(details);
-
+                
                 if (TooltipUI && typeof TooltipUI.show === 'function') {
                     TooltipUI.show(target, html, {
                         autoHide: true,
@@ -43,7 +43,7 @@ class TurnUpdatesUI {
             }
         };
     }
-
+    
     initialize() {
         if (this.initialized) return;
         console.log('🎮 Инициализация TurnUpdatesUI...');
@@ -53,7 +53,7 @@ class TurnUpdatesUI {
         this.initialized = true;
         console.log('✅ TurnUpdatesUI готов');
     }
-
+    
     ensureContainer() {
         this.container = document.getElementById('turnUpdatesContainer');
         if (!this.container) {
@@ -71,7 +71,7 @@ class TurnUpdatesUI {
             this.container.classList.add('turn-updates-container');
         }
     }
-
+    
     setupEventListeners() {
         State.on(State.EVENTS.TURN_COMPLETED, () => {
             this.ensureContainer();
@@ -92,7 +92,7 @@ class TurnUpdatesUI {
             }
         });
     }
-
+    
     /**
      * Назначает обработчики напрямую каждому элементу с data-details
      */
@@ -109,7 +109,7 @@ class TurnUpdatesUI {
         });
         console.log(`🔧 Назначены обработчики для ${elements.length} элементов`);
     }
-
+    
     static buildTooltipHTML(details) {
         let html = `<div class="tooltip-calculation">`;
         
@@ -212,7 +212,7 @@ class TurnUpdatesUI {
         html += `</div>`;
         return html;
     }
-
+    
     generateUpdatesHTML(actionResults, events, turnNumber, actionOperationResults = [], eventOperationResults = []) {
         log.debug(LOG_CATEGORIES.TURN_PROCESSING, `TurnUpdatesUI.generateUpdatesHTML for turn ${turnNumber}`, { actionResults, events });
         
@@ -225,7 +225,7 @@ class TurnUpdatesUI {
         
         return innerHTML;
     }
-
+    
     _createUpdatesInnerHTML(actionResults, events, turnNumber, actionOperationResults = [], eventOperationResults = []) {
         let html = '';
         
@@ -250,9 +250,9 @@ class TurnUpdatesUI {
                 const operations = result.operations || [];
                 if (operations.length === 0 && !result.reason) return;
                 
-                const statusClass = result.success 
-                    ? (result.partial ? 'action-partial' : 'action-success')
-                    : 'action-failure';
+                const statusClass = result.success ?
+                    (result.partial ? 'action-partial' : 'action-success') :
+                    'action-failure';
                 
                 const opResults = actionOperationResults[actionIdx] || [];
                 
@@ -363,7 +363,7 @@ class TurnUpdatesUI {
         
         return html;
     }
-
+    
     _createCompactOperationHTML(operation, source) {
         if (!operation || !operation.id || !operation.operation) {
             log.warn(LOG_CATEGORIES.VALIDATION, 'Некорректная операция', operation);
@@ -514,12 +514,12 @@ class TurnUpdatesUI {
             </div>
         `;
     }
-
+    
     renderFromState() {
         try {
             const state = State.getState();
             if (!this.container) return;
-
+            
             const innerContent = state.lastTurnUpdates || '<div class="turn-update-empty">Ожидание хода...</div>';
             this.container.innerHTML = `
                 <div class="turn-updates-header">
@@ -545,7 +545,7 @@ class TurnUpdatesUI {
             }
         }
     }
-
+    
     scrollToUpdates() {
         if (!this.container) return;
         setTimeout(() => {
@@ -554,15 +554,15 @@ class TurnUpdatesUI {
             }
         }, 300);
     }
-
+    
     clear() {
         if (this.container) this.container.innerHTML = '';
     }
-
+    
     forceUpdate() {
         this.renderFromState();
     }
-
+    
     destroy() {
         this.clear();
         this.container = null;

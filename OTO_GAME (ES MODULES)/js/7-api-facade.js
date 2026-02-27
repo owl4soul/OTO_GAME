@@ -440,12 +440,18 @@ function createAuditEntryForGameTurn(selectedActions, payload, state, d10) {
         selectedActions.map(action => action.text).join(', ') :
         String(selectedActions);
     
+    const maxAuditTitleLength = 100;
+    const shortDescription = actionsDescription.length > maxAuditTitleLength ?
+        actionsDescription.substring(0, maxAuditTitleLength) + '...' :
+        actionsDescription;
+    
     const auditEntry = Audit.createEntry(
-        `Игровой ход: ${actionsDescription}`,
+        `Игровой ход: ${shortDescription}`,
         payload,
         state.settings.model,
         state.settings.apiProvider
     );
+    
     auditEntry.d10 = d10;
     auditEntry.gameType = state.gameType;
     

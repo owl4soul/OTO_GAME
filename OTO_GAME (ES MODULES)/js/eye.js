@@ -8,49 +8,51 @@ const dom = DOM.getDOM();
 
 // ==================== КОНФИГУРАЦИЯ (легко настраивается) ====================
 const PHYSICS_CONFIG = {
-  friction: 1.2,           // трение (чем меньше, тем дольше катится)
-  elasticity: 0.85,        // упругость при отскоке (0..1)
-  minSpeed: 0.005,         // порог остановки (пикс/мс) – ниже этой скорости останавливаем
-  maxSpeed: 1.5,           // максимальная начальная скорость броска (ограничение)
-  throwFactor: 1.5,        // множитель броска – усиливает инерцию
-  speedSamples: 5          // количество сохраняемых точек касания для расчёта скорости
+  friction: 1.2, // трение (чем меньше, тем дольше катится)
+  elasticity: 0.85, // упругость при отскоке (0..1)
+  minSpeed: 0.005, // порог остановки (пикс/мс) – ниже этой скорости останавливаем
+  maxSpeed: 1.5, // максимальная начальная скорость броска (ограничение)
+  throwFactor: 1.5, // множитель броска – усиливает инерцию
+  speedSamples: 5 // количество сохраняемых точек касания для расчёта скорости
 };
 
 const SPIN_CONFIG = {
-  enabled: true,           // включить вращение при движении
-  factor: 0.03,            // чувствительность вращения (рад/пикс)
+  enabled: true, // включить вращение при движении
+  factor: 0.03, // чувствительность вращения (рад/пикс)
 };
 
 const VIBRO_CONFIG = {
-  baseDuration: 10,        // минимальная длительность вибрации при слабом ударе (мс)
-  maxDuration: 50,         // максимальная длительность при сильном ударе (мс)
+  baseDuration: 10, // минимальная длительность вибрации при слабом ударе (мс)
+  maxDuration: 50, // максимальная длительность при сильном ударе (мс)
 };
 
 const DEFORM_CONFIG = {
-  maxSquash: 0.6,          // максимальное сжатие по оси удара (scale = 0.6 при интенсивности 1)
-  maxStretch: 1.4,         // максимальное растяжение по перпендикулярной оси (scale = 1.4)
-  animDuration: 200,       // длительность анимации деформации (мс)
+  maxSquash: 0.6, // максимальное сжатие по оси удара (scale = 0.6 при интенсивности 1)
+  maxStretch: 1.4, // максимальное растяжение по перпендикулярной оси (scale = 1.4)
+  animDuration: 200, // длительность анимации деформации (мс)
 };
 
 // ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
-let isDragging = false;          // флаг перетаскивания (палец на глазу)
-let startX, startY;              // координаты начала касания (экранные)
-let startLeft, startTop;         // координаты глаза в момент начала касания
-let moved = false;               // было ли движение (для отличия тапа от драга)
-let holdTimer, tapTimer;         // таймеры для удержания и тапа
-const DRAG_THRESHOLD = 5;        // порог движения для начала перетаскивания
-const HOLD_DELAY = 200;          // задержка для включения режима удержания (holding)
-const TAP_TIMEOUT = 200;         // окно для определения тапа
+let isDragging = false; // флаг перетаскивания (палец на глазу)
+let startX, startY; // координаты начала касания (экранные)
+let startLeft, startTop; // координаты глаза в момент начала касания
+let moved = false; // было ли движение (для отличия тапа от драга)
+let holdTimer, tapTimer; // таймеры для удержания и тапа
+const DRAG_THRESHOLD = 5; // порог движения для начала перетаскивания
+const HOLD_DELAY = 200; // задержка для включения режима удержания (holding)
+const TAP_TIMEOUT = 200; // окно для определения тапа
 
 // Физические переменные
-let vx = 0, vy = 0;               // скорость (пикс/мс)
-let animFrame = null;             // id requestAnimationFrame
-let lastTimestamp = null;         // время предыдущего кадра
-let isPhysicalMoving = false;     // флаг, что анимация физики запущена
-let rotationAngle = 0;            // текущий угол вращения (радианы)
+let vx = 0,
+  vy = 0; // скорость (пикс/мс)
+let animFrame = null; // id requestAnimationFrame
+let lastTimestamp = null; // время предыдущего кадра
+let isPhysicalMoving = false; // флаг, что анимация физики запущена
+let rotationAngle = 0; // текущий угол вращения (радианы)
 
 // Текущие координаты глаза (хранятся отдельно для оптимизации)
-let eyeX = 0, eyeY = 0;
+let eyeX = 0,
+  eyeY = 0;
 
 // История точек касания для вычисления скорости броска
 let points = [];
@@ -58,11 +60,12 @@ let points = [];
 // Кешированные размеры окна и глаза (чтобы не запрашивать DOM часто)
 let winWidth = window.innerWidth;
 let winHeight = window.innerHeight;
-let eyeWidth = 80;    // ширина глаза (обновится при показе)
-let eyeHeight = 80;   // высота глаза
+let eyeWidth = 80; // ширина глаза (обновится при показе)
+let eyeHeight = 80; // высота глаза
 
 // Отладка (можно включить для проверки)
 const DEBUG = false;
+
 function log(...args) { if (DEBUG) console.log('[EyePhysics]', ...args); }
 
 // ==================== ОБНОВЛЕНИЕ РАЗМЕРОВ ПРИ ПОВОРОТЕ ЭКРАНА ====================
@@ -103,27 +106,27 @@ function updateElementTransform() {
 export function showEye() {
   const eye = dom.waitingEye;
   if (!eye) return;
-
-  stopPhysics();                 // останавливаем текущее движение
+  
+  stopPhysics(); // останавливаем текущее движение
   eye.style.display = 'block';
   eye.classList.remove('visible');
-
+  
   requestAnimationFrame(() => {
     const textElement = dom.thoughtsOfHeroText;
     if (!textElement) return;
-
+    
     const rect = textElement.getBoundingClientRect();
     eyeWidth = eye.offsetWidth || 80;
     eyeHeight = eye.offsetHeight || 80;
     const left = rect.left + rect.width / 2 - eyeWidth / 2;
     const top = rect.top - 100;
-
+    
     const maxX = winWidth - eyeWidth;
     const maxY = winHeight - eyeHeight;
     eyeX = Math.max(0, Math.min(left, maxX));
     eyeY = Math.max(0, Math.min(top, maxY));
-    rotationAngle = 0;            // сбрасываем вращение
-
+    rotationAngle = 0; // сбрасываем вращение
+    
     updateElementTransform();
     eye.classList.add('visible');
     log('showEye');
@@ -136,7 +139,7 @@ export function showEye() {
 export function hideEye() {
   const eye = dom.waitingEye;
   if (!eye) return;
-
+  
   stopPhysics();
   eye.classList.remove('visible');
   setTimeout(() => {
@@ -166,28 +169,28 @@ export function initEyeDrag() {
 function onTouchStart(e) {
   e.preventDefault();
   log('touchstart');
-  stopPhysics();                 // останавливаем физику, так как начинаем перетаскивание
-
+  stopPhysics(); // останавливаем физику, так как начинаем перетаскивание
+  
   const touch = e.touches[0];
   startX = touch.clientX;
   startY = touch.clientY;
   startLeft = eyeX;
   startTop = eyeY;
-
+  
   points = [{ x: startX, y: startY, time: performance.now() }];
   moved = false;
   isDragging = false;
-
-  rotationAngle = 0;             // при начале перетаскивания сбрасываем вращение
+  
+  rotationAngle = 0; // при начале перетаскивания сбрасываем вращение
   updateElementTransform();
-
-  dom.waitingEye.classList.add('dragging');   // визуальный класс
-
+  
+  dom.waitingEye.classList.add('dragging'); // визуальный класс
+  
   clearTimeout(holdTimer);
   holdTimer = setTimeout(() => {
     if (!isDragging) dom.waitingEye.classList.add('holding');
   }, HOLD_DELAY);
-
+  
   clearTimeout(tapTimer);
   tapTimer = setTimeout(() => {
     if (!moved && !isDragging) {
@@ -200,18 +203,18 @@ function onTouchStart(e) {
 function onTouchMove(e) {
   e.preventDefault();
   if (!isDragging && !dom.waitingEye) return;
-
+  
   const touch = e.touches[0];
   const now = performance.now();
-
+  
   points.push({ x: touch.clientX, y: touch.clientY, time: now });
   if (points.length > PHYSICS_CONFIG.speedSamples) {
     points.shift();
   }
-
+  
   const deltaX = touch.clientX - startX;
   const deltaY = touch.clientY - startY;
-
+  
   // Определяем начало перетаскивания (превышен порог)
   if (!isDragging && (Math.abs(deltaX) > DRAG_THRESHOLD || Math.abs(deltaY) > DRAG_THRESHOLD)) {
     isDragging = true;
@@ -220,16 +223,16 @@ function onTouchMove(e) {
     clearTimeout(tapTimer);
     dom.waitingEye.classList.add('holding');
   }
-
+  
   if (isDragging) {
     let newX = startLeft + deltaX;
     let newY = startTop + deltaY;
-
+    
     const maxX = winWidth - eyeWidth;
     const maxY = winHeight - eyeHeight;
     eyeX = Math.max(0, Math.min(newX, maxX));
     eyeY = Math.max(0, Math.min(newY, maxY));
-
+    
     updateElementTransform();
   }
 }
@@ -240,19 +243,20 @@ function onTouchEnd(e) {
   dom.waitingEye.classList.remove('dragging');
   clearTimeout(holdTimer);
   clearTimeout(tapTimer);
-
+  
   if (isDragging) {
     // Вычисляем скорость броска по накопленным точкам
     if (points.length >= 2) {
       const first = points[0];
       const last = points[points.length - 1];
       const totalTime = last.time - first.time;
-      let vxCalc = 0, vyCalc = 0;
+      let vxCalc = 0,
+        vyCalc = 0;
       if (totalTime > 0) {
         vxCalc = (last.x - first.x) / totalTime;
         vyCalc = (last.y - first.y) / totalTime;
       }
-
+      
       // Усредняем с последним сегментом (более свежее движение)
       if (points.length >= 3) {
         const prev = points[points.length - 2];
@@ -264,10 +268,10 @@ function onTouchEnd(e) {
           vyCalc = vySeg * 0.6 + vyCalc * 0.4;
         }
       }
-
-      startPhysics(vxCalc, vyCalc);   // запускаем физику с вычисленной скоростью
+      
+      startPhysics(vxCalc, vyCalc); // запускаем физику с вычисленной скоростью
     }
-
+    
     dom.waitingEye.classList.remove('holding');
     if (navigator.vibrate) {
       navigator.vibrate(VIBRO_CONFIG.maxDuration); // лёгкая вибрация при броске
@@ -279,7 +283,7 @@ function onTouchEnd(e) {
     }
     dom.waitingEye.classList.remove('holding');
   }
-
+  
   isDragging = false;
   moved = false;
   points = [];
@@ -331,21 +335,21 @@ function stopPhysics() {
  */
 function startPhysics(initialVx, initialVy) {
   log('startPhysics input:', initialVx, initialVy);
-
+  
   initialVx *= PHYSICS_CONFIG.throwFactor;
   initialVy *= PHYSICS_CONFIG.throwFactor;
-
+  
   const speed = Math.hypot(initialVx, initialVy);
   if (speed > PHYSICS_CONFIG.maxSpeed) {
     const scale = PHYSICS_CONFIG.maxSpeed / speed;
     initialVx *= scale;
     initialVy *= scale;
   }
-
+  
   if (Math.abs(initialVx) < PHYSICS_CONFIG.minSpeed && Math.abs(initialVy) < PHYSICS_CONFIG.minSpeed) {
     return; // слишком медленно, не запускаем анимацию
   }
-
+  
   cancelAnimation();
   vx = initialVx;
   vy = initialVy;
@@ -363,10 +367,10 @@ function startPhysics(initialVx, initialVy) {
 function applyHitEffect(impactSpeed, direction) {
   const eye = dom.waitingEye;
   if (!eye) return;
-
+  
   // Интенсивность удара от 0 до 1 (относительно максимальной скорости)
   const intensity = Math.min(1, impactSpeed / PHYSICS_CONFIG.maxSpeed);
-
+  
   // Вибрация – длительность линейно зависит от интенсивности
   if (navigator.vibrate) {
     const vibroTime = Math.round(
@@ -375,7 +379,7 @@ function applyHitEffect(impactSpeed, direction) {
     navigator.vibrate(vibroTime);
     log(`Vibro: ${vibroTime}ms, intensity: ${intensity}`);
   }
-
+  
   // Деформация: в зависимости от направления удара задаём коэффициенты сжатия/растяжения
   let squashX, squashY;
   if (direction === 'horizontal') {
@@ -387,18 +391,18 @@ function applyHitEffect(impactSpeed, direction) {
     squashY = 1 - intensity * (1 - DEFORM_CONFIG.maxSquash);
     squashX = 1 + intensity * (DEFORM_CONFIG.maxStretch - 1);
   }
-
+  
   // Сохраняем в CSS-переменные (будут использованы в анимации)
   eye.style.setProperty('--squash-x', squashX);
   eye.style.setProperty('--squash-y', squashY);
-
+  
   // Запускаем анимацию удара (через класс wall-hit)
   eye.classList.remove('wall-hit');
   // Небольшая задержка, чтобы браузер увидел удаление класса и перезапустил анимацию
   setTimeout(() => {
     eye.classList.add('wall-hit');
   }, 10);
-
+  
   // Убираем класс после окончания анимации
   setTimeout(() => {
     eye.classList.remove('wall-hit');
@@ -410,40 +414,40 @@ function applyHitEffect(impactSpeed, direction) {
  */
 function updatePhysics(timestamp) {
   if (!isPhysicalMoving) return;
-
+  
   const eye = dom.waitingEye;
   if (!eye || eye.style.display === 'none') {
     stopPhysics();
     return;
   }
-
+  
   if (!lastTimestamp) {
     lastTimestamp = timestamp;
     animFrame = requestAnimationFrame(updatePhysics);
     return;
   }
-
+  
   const deltaTime = Math.min(50, timestamp - lastTimestamp); // ограничиваем, чтобы избежать рывков
   lastTimestamp = timestamp;
-
+  
   // Трение (экспоненциальное затухание)
   const frictionFactor = Math.exp(-PHYSICS_CONFIG.friction * deltaTime / 1000);
   vx *= frictionFactor;
   vy *= frictionFactor;
-
+  
   // Запоминаем скорость до обработки столкновений (нужна для расчёта силы удара)
   const speedBefore = Math.hypot(vx, vy);
-
+  
   // Обновляем координаты
   eyeX += vx * deltaTime;
   eyeY += vy * deltaTime;
-
+  
   // Границы экрана и отскоки
   const maxX = winWidth - eyeWidth;
   const maxY = winHeight - eyeHeight;
   let collided = false;
   let collisionDirection = null;
-
+  
   if (eyeX < 0) {
     eyeX = 0;
     vx = -vx * PHYSICS_CONFIG.elasticity;
@@ -455,7 +459,7 @@ function updatePhysics(timestamp) {
     collided = true;
     collisionDirection = 'horizontal';
   }
-
+  
   if (eyeY < 0) {
     eyeY = 0;
     vy = -vy * PHYSICS_CONFIG.elasticity;
@@ -467,12 +471,12 @@ function updatePhysics(timestamp) {
     collided = true;
     collisionDirection = 'vertical';
   }
-
+  
   if (collided) {
     // Применяем вибрацию и деформацию, пропорциональные скорости до удара
     applyHitEffect(speedBefore, collisionDirection);
   }
-
+  
   // Вращение (если включено)
   if (SPIN_CONFIG.enabled) {
     const speed = Math.hypot(vx, vy);
@@ -481,10 +485,10 @@ function updatePhysics(timestamp) {
       rotationAngle += speed * deltaTime * SPIN_CONFIG.factor * direction;
     }
   }
-
+  
   // Применяем трансформацию
   updateElementTransform();
-
+  
   // Продолжаем, если скорость выше порога
   if (Math.abs(vx) < PHYSICS_CONFIG.minSpeed && Math.abs(vy) < PHYSICS_CONFIG.minSpeed) {
     stopPhysics();

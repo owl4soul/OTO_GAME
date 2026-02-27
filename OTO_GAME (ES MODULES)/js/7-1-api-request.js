@@ -24,12 +24,12 @@ function constructFullSystemPrompt(state) {
     const worldCtx = state.settings?.worldContext || '';
     prompt = worldCtx ? base + '\n\n' + worldCtx : base;
   }
-
+  
   // ===== НОВОЕ: добавляем metaContext, если он есть =====
   if (state.metaGameState?.metaContext) {
     prompt += `\n\n### META CONTEXT\n${state.metaGameState.metaContext}`;
   }
-
+  
   return prompt;
 }
 
@@ -109,23 +109,23 @@ function buildContextBlock(state) {
   }
   
   // Г. История (сжатая для старых ходов, полная для последнего)
-  const turnsToTake = state.gameState.summary
-    ? CONFIG.activeContextTurns
-    : CONFIG.fullTurnsToSendInContext;
+  const turnsToTake = state.gameState.summary ?
+    CONFIG.activeContextTurns :
+    CONFIG.fullTurnsToSendInContext;
   const historySlice = state.gameState.history.slice(-turnsToTake);
   
   if (historySlice.length > 0) {
     const historyString = historySlice.map((entry, idx) => {
       const isLast = idx === historySlice.length - 1;
-      const choiceText = entry.actionResults
-        ? entry.actionResults.map(a => `${a.text}${a.success ? '' : ' ❌'}`).join(' | ')
-        : (entry.choice || '—');
+      const choiceText = entry.actionResults ?
+        entry.actionResults.map(a => `${a.text}${a.success ? '' : ' ❌'}`).join(' | ') :
+        (entry.choice || '—');
       
       // Старые ходы: только summary (или усечение)
       // Последний ход: полный текст для живого нарратива
-      const sceneContent = isLast
-        ? (entry.fullText || entry.summary || '(нет текста)')
-        : (entry.summary || truncateScene(entry.fullText, 400));
+      const sceneContent = isLast ?
+        (entry.fullText || entry.summary || '(нет текста)') :
+        (entry.summary || truncateScene(entry.fullText, 400));
       
       return `СЦЕНА: ${sceneContent}\nВЫБОР: ${choiceText}\n(Изменения: ${entry.changes || 'нет'})`;
     }).join('\n---\n');
@@ -143,9 +143,9 @@ function buildContextBlock(state) {
 function formatSelectedActionsForPrompt(selectedActions) {
   if (!selectedActions?.length) return "Действия не выбраны";
   return selectedActions.map(action => {
-    const status = action.success ? '✅ УСПЕХ'
-      : action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ'
-      : '❌ ПРОВАЛ';
+    const status = action.success ? '✅ УСПЕХ' :
+      action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ' :
+      '❌ ПРОВАЛ';
     return `"${action.text}" → ${status} (Сложность: ${action.difficulty_level})`;
   }).join('\n');
 }
@@ -156,8 +156,16 @@ function formatHeroStateForPrompt(heroState) {
   }
   
   const sections = {
-    stats: [], organizations: [], skills: [], inventory: [],
-    relations: [], buffs: [], debuffs: [], blessings: [], curses: [], other: []
+    stats: [],
+    organizations: [],
+    skills: [],
+    inventory: [],
+    relations: [],
+    buffs: [],
+    debuffs: [],
+    blessings: [],
+    curses: [],
+    other: []
   };
   
   heroState.forEach(item => {
@@ -168,23 +176,49 @@ function formatHeroStateForPrompt(heroState) {
     const line = `• ${item.id}: ${item.value}${extra}`;
     
     switch (type) {
-      case 'stat':               sections.stats.push(line); break;
-      case 'organization_rank':  sections.organizations.push(line); break;
-      case 'skill':              sections.skills.push(line); break;
-      case 'inventory':          sections.inventory.push(line); break;
-      case 'relations':          sections.relations.push(line); break;
-      case 'buff':               sections.buffs.push(line); break;
-      case 'debuff':             sections.debuffs.push(line); break;
-      case 'bless':              sections.blessings.push(line); break;
-      case 'curse':              sections.curses.push(line); break;
-      default:                   sections.other.push(line);
+      case 'stat':
+        sections.stats.push(line);
+        break;
+      case 'organization_rank':
+        sections.organizations.push(line);
+        break;
+      case 'skill':
+        sections.skills.push(line);
+        break;
+      case 'inventory':
+        sections.inventory.push(line);
+        break;
+      case 'relations':
+        sections.relations.push(line);
+        break;
+      case 'buff':
+        sections.buffs.push(line);
+        break;
+      case 'debuff':
+        sections.debuffs.push(line);
+        break;
+      case 'bless':
+        sections.blessings.push(line);
+        break;
+      case 'curse':
+        sections.curses.push(line);
+        break;
+      default:
+        sections.other.push(line);
     }
   });
   
   const labels = {
-    stats: 'СТАТЫ', organizations: 'ОРГАНИЗАЦИИ', skills: 'НАВЫКИ',
-    inventory: 'ИНВЕНТАРЬ', relations: 'ОТНОШЕНИЯ', buffs: 'БАФФЫ',
-    debuffs: 'ДЕБАФФЫ', blessings: 'БЛАГОСЛОВЕНИЯ', curses: 'ПРОКЛЯТИЯ', other: 'ПРОЧЕЕ'
+    stats: 'СТАТЫ',
+    organizations: 'ОРГАНИЗАЦИИ',
+    skills: 'НАВЫКИ',
+    inventory: 'ИНВЕНТАРЬ',
+    relations: 'ОТНОШЕНИЯ',
+    buffs: 'БАФФЫ',
+    debuffs: 'ДЕБАФФЫ',
+    blessings: 'БЛАГОСЛОВЕНИЯ',
+    curses: 'ПРОКЛЯТИЯ',
+    other: 'ПРОЧЕЕ'
   };
   
   return Object.entries(sections)
