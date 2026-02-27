@@ -36,31 +36,27 @@ const DOMPurify = window.DOMPurify || {
  * @returns {number} Общее количество ключей/элементов
  */
 function countKeysRecursive(obj, visited = new Set()) {
-    if (obj === null || obj === undefined || typeof obj !== 'object') {
-        return 0;
-    }
-    
-    if (visited.has(obj)) {
-        return 0;
-    }
+    if (obj === null || obj === undefined) return 0;
+    if (visited.has(obj)) return 0;
     visited.add(obj);
-    
-    let totalCount = 0;
-    
+
+    // Примитивы – это одно значение
+    if (typeof obj !== 'object') return 1;
+
     if (Array.isArray(obj)) {
-        totalCount = obj.length;
+        let total = obj.length;
         for (let i = 0; i < obj.length; i++) {
-            totalCount += countKeysRecursive(obj[i], visited);
+            total += countKeysRecursive(obj[i], visited);
         }
+        return total;
     } else {
         const keys = Object.keys(obj);
-        totalCount = keys.length;
+        let total = keys.length;
         for (let i = 0; i < keys.length; i++) {
-            totalCount += countKeysRecursive(obj[keys[i]], visited);
+            total += countKeysRecursive(obj[keys[i]], visited);
         }
+        return total;
     }
-    
-    return totalCount;
 }
 
 /**
@@ -182,20 +178,21 @@ function renderAiMemoryRecursive(obj, depth = 0) {
  * @returns {string} HTML-строка с отформатированной памятью
  */
 function formatAiMemory(aiMemory) {
-    if (!aiMemory || typeof aiMemory !== 'object') {
+    // Если данных нет – специальная заглушка
+    if (aiMemory === null || aiMemory === undefined) {
         return '<div style="color: #888; font-style: italic; padding: 10px; text-align: center;">Нет данных в памяти ГМ</div>';
     }
-    
+
     const totalKeys = countKeysRecursive(aiMemory);
     const isComplex = totalKeys > 50;
-    
+
     const memoryInfo = `<div style="color: #aaa; font-size: 0.8em; margin-bottom: 10px; padding: 8px; background: rgba(251, 197, 49, 0.05); border-radius: 3px; border: 1px solid rgba(251, 197, 49, 0.1);">
         <i class="fas fa-info-circle"></i> Память ГМ содержит: <strong style="color: #fbc531;">${totalKeys}</strong> ключей/элементов
         ${isComplex ? '<span style="color: #ff9ff3; margin-left: 10px;"><i class="fas fa-exclamation-triangle"></i> Сложная структура</span>' : ''}
     </div>`;
-    
+
     const memoryContent = renderAiMemoryRecursive(aiMemory);
-    
+
     return memoryInfo + memoryContent;
 }
 
@@ -292,8 +289,8 @@ export function renderDesignNotes(container, designNotes) {
  * @param {Object} aiMemory - объект памяти
  */
 export function renderAiMemory(container, aiMemory) {
-    if (!aiMemory || typeof aiMemory !== 'object' || Object.keys(aiMemory).length === 0) {
-        // Показываем заглушку, если нужно
+    // Если данных нет вообще – показываем заглушку
+    if (aiMemory === null || aiMemory === undefined) {
         const emptyBlock = document.createElement('div');
         emptyBlock.className = 'scene-meta-block no-memory-block';
         emptyBlock.innerHTML = `
@@ -305,7 +302,7 @@ export function renderAiMemory(container, aiMemory) {
         return;
     }
     
-    const memoryContent = formatAiMemory(aiMemory);
+    const memoryHtml = formatAiMemory(aiMemory);
     
     const block = document.createElement('div');
     block.className = 'scene-meta-block ai-memory-block';
@@ -313,16 +310,16 @@ export function renderAiMemory(container, aiMemory) {
     block.innerHTML = `
         <div class="ai-memory-header">
             <i class="fas fa-brain"></i> ПАМЯТЬ ГМ:
-            <span class="ai-memory-stats">${Object.keys(aiMemory).length} полей</span>
+            <span class="ai-memory-stats">${typeof aiMemory === 'object' ? Object.keys(aiMemory).length : '—'}</span>
         </div>
         <div class="ai-memory-content">
-            ${memoryContent}
+            ${memoryHtml}
         </div>
     `;
     
     container.appendChild(block);
     
-    // Добавляем возможность сворачивания после рендеринга
+    // Добавляем возможность сворачивания
     setTimeout(() => makeAiMemoryCollapsible(), 200);
 }
 
@@ -422,7 +419,7 @@ export function renderReflection(container, reflection) {
     
     block.innerHTML = `
         <div class="reflection-title">
-            <i class="fas fa-eye"></i> Рефлексия ГМ
+            <i class="fas fa-eye"></i> Рефлексия героя
         </div>
         <div class="reflection-content">
             ${Utils.escapeHtml(reflection).replace(/\n/g, '<br>')}

@@ -1,4 +1,4 @@
-// Модуль 7.1: API REQUEST - Построение и отправка запросов (v5.0)
+// Модуль 7.1: API REQUEST - Построение и отправка запросов (v5.1)
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -13,14 +13,24 @@ import { PROMPTS } from './prompts.js';
  * Конструирует системный промпт в зависимости от типа игры:
  * - 'standard'  → универсальный + контекст мира ОТО
  * - другие      → универсальный + worldContext из настроек (если задан)
+ * + добавляет metaContext из состояния, если есть
  */
 function constructFullSystemPrompt(state) {
+  let prompt;
   if (state.gameType === 'standard') {
-    return PROMPTS.standardGameOTO.system.gameMaster;
+    prompt = PROMPTS.standardGameOTO.system.gameMaster;
+  } else {
+    const base = PROMPTS.system.gameMaster;
+    const worldCtx = state.settings?.worldContext || '';
+    prompt = worldCtx ? base + '\n\n' + worldCtx : base;
   }
-  const base = PROMPTS.system.gameMaster;
-  const worldCtx = state.settings?.worldContext || '';
-  return worldCtx ? base + '\n\n' + worldCtx : base;
+
+  // ===== НОВОЕ: добавляем metaContext, если он есть =====
+  if (state.metaGameState?.metaContext) {
+    prompt += `\n\n### META CONTEXT\n${state.metaGameState.metaContext}`;
+  }
+
+  return prompt;
 }
 
 // ============================================================================
@@ -225,11 +235,19 @@ ${needsThoughts ? '\n### Сгенерируй 10+ мыслей героя (thoug
 }
 
 // ============================================================================
-// HTTP ЗАПРОС
+// HTTP ЗАПРОС (УЛУЧШЕННОЕ ЛОГГИРОВАНИЕ)
 // ============================================================================
 
 async function executeFetchRaw(url, headers, payload, abortController) {
-  console.log(`🚀 [API] ${url} | model: ${payload.model}`);
+  // Логируем детали запроса
+  const logHeaders = { ...headers };
+  if (logHeaders.Authorization) logHeaders.Authorization = 'Bearer [HIDDEN]';
+  console.log(`🚀 [API] Запрос к ${url}`, {
+    method: 'POST',
+    headers: logHeaders,
+    body: JSON.stringify(payload).substring(0, 200) + '...',
+    model: payload.model
+  });
   
   try {
     const response = await fetch(url, {
@@ -241,10 +259,11 @@ async function executeFetchRaw(url, headers, payload, abortController) {
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ HTTP ${response.status}:`, errorText.substring(0, 200));
+      console.error(`❌ HTTP ${response.status}:`, errorText);
       const error = new Error(`HTTP Error ${response.status}: ${errorText}`);
       error.rawResponse = errorText;
       error.status = response.status;
+      error.requestDetails = { url, method: 'POST', headers: logHeaders, payload };
       throw error;
     }
     
@@ -253,12 +272,14 @@ async function executeFetchRaw(url, headers, payload, abortController) {
     return rawText;
     
   } catch (error) {
-    console.error('🔥 Ошибка запроса:', error.message);
-    if (!error.rawResponse) error.rawResponse = '';
-    if (!error.status && error.message.includes('HTTP Error')) {
-      const match = error.message.match(/HTTP Error (\d+):/);
-      if (match) error.status = parseInt(match[1]);
+    // Если ошибка сети (fetch не выполнился), добавляем информацию
+    if (!error.rawResponse) {
+      error.rawResponse = `Network error: ${error.message}`;
     }
+    if (!error.requestDetails) {
+      error.requestDetails = { url, method: 'POST', headers: logHeaders, payload };
+    }
+    console.error('🔥 Ошибка запроса:', error.message, error.requestDetails);
     throw error;
   }
 }

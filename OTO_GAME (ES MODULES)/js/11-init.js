@@ -18,6 +18,8 @@ import { HistoryUI } from './history-ui.js';
 // import { theme } from './theme.js';
 import { themeEditorPro } from './theme/theme-editor-pro.js';
 import { themeManagerPro } from './theme/theme-pro.js';
+import { OperationsServiceInstance } from './operations-service.js';
+import { API_Response } from './7-2-api-response.js';
 
 const dom = DOM.getDOM();
 
@@ -27,90 +29,88 @@ const dom = DOM.getDOM();
 function init() {
     try {
         Logger.info('BOOT', "🚀 Инициализация O.T.O. QUEST...");
-        
-        
+
         // 0. Инициализация темы (Самым первым шагом, чтобы избежать мигания стилей)
         themeManagerPro.initialize();
         Logger.success('THEME', "Менеджер тем инициализирован");
-        
+
         // 1. Проверяем, что DOM полностью готов
         if (!document.body || document.readyState !== 'complete') {
             Logger.info('DOM', "DOM не готов, ожидаем...");
             setTimeout(init, 50);
             return;
         }
-        
+
         Logger.success('DOM', "DOM полностью загружен");
-        
+
         // 2. Проверяем, что состояние корректно инициализировано
         const state = State.getState();
         if (!state || !state.gameState || !state.gameState.currentScene) {
             Logger.error('STATE', "Состояние игры не инициализировано корректно");
             throw new Error('Состояние игры не инициализировано корректно');
         }
-        
+
         Logger.success('STATE', `Состояние инициализировано (игра: ${state.gameId}, ход: ${state.turnCount})`);
-        
+
         // 3. Инициализируем UI модули в ПРАВИЛЬНОМ ПОРЯДКЕ:
-        
+
         // 4.1 Сначала рендерим сцену, чтобы создать все необходимые контейнеры
         Logger.info('RENDER', "Рендеринг сцены для создания контейнеров...");
         Render.renderScene();
         Render.renderChoices();
-        
+
         // 4.2 Теперь инициализируем UI модули, которые зависят от контейнеров в DOM
         Logger.info('UI', "Инициализация UI модулей...");
-        
+
         if (GameItemUI && typeof GameItemUI.initialize === 'function') {
             Logger.info('GAMEITEM', "Инициализация GameItemUI...");
             GameItemUI.initialize();
             Logger.success('GAMEITEM', "GameItemUI инициализирован");
         }
-        
+
         if (TurnUpdatesUI && typeof TurnUpdatesUI.initialize === 'function') {
             TurnUpdatesUI.initialize();
             Logger.success('UI', "TurnUpdatesUI инициализирован");
         }
-        
+
         if (StatsUI && typeof StatsUI.initialize === 'function') {
             StatsUI.initialize();
             Logger.success('UI', "StatsUI инициализирован");
         }
-        
+
         if (HistoryUI && typeof HistoryUI.initialize === 'function') {
             HistoryUI.initialize();
             Logger.success('UI', "HistoryUI инициализирован");
         }
-        
+
         // 4.3 Инициализируем основной UI
         UI.init();
         Logger.success('UI', "Основной UI инициализирован");
-        
+
         // Настраиваем события
         Logger.info('EVENTS', "Настройка обработчиков событий...");
         setupEventListeners();
         setupFullscreenListeners();
         Logger.success('EVENTS', "Обработчики событий настроены");
-        
+
         // ✅ КРИТИЧЕСКИ ВАЖНО: принудительно устанавливаем сохранённый текст в поле свободного ввода
-        // Даже если режим свободного ввода выключен, поле должно содержать текст для будущего включения
         if (dom.freeInputText) {
             dom.freeInputText.value = state.freeModeText || '';
         }
-        
+
         // Обновляем кнопки действий
         UI.updateActionButtons();
-        
+
         // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода и т.д.)
         Render.updateUIMode();
-        
+
         // Финальная проверка: убеждаемся, что все контейнеры отображены
         setTimeout(() => {
             checkAllContainersVisible();
         }, 100);
-        
+
         Logger.success('SYSTEM', `📊 Статистика: Ход ${state.turnCount}, Организации: ${State.getHeroOrganizations().length}`);
-        
+
         // 5. Настраиваем игровые подписки ПОСЛЕ инициализации всех модулей
         Logger.info('GAME', "Настройка игровых подписок...");
         if (Game.setupGameObservers) {
@@ -119,15 +119,14 @@ function init() {
         if (Render.setupStateObservers) {
             Render.setupStateObservers();
         }
-        
+
         // Обновляем состояние четырёх иконок проверки моделей в настройках
         Render.updateModelStats();
-        
+
         Logger.success('SYSTEM', "✅ Система полностью инициализирована и готова");
     } catch (error) {
         Logger.error('FATAL', "Критическая ошибка инициализации", error);
-        
-        // Показываем подробную ошибку пользователю
+
         const errorDetails = `
 🚨 КРИТИЧЕСКАЯ ОШИБКА ЗАПУСКА ИГРЫ:
 
@@ -144,10 +143,9 @@ ${error.stack || 'Нет информации о стеке'}
 
 Время ошибки: ${new Date().toLocaleString()}
         `;
-        
+
         console.error(errorDetails);
-        
-        // Показываем ошибку в интерфейсе
+
         if (dom.sceneArea) {
             dom.sceneArea.innerHTML = `
                 <div style="color: #ff3838; padding: 30px; text-align: center; background: rgba(255,0,0,0.1); border: 2px solid #ff3838; border-radius: 5px;">
@@ -169,16 +167,16 @@ ${error.stack || 'Нет информации о стеке'}
 function checkAllContainersVisible() {
     try {
         console.log('🔍 Проверка видимости всех контейнеров...');
-        
+
         const requiredContainers = [
             'personalityBlockContainer',
             'typologyContainer',
             'organizationsContainer',
             'turnUpdatesContainer'
         ];
-        
+
         let allVisible = true;
-        
+
         requiredContainers.forEach(containerId => {
             const container = document.getElementById(containerId);
             if (container) {
@@ -190,17 +188,11 @@ function checkAllContainersVisible() {
                 allVisible = false;
             }
         });
-        
+
         if (allVisible) {
             console.log('✅ ВСЕ обязательные контейнеры отображены');
         } else {
             console.warn('⚠️ Некоторые контейнеры не отображены!');
-            // Попытка восстановить отображение
-            /*
-            if (GameItemUI && typeof GameItemUI.forceUpdate === 'function') {
-                console.log('🔄 Попытка восстановить отображение через forceUpdate...');
-                GameItemUI.forceUpdate();
-            }*/
         }
     } catch (error) {
         console.error('❌ Ошибка при проверке видимости контейнеров:', error);
@@ -215,41 +207,32 @@ function setupEventListeners() {
     if (dom.btnSubmit) {
         dom.btnSubmit.onclick = () => Game.submitTurn();
     }
-    
+
     if (dom.btnClear) {
         dom.btnClear.onclick = () => Game.handleClear();
     }
-    
+
     // ========== ПЕРЕКЛЮЧАТЕЛЬ РЕЖИМА ==========
     if (dom.freeModeToggle) {
-        // Используем обновленный обработчик из Game.js
         dom.freeModeToggle.onchange = (e) => Game.handleFreeModeToggle(e);
     }
-    
+
     // ========== ПОЛЕ СВОБОДНОГО ВВОДА ==========
     if (dom.freeInputText) {
-        // ✅ Debounce-таймер для сохранения
         let saveTimeout;
-        
-        // Обработка ввода текста для активации кнопки
         dom.freeInputText.oninput = (e) => {
             const state = State.getState();
-            state.freeModeText = e.target.value; // изменяем объект напрямую
-            
+            state.freeModeText = e.target.value;
             const hasText = state.freeModeText.trim().length > 0;
             dom.choicesCounter.textContent = hasText ? '✓/∞' : '0/∞';
-            
-            // ❌ УБИРАЕМ State.setState({ freeModeText: ... }) – уже изменили объект
             UI.updateActionButtons();
-            
-            // Debounce сохранения: 500 мс после остановки ввода
+
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(() => {
                 State.saveStateToLocalStorage();
             }, 500);
         };
-        
-        // Отправка по Ctrl+Enter
+
         dom.freeInputText.onkeydown = (e) => {
             if (e.ctrlKey && e.key === 'Enter') {
                 e.preventDefault();
@@ -257,42 +240,41 @@ function setupEventListeners() {
             }
         };
     }
-    
+
     // ========== КНОПКА НАСТРОЕК ==========
     const btnSettings = document.getElementById('btnSettings');
     if (btnSettings) {
-        // Вызываем UI метод
         btnSettings.onclick = () => UI.openSettingsModal();
     }
-    
+
     // ========== КНОПКА ПОЛНОЭКРАННОГО РЕЖИМА ==========
     const btnFullscreen = document.getElementById('btnFullscreen');
     if (btnFullscreen) {
-        // Вызываем UI метод
         btnFullscreen.onclick = () => UI.toggleFullscreen();
     }
-    
+
     // ========== КНОПКИ МАСШТАБИРОВАНИЯ ==========
     const btnScaleUp = document.getElementById('btnScaleUp');
     if (btnScaleUp) {
-        // Вызываем UI метод
         btnScaleUp.onclick = () => UI.scaleUp();
     }
-    
+
     const btnScaleDown = document.getElementById('btnScaleDown');
     if (btnScaleDown) {
-        // Вызываем UI метод
         btnScaleDown.onclick = () => UI.scaleDown();
     }
-    
+
     // ========== НАСТРОЙКИ В МОДАЛЬНОМ ОКНЕ ==========
     setupSettingsModalEvents();
-    
+
     // ========== СОХРАНЕНИЕ/ЗАГРУЗКА ==========
     setupSaveLoadEvents();
-    
+
     // ========== АУДИТ-ЛОГ ==========
     setupAuditEvents();
+
+    // ========== ОБРАБОТЧИК ПРИНЯТИЯ СЮЖЕТА (переопределён) ==========
+    setupAcceptPlotHandler();
 }
 
 /**
@@ -301,19 +283,17 @@ function setupEventListeners() {
 function setupSettingsModalEvents() {
     const closeModalBtn = document.getElementById('closeModalBtn');
     if (closeModalBtn) {
-        // Вызываем UI метод
         closeModalBtn.onclick = () => UI.closeSettingsModal();
     }
-    
-    // В setupSettingsModalEvents:
+
     const btnTheme = document.getElementById('btnOpenThemeEditor');
     if (btnTheme) {
         btnTheme.onclick = () => {
-            UI.closeSettingsModal(); // Закрываем основные настройки
-            themeEditorPro.open(); // Открываем редактор темы
+            UI.closeSettingsModal();
+            themeEditorPro.open();
         };
     }
-    
+
     // --- 1. Провайдер API ---
     const providerInput = document.getElementById('providerInput');
     if (providerInput) {
@@ -327,10 +307,9 @@ function setupSettingsModalEvents() {
             Render.updateModelDetails();
             State.saveStateToLocalStorage();
         };
-        // Устанавливаем текущее значение
         providerInput.value = State.getState().settings.apiProvider;
     }
-    
+
     // --- 2. API ключи ---
     const apiKeyOpenrouterInput = document.getElementById('apiKeyOpenrouterInput');
     if (apiKeyOpenrouterInput) {
@@ -343,7 +322,7 @@ function setupSettingsModalEvents() {
         };
         apiKeyOpenrouterInput.value = State.getState().settings.apiKeyOpenrouter;
     }
-    
+
     const apiKeyVsegptInput = document.getElementById('apiKeyVsegptInput');
     if (apiKeyVsegptInput) {
         apiKeyVsegptInput.oninput = () => {
@@ -355,7 +334,7 @@ function setupSettingsModalEvents() {
         };
         apiKeyVsegptInput.value = State.getState().settings.apiKeyVsegpt;
     }
-    
+
     // --- 3. Модель ИИ ---
     const modelInput = document.getElementById('modelInput');
     if (modelInput) {
@@ -368,60 +347,54 @@ function setupSettingsModalEvents() {
             State.saveStateToLocalStorage();
         };
     }
-    
+
     // --- 4. Кнопки тестирования ---
     const testCurrentProviderBtn = document.getElementById('testCurrentProviderBtn');
     if (testCurrentProviderBtn) {
         testCurrentProviderBtn.onclick = () => API.testCurrentProvider();
     }
-    
+
     const testSelectedModelBtn = document.getElementById('testSelectedModelBtn');
     if (testSelectedModelBtn) {
         testSelectedModelBtn.onclick = () => API.testSelectedModel();
     }
-    
+
     // --- 5. ГЕНЕРАТОР СЮЖЕТА ---
     const plotInput = document.getElementById('plotInput');
     const btnGen = document.getElementById('btnGenPlot');
     const btnClear = document.getElementById('btnClearPlot');
     const btnAccept = document.getElementById('btnAcceptPlot');
-    
+
     if (plotInput) {
         plotInput.oninput = () => {
             const val = plotInput.value.trim();
             if (btnAccept) btnAccept.disabled = val.length === 0;
         };
     }
-    
+
     if (btnClear && plotInput) {
         btnClear.onclick = () => {
             plotInput.value = '';
             if (btnAccept) btnAccept.disabled = true;
         };
     }
-    
+
     if (btnGen && plotInput) {
         btnGen.onclick = async () => {
             const currentText = plotInput.value.trim();
             const promptToSend = currentText.length > 0 ? currentText + "</br>" + CONFIG.marsyasScenarioPrompt : CONFIG.marsyasScenarioPrompt;
-            
+
             btnGen.disabled = true;
             const oldBtnText = btnGen.innerHTML;
             btnGen.innerHTML = '<span class="spinner"></span> ГЕНЕРАЦИЯ...';
-            
+
             if (btnAccept) btnAccept.disabled = true;
             if (btnClear) btnClear.disabled = true;
             plotInput.disabled = true;
-            
+
             try {
-                const responseText = await API.generateCustomScene(promptToSend);
-                plotInput.value = responseText;
-                
-                try {
-                    const json = JSON.parse(responseText);
-                    plotInput.value = JSON.stringify(json, null, 2);
-                } catch (e) {}
-                
+                const sceneData = await API.generateCustomScene(promptToSend);
+                plotInput.value = JSON.stringify(sceneData, null, 2);
                 Render.showSuccessAlert("Сюжет сгенерирован", "Ответ от ИИ получен.");
             } catch (error) {
                 console.error("Ошибка генерации сюжета:", error);
@@ -435,113 +408,198 @@ function setupSettingsModalEvents() {
             }
         };
     }
-    // Принять сгенерированный сюжет (начало игры по сгенерированному сюжету):
-    if (btnAccept && plotInput) {
-        btnAccept.onclick = () => {
-            const text = plotInput.value.trim();
-            if (!text) return;
-            
+}
+
+/**
+ * НОВЫЙ ОБРАБОТЧИК ДЛЯ КНОПКИ "ПРИНЯТЬ" (полная обработка game_items и событий)
+ */
+function setupAcceptPlotHandler() {
+    const btnAccept = document.getElementById('btnAcceptPlot');
+    const plotInput = document.getElementById('plotInput');
+    if (!btnAccept || !plotInput) return;
+
+    btnAccept.onclick = () => {
+        const rawText = plotInput.value.trim();
+        if (!rawText) return;
+
+        let clean = rawText
+            .replace(/^```json\s*/i, '')
+            .replace(/\s*```$/i, '')
+            .replace(/^```\s*/i, '')
+            .trim();
+
+        let sceneData;
+        try {
+            sceneData = JSON.parse(clean);
+            console.log('✅ JSON parsed successfully');
+        } catch (parseError) {
+            console.warn('⚠️ Стандартный парсинг JSON не удался, пробуем восстановление...', parseError);
             try {
-                const sceneData = Utils.safeParseAIResponse(text);
-                const state = State.getState();
-                
-                // -------------------------------------------------
-                //  ПОЛНЫЙ СБРОС ПРОГРЕССА БЕЗ resetGameProgress
-                // -------------------------------------------------
-                // Сохраняем только настройки, UI, модели, аудит и API-ключи
-                const preserved = {
-                    settings: { ...state.settings },
-                    ui: { ...state.ui },
-                    models: [...state.models],
-                    auditLog: [...state.auditLog],
-                    gameId: Utils.generateUniqueId(),
-                    lastSaveTime: new Date().toISOString()
-                };
-                
-                // ✅ Получаем чистый дефолтный герой через метод State
-                const newHeroState = State.getDefaultHeroState();
-                
-                // Новое состояние игры — полностью с нуля
-                const newGameState = {
-                    summary: "",
-                    history: [],
-                    aiMemory: {},
-                    currentScene: {
-                        scene: sceneData.scene || sceneData.text || "",
-                        choices: sceneData.choices || [],
-                        reflection: sceneData.reflection || "",
-                        typology: sceneData.typology || "",
-                        thoughts: sceneData.thoughts || [],
-                        summary: sceneData.summary || "",
-                        aiMemory: sceneData.aiMemory || {},
-                        events: sceneData.events || [],
-                        design_notes: sceneData.design_notes || "",
-                        gameType: 'custom' // 👈 ключевое поле
-                    },
-                    selectedActions: [],
-                    organizationsHierarchy: sceneData.organization_rank_hierarchy ?
-                        { ...sceneData.organization_rank_hierarchy } :
-                        {}
-                };
-                
-                // Первая запись в истории
-                newGameState.history.push({
-                    fullText: newGameState.currentScene.scene,
-                    choice: "Начало игры (загруженный сюжет)",
-                    changes: "Загружен новый сюжет",
-                    turn: 1
-                });
-                
-                // Собираем полное новое состояние
-                const newState = {
-                    ...preserved,
-                    version: '4.1.0',
-                    gameType: 'custom',
-                    turnCount: 1,
-                    heroState: newHeroState,
-                    gameState: newGameState,
-                    isRitualActive: false,
-                    ritualProgress: 0,
-                    ritualTarget: null,
-                    freeMode: false,
-                    freeModeText: '',
-                    lastTurnUpdates: "",
-                    lastTurnStatChanges: null,
-                    thoughtsOfHero: [],
-                    pendingRequest: null
-                };
-                
-                // Применяем и сохраняем
-                State.setState(newState);
-                State.saveStateToLocalStorage();
-                
-                // Оповещаем систему
-                State.emit(State.EVENTS.GAME_TYPE_CHANGED, {
-                    oldGameType: state.gameType,
-                    newGameType: 'custom'
-                });
-                State.emit(State.EVENTS.HERO_CHANGED, { type: 'reset', heroState: newHeroState });
-                State.emit(State.EVENTS.SCENE_CHANGED, { scene: newGameState.currentScene });
-                
-                // Перерисовка
-                Render.renderScene();
-                Render.renderChoices();
-                if (typeof GameItemUI?.forceUpdate === 'function') GameItemUI.forceUpdate();
-                if (typeof StatsUI?.render === 'function') StatsUI.render();
-                if (typeof HistoryUI?.render === 'function') HistoryUI.render();
-                
-                UI.closeSettingsModal();
-                Render.showSuccessAlert("Сюжет принят", "Новая кастомная игра запущена.");
-                
-            } catch (error) {
-                Render.showErrorAlert(
-                    "Ошибка загрузки",
-                    "Текст не является валидным JSON или отсутствует поле 'scene'.",
-                    error
-                );
+                sceneData = Utils.robustJsonParse(clean);
+                console.log('✅ Удалось восстановить JSON через robustJsonParse');
+            } catch (robustError) {
+                console.error('❌ Восстановление JSON также не удалось', robustError);
+                Render.showErrorAlert("Ошибка парсинга JSON", "Не удалось распарсить ответ", parseError);
+                return;
             }
+        }
+
+        console.log('📦 sceneData keys:', Object.keys(sceneData));
+
+        // Сохраняем настройки и пр.
+        const state = State.getState();
+        const preserved = {
+            settings: { ...state.settings },
+            ui: { ...state.ui },
+            models: [...state.models],
+            auditLog: [...state.auditLog],
+            gameId: Utils.generateUniqueId(),
+            lastSaveTime: new Date().toISOString()
         };
-    }
+
+        // 1. Начальное состояние героя (дефолтное)
+        let heroState = State.getDefaultHeroState(); // [{stat:will:50}, ...]
+
+        // 2. Добавляем/обновляем все game_items из сцены (если есть)
+        if (sceneData.game_items && Array.isArray(sceneData.game_items)) {
+            sceneData.game_items.forEach(newItem => {
+                const existingIndex = heroState.findIndex(item => item.id === newItem.id);
+                if (existingIndex >= 0) {
+                    // Обновляем существующий
+                    heroState[existingIndex] = { ...heroState[existingIndex], ...newItem };
+                } else {
+                    // Добавляем новый
+                    heroState.push({ ...newItem });
+                }
+            });
+        }
+
+        // 3. Применяем операции из корня, если есть
+        if (sceneData.operations && Array.isArray(sceneData.operations)) {
+            const normalizedOps = API_Response.normalizeOperations(sceneData.operations, 'initial');
+            OperationsServiceInstance.applyOperations(normalizedOps, heroState);
+        }
+
+        // 4. Применяем эффекты событий и сохраняем результаты для каждого события
+        const eventOperationResults = [];
+        if (sceneData.events && Array.isArray(sceneData.events)) {
+            // Собираем все эффекты событий в один массив
+            const allEffects = sceneData.events.flatMap(event => event.effects || []);
+            if (allEffects.length > 0) {
+                const eventResult = OperationsServiceInstance.applyOperations(allEffects, heroState);
+                // Разбиваем результаты по событиям
+                let effectIndex = 0;
+                sceneData.events.forEach((event, evIdx) => {
+                    const count = event.effects?.length || 0;
+                    eventOperationResults[evIdx] = eventResult.results?.slice(effectIndex, effectIndex + count) || [];
+                    effectIndex += count;
+                });
+            } else {
+                sceneData.events.forEach((_, i) => { eventOperationResults[i] = []; });
+            }
+        }
+
+        // 5. Обновляем metaGameState, если есть meta_context
+        if (sceneData.meta_context) {
+            State.setMetaContext(JSON.stringify(sceneData.meta_context));
+        }
+
+        // Создаём новое gameState
+        const newGameState = {
+            summary: sceneData.summary || "",
+            history: [],
+            aiMemory: {},
+            currentScene: {
+                scene: sceneData.scene || sceneData.text || "",
+                choices: sceneData.choices || [],
+                reflection: sceneData.reflection || "",
+                typology: sceneData.typology || "",
+                thoughts: sceneData.thoughts || [],
+                summary: sceneData.summary || "",
+                aiMemory: sceneData.aiMemory || {},
+                events: sceneData.events || [],
+                design_notes: sceneData.design_notes || "",
+                gameType: 'custom'
+            },
+            selectedActions: [],
+            organizationsHierarchy: {}
+        };
+
+        // Извлекаем иерархии организаций
+        if (sceneData._organizationsHierarchy) {
+            newGameState.organizationsHierarchy = { ...sceneData._organizationsHierarchy };
+        } else {
+            Object.keys(sceneData).forEach(key => {
+                if (key.startsWith('organization_rank_hierarchy:')) {
+                    const orgId = key.split(':')[1];
+                    if (orgId) newGameState.organizationsHierarchy[orgId] = sceneData[key];
+                }
+            });
+        }
+
+        // Первая запись в истории
+        newGameState.history.push({
+            fullText: newGameState.currentScene.scene,
+            choice: "Начало игры (загруженный сюжет)",
+            changes: "Загружен новый сюжет",
+            turn: 1
+        });
+
+        // Собираем новое состояние, пока без lastTurnUpdates (оставим пустым)
+        const newState = {
+            ...preserved,
+            version: '4.1.0',
+            gameType: 'custom',
+            turnCount: 1,
+            heroState: heroState,
+            gameState: newGameState,
+            isRitualActive: false,
+            ritualProgress: 0,
+            ritualTarget: null,
+            freeMode: false,
+            freeModeText: '',
+            lastTurnUpdates: "", // временно пусто
+            lastTurnStatChanges: null,
+            thoughtsOfHero: [],
+            pendingRequest: null,
+            metaGameState: { ...state.metaGameState } // уже обновлено через setMetaContext
+        };
+
+        // Устанавливаем основное состояние
+        State.setState(newState);
+        State.saveStateToLocalStorage();
+
+        // 6. Генерируем HTML для начальных событий с результатами их применения
+        if (TurnUpdatesUI && typeof TurnUpdatesUI.generateUpdatesHTML === 'function') {
+            TurnUpdatesUI.generateUpdatesHTML(
+                [],                                // actionResults – пусто, хода не было
+                newGameState.currentScene.events || [], // события из сцены
+                0,                                 // номер хода (можно 0)
+                [],                                // actionOperationResults – пусто
+                eventOperationResults               // результаты применения эффектов событий
+            );
+        }
+
+        // Принудительно обновляем отображение панели
+        if (TurnUpdatesUI && TurnUpdatesUI.initialized) {
+            TurnUpdatesUI.renderFromState();
+        }
+
+        // Эмитим события
+        State.emit(State.EVENTS.GAME_TYPE_CHANGED, { oldGameType: state.gameType, newGameType: 'custom' });
+        State.emit(State.EVENTS.HERO_CHANGED, { type: 'reset', heroState });
+        State.emit(State.EVENTS.SCENE_CHANGED, { scene: newGameState.currentScene });
+
+        // Рендерим всё
+        Render.renderScene();
+        Render.renderChoices();
+        GameItemUI?.forceUpdate?.();
+        StatsUI?.render?.();
+        HistoryUI?.render?.();
+
+        UI.closeSettingsModal();
+        Utils.showToast('Новая кастомная игра запущена', 'success');
+    };
 }
 
 /**
@@ -554,18 +612,14 @@ function setupSaveLoadEvents() {
             const result = await Saveload.loadGameFromFile();
             if (result.success) {
                 Render.showSuccessAlert("Игра загружена", `Файл: ${result.fileName}`);
-                // После загрузки переинициализируем UI модули
                 UI.init();
                 Render.renderScene();
                 Render.renderChoices();
-                
-                // ✅ Принудительно устанавливаем текст в поле свободного ввода
+
                 const state = State.getState();
                 if (dom.freeInputText) {
                     dom.freeInputText.value = state.freeModeText || '';
                 }
-                
-                // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода)
                 Render.updateUIMode();
                 GameItemUI.forceUpdate();
                 StatsUI.render();
@@ -575,7 +629,7 @@ function setupSaveLoadEvents() {
             }
         };
     }
-    
+
     const saveGameBtn = document.getElementById('saveGameBtn');
     if (saveGameBtn) {
         saveGameBtn.onclick = async () => {
@@ -587,7 +641,7 @@ function setupSaveLoadEvents() {
             }
         };
     }
-    
+
     const exportAllDataBtn = document.getElementById('exportAllDataBtn');
     if (exportAllDataBtn) {
         exportAllDataBtn.onclick = async () => {
@@ -596,7 +650,7 @@ function setupSaveLoadEvents() {
             else Render.showErrorAlert("Ошибка экспорта", result.error);
         };
     }
-    
+
     const importAllDataBtn = document.getElementById('importAllDataBtn');
     if (importAllDataBtn) {
         importAllDataBtn.onclick = async () => {
@@ -608,14 +662,11 @@ function setupSaveLoadEvents() {
                 Render.updateModelDetails();
                 Audit.renderAuditList();
                 UI.init();
-                
-                // ✅ Принудительно устанавливаем текст в поле свободного ввода
+
                 const state = State.getState();
                 if (dom.freeInputText) {
                     dom.freeInputText.value = state.freeModeText || '';
                 }
-                
-                // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода)
                 Render.updateUIMode();
                 GameItemUI.forceUpdate();
                 StatsUI.render();
@@ -625,7 +676,7 @@ function setupSaveLoadEvents() {
             }
         };
     }
-    
+
     const exportHistoryBtn = document.getElementById('exportHistoryBtn');
     if (exportHistoryBtn) {
         exportHistoryBtn.onclick = () => {
@@ -645,7 +696,7 @@ function setupSaveLoadEvents() {
             Render.showSuccessAlert("История экспортирована", fileName);
         };
     }
-    
+
     const quickSaveBtn = document.getElementById('quickSaveBtn');
     if (quickSaveBtn) {
         quickSaveBtn.onclick = () => {
@@ -653,24 +704,22 @@ function setupSaveLoadEvents() {
             Render.showSuccessAlert("Быстрое сохранение", "Игра сохранена в браузере.");
         };
     }
-    
-    // В настройках: ПОЛНЫЙ СБРОС и СБРОС ИГРЫ
+
     const btnFullReset = document.getElementById('btnFullReset');
     if (btnFullReset) {
         btnFullReset.onclick = () => State.resetFullGame();
     }
-    
+
     const btnResetGameProgress = document.getElementById('btnResetGameProgress');
     if (btnResetGameProgress) {
         btnResetGameProgress.onclick = () => State.resetGameProgress();
     }
-    
-    // На экране Победы/Поражения: ЗАНОВО и ПРОДОЛЖИТЬ
+
     const btnRestartGame = document.getElementById('btnRestartGame');
     if (btnRestartGame) {
         btnRestartGame.onclick = () => Game.restartGame();
     }
-    
+
     const btnContinueGame = document.getElementById('btnContinueGame');
     if (btnContinueGame) {
         btnContinueGame.onclick = () => Game.continueGame();
@@ -681,17 +730,17 @@ function setupSaveLoadEvents() {
  * Настройка обработчиков кнопок для аудит-лога
  */
 function setupAuditEvents() {
-    const clearAuditBtn = document.getElementById('clearAuditBtn'); // Кнопка "Очистить"
+    const clearAuditBtn = document.getElementById('clearAuditBtn');
     if (clearAuditBtn) {
         clearAuditBtn.onclick = () => Audit.clearAudit();
     }
-    
-    const exportAuditBtn = document.getElementById('exportAuditBtn'); // Кнопка "Копировать"
+
+    const exportAuditBtn = document.getElementById('exportAuditBtn');
     if (exportAuditBtn) {
         exportAuditBtn.onclick = () => Audit.copyFullAuditLog();
     }
-    
-    const downloadAuditBtn = document.getElementById('downloadAuditBtn'); // Кнопка "Скачать"
+
+    const downloadAuditBtn = document.getElementById('downloadAuditBtn');
     if (downloadAuditBtn) {
         downloadAuditBtn.onclick = () => Audit.exportFullAuditLog();
     }
@@ -716,24 +765,20 @@ function openSettingsModal() {
     const modal = document.getElementById('settingsModal');
     if (modal) {
         modal.classList.add('active');
-        
         if (DOM.refresh) DOM.refresh();
-        
         const state = State.getState();
         const providerInput = document.getElementById('providerInput');
         const apiKeyOpenrouterInput = document.getElementById('apiKeyOpenrouterInput');
         const apiKeyVsegptInput = document.getElementById('apiKeyVsegptInput');
         const modelInput = document.getElementById('modelInput');
-        
         if (providerInput) providerInput.value = state.settings.apiProvider;
         if (apiKeyOpenrouterInput) apiKeyOpenrouterInput.value = state.settings.apiKeyOpenrouter;
         if (apiKeyVsegptInput) apiKeyVsegptInput.value = state.settings.apiKeyVsegpt;
         if (modelInput) modelInput.value = state.settings.model;
-        
         Render.updateApiKeyFields();
         Render.renderModelSelectorByProvider();
         Render.updateModelDetails();
-        Audit.renderAuditList(); // полный рендер при открытии
+        Audit.renderAuditList();
     }
 }
 
@@ -754,32 +799,26 @@ function showMainInterface() {
     const mainContainer = document.getElementById('mainContainer');
     if (mainContainer) {
         mainContainer.style.display = 'flex';
-        
-        // Рендерим через специализированные модули
+
         Render.renderScene();
         Render.renderChoices();
-        
-        // ✅ Принудительно устанавливаем текст в поле свободного ввода
+
         const state = State.getState();
         if (dom.freeInputText) {
             dom.freeInputText.value = state.freeModeText || '';
         }
-        
-        // ✅ Восстанавливаем состояние UI (режим, текст свободного ввода)
         Render.updateUIMode();
         GameItemUI.forceUpdate();
         StatsUI.render();
         HistoryUI.render();
-        
+
         State.saveStateToLocalStorage();
     }
 }
 
 // КРИТИЧЕСКИ ВАЖНО: гарантированное сохранение состояния перед уходом со страницы
 window.addEventListener('beforeunload', () => {
-    // Сохраняем состояние синхронно – без задержек
     State.saveStateToLocalStorage();
-    // Дополнительно сохраняем аудит-лог отдельно
     if (typeof State.saveAuditLogToLocalStorage === 'function') {
         State.saveAuditLogToLocalStorage();
     }

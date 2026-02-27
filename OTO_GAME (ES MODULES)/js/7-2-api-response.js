@@ -5,244 +5,94 @@
 import { CONFIG } from './1-config.js';
 import { Utils } from './2-utils.js';
 import { PROMPTS } from './prompts.js';
+import { log, LOG_CATEGORIES } from './logger.js';
 
 // ============================================================================
 // ОБРАБОТЧИКИ ОШИБОК И БЕЗОПАСНЫЙ ПАРСИНГ
 // ============================================================================
 
+// ===== НОВЫЙ БЕЛЫЙ СПИСОК ИЗВЕСТНЫХ КОРНЕВЫХ ПОЛЕЙ =====
+const KNOWN_ROOT_KEYS = new Set([
+    'design_notes', 'scene', 'reflection', 'personality', 'typology', 'choices',
+    'events', 'aiMemory', 'thoughts', 'summary', '_organizationsHierarchy',
+    'gameType', 'meta_context' // ← добавлены game_items и meta_context больше не парсятся из корня!
+]);
+
+// ===== НОВЫЙ МАССИВ СТАНДАРТНЫХ ТИПОВ GAME_ITEM =====
+const STANDARD_GAME_ITEM_TYPES = [
+    'stat', 'skill', 'inventory', 'relations', 'bless', 'curse',
+    'buff', 'debuff', 'personality', 'initiation_degree', 'progress',
+    'organization_rank'
+];
+
+// ============================================================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ НОРМАЛИЗАЦИИ
+// ============================================================================
+
 /**
- * Безопасно извлекает контент из ответа API
- * @param {string} rawResponseText - Сырой ответ от API
- * @returns {Object} {success: boolean, content: string, error: string, parsedResponse: Object}
+ * Нормализует одну операцию
  */
-function safelyExtractContent(rawResponseText) {
-    try {
-        const parsed = JSON.parse(rawResponseText);
-        
-        if (!parsed.choices || !Array.isArray(parsed.choices) || parsed.choices.length === 0) {
-            return {
-                success: false,
-                content: null,
-                error: 'Ответ API не содержит choices',
-                parsedResponse: null
-            };
-        }
-        
-        const content = parsed.choices[0]?.message?.content;
-        if (!content || typeof content !== 'string') {
-            return {
-                success: false,
-                content: null,
-                error: 'Ответ API не содержит content',
-                parsedResponse: null
-            };
-        }
-        
-        return {
-            success: true,
-            content: content,
-            parsedResponse: parsed,
-            error: null
-        };
-        
-    } catch (error) {
-        return {
-            success: false,
-            content: null,
-            error: `Ошибка парсинга ответа API: ${error.message}`,
-            parsedResponse: null
-        };
+function normalizeOperation(op, context) {
+    if (!op || typeof op !== 'object') return null;
+    
+    const operation = String(op.operation || '').toUpperCase().trim();
+    if (!operation || !['ADD', 'REMOVE', 'MODIFY', 'SET'].includes(operation)) return null;
+    
+    const id = String(op.id || '').trim();
+    if (!id.includes(':')) return null;
+    
+    const normalized = { operation, id };
+    
+    // value (оставляем как есть)
+    if (op.value !== undefined) normalized.value = op.value;
+    
+    // delta -> число
+    if (op.delta !== undefined) normalized.delta = Number(op.delta) || 0;
+    
+    // duration -> целое положительное
+    if (op.duration !== undefined) {
+        normalized.duration = Math.max(1, Math.min(999, Number(op.duration) || 1));
     }
+    
+    // description -> строка
+    normalized.description = op.description ? String(op.description).trim() : '';
+    
+    // Для ADD и SET без value подставляем заглушку
+    if ((operation === 'ADD' || operation === 'SET') && normalized.value === undefined) {
+        normalized.value = '[значение не указано]';
+    }
+    
+    // Для MODIFY без delta ставим 0 (ничего не меняет)
+    if (operation === 'MODIFY' && normalized.delta === undefined) {
+        normalized.delta = 0;
+    }
+    
+    // Для buff/debuff без duration ставим 1
+    const type = id.split(':')[0];
+    if ((type === 'buff' || type === 'debuff') && normalized.duration === undefined) {
+        log.warn(LOG_CATEGORIES.API, `У операции ${id} нет duration, устанавливаем 1 (${context})`);
+        normalized.duration = 1;
+    }
+    
+    return normalized;
 }
 
 /**
- * Основной обработчик ответа API
- * @param {string} url - URL API
- * @param {Object} headers - HTTP заголовки
- * @param {Object} payload - Тело запроса
- * @param {Object} apiRequestModule - Модуль API_Request
- * @param {AbortController} abortCtrl - Контроллер отмены
- * @returns {Promise<Object>} Объект с rawResponseText и processedData
+ * Нормализует массив операций
  */
-async function handleAPIResponse(url, headers, payload, apiRequestModule, abortCtrl) {
-    let rawResponseText = '';
-    
-    try {
-        // 1. Выполняем запрос
-        rawResponseText = await apiRequestModule.executeFetchRaw(url, headers, payload, abortCtrl);
-        
-        // 2. Безопасно извлекаем контент
-        const extractionResult = safelyExtractContent(rawResponseText);
-        if (!extractionResult.success) {
-            throw new Error(extractionResult.error);
-        }
-        
-        // 3. Обрабатываем контент ИИ
-        const processedData = processAIResponse(extractionResult.content);
-        
-        // 4. Проверяем наличие сцены
-        if (!processedData.scene || processedData.scene.length === 0) {
-            throw new Error("AI returned empty scene");
-        }
-        
-        return {
-            rawResponseText,
-            processedData,
-            extractionResult: extractionResult
-        };
-        
-// Важно не потерять и не затереть текст сырого отаета с ошибкой:
-} catch (error) {
-    // Сохраняем сырой ответ для аудита
-    // НЕ перезаписываем rawResponse, если он уже есть
-    if (!error.rawResponse) {
-        error.rawResponse = rawResponseText;
-    }
-    throw error;
-}
+export function normalizeOperations(operations, context) {
+    if (!Array.isArray(operations)) return [];
+    return operations.map((op, idx) => normalizeOperation(op, `${context}[${idx}]`)).filter(Boolean);
 }
 
 /**
- * Улучшенный robustFetchWithRepair с четким разделением ответственности
- * @param {string} url - URL API
- * @param {Object} headers - HTTP заголовки
- * @param {Object} payload - Тело запроса
- * @param {number} attemptsLeft - Оставшиеся попытки
- * @param {Object} apiRequestModule - Модуль API_Request
- * @param {AbortController} abortCtrl - Контроллер отмены
- * @returns {Promise<Object>} Объект с rawResponseText и processedData
- */
-async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiRequestModule, abortCtrl) {
-    
-    try {
-        // Основной запрос
-        return await handleAPIResponse(url, headers, payload, apiRequestModule, abortCtrl);
-        
-    } catch (error) {
-        // Попытка ремонта только если есть попытки и не пустая сцена
-        if (attemptsLeft > 0 && error.message !== "AI returned empty scene") {
-            console.warn(`⚠️ [AI Repair] Запуск ремонта... Осталось попыток: ${attemptsLeft}`);
-            
-            // Создаем новый payload с инструкцией по ремонту
-            const repairPayload = JSON.parse(JSON.stringify(payload));
-            repairPayload.messages.push({
-                role: "user",
-                content: PROMPTS.injections.jsonRepair
-            });
-            
-            // Рекурсивный вызов с уменьшенным счетчиком
-            return robustFetchWithRepair(
-                url,
-                headers,
-                repairPayload,
-                attemptsLeft - 1,
-                apiRequestModule,
-                abortCtrl
-            );
-// В блоке else (после исчерпания попыток):
-} else {
-    // Попытки исчерпаны
-    console.error(`🔥 CRITICAL: AI failed after ${CONFIG.autoRepairAttempts} attempts`);
-    
-    // Последняя попытка - аварийный парсинг
-    if (error.rawResponse) {
-        try {
-            const extractionResult = safelyExtractContent(error.rawResponse);
-            if (extractionResult.success) {
-                const emergencyData = extractDataFromBrokenJSON(extractionResult.content);
-                if (emergencyData && emergencyData.scene) {
-                    console.warn('⚠️ Использован аварийный парсинг как последняя попытка');
-                    return {
-                        rawResponseText: error.rawResponse,
-                        processedData: validateAndNormalizeResponse(emergencyData)
-                    };
-                }
-            }
-        } catch (e) {
-            console.error('❌ Даже аварийный парсинг не помог:', e);
-        }
-    }
-    
-    // СОЗДАЕМ ФИНАЛЬНУЮ ОШИБКУ с сохранением rawResponse
-    const finalError = new Error(
-        `CRITICAL: AI failed to produce valid response after ${CONFIG.autoRepairAttempts} attempts. ` +
-        `Last error: ${error.message}`
-    );
-    // Важно: сохраняем rawResponse из исходной ошибки
-    finalError.rawResponse = error.rawResponse || 'No response';
-    throw finalError;
-}
-    }
-}
-
-/**
- * НОВАЯ ФУНКЦИЯ: Извлекает organization_rank_hierarchy из ответа ИИ
- * @param {Object} parsedData - Распарсенные данные
- * @returns {Object} Иерархии организаций
- */
-function extractOrganizationHierarchies(parsedData) {
-    const hierarchies = {};
-    
-    console.log('🔍 Поиск иерархий организаций в ответе ИИ...');
-    
-    // Ищем все ключи, начинающиеся с organization_rank_hierarchy:
-    for (const key in parsedData) {
-        if (key.startsWith('organization_rank_hierarchy:')) {
-            try {
-                const hierarchy = parsedData[key];
-                if (hierarchy && typeof hierarchy === 'object') {
-                    const orgId = key.split(':')[1];
-                    
-                    // Проверяем обязательные поля
-                    if (hierarchy.value && Array.isArray(hierarchy.description)) {
-                        // Нормализуем описание иерархии
-                        const normalizedDescription = hierarchy.description.map(item => {
-                            // Проверяем, что есть lvl и rank
-                            if (item && typeof item === 'object') {
-                                return {
-                                    lvl: typeof item.lvl === 'number' ? item.lvl : parseInt(item.lvl) || 0,
-                                    rank: item.rank || `Ранг ${item.lvl}`,
-                                    threshold: typeof item.threshold === 'number' ? item.threshold : (typeof item.lvl === 'number' ? item.lvl * 10 : 0)
-                                };
-                            }
-                            return null;
-                        }).filter(Boolean); // Удаляем null элементы
-                        
-                        if (normalizedDescription.length > 0) {
-                            hierarchies[orgId] = {
-                                id: key,
-                                value: hierarchy.value,
-                                description: normalizedDescription
-                            };
-                            console.log(`✅ Извлечена иерархия организации: ${orgId} (${normalizedDescription.length} рангов)`);
-                        } else {
-                            console.warn(`⚠️ Пустое описание иерархии для организации: ${orgId}`);
-                        }
-                    } else {
-                        console.warn(`⚠️ Некорректная структура иерархии для организации: ${orgId}`);
-                    }
-                }
-            } catch (error) {
-                console.error(`❌ Ошибка обработки иерархии ${key}:`, error);
-            }
-        }
-    }
-    
-    console.log(`✅ Извлечено иерархий организаций: ${Object.keys(hierarchies).length}`);
-    return hierarchies;
-}
-
-/**
- * УЛУЧШЕННАЯ ФУНКЦИЯ: Безопасная нормализация одного choice с детальным логированием
- * @param {Object} choice - Объект choice
- * @param {number} index - Индекс choice
- * @returns {Object} Нормализованный choice
+ * Нормализует один choice
  */
 function normalizeChoice(choice, index) {
     if (!choice || typeof choice !== 'object') {
-        console.warn(`⚠️ Choice ${index}: Некорректный объект, используем дефолт`);
+        log.warn(LOG_CATEGORIES.API, `Choice ${index} не объект, создаём дефолтный`);
         return {
-            text: "Действие без описания",
+            text: "Действие",
             difficulty_level: 5,
             requirements: [],
             success_rewards: [],
@@ -251,107 +101,80 @@ function normalizeChoice(choice, index) {
     }
     
     const normalized = {
-        text: "",
+        text: '',
         difficulty_level: 5,
         requirements: [],
         success_rewards: [],
         fail_penalties: []
     };
     
-    // 1. TEXT (обязательное поле)
-    if (typeof choice.text === 'string' && choice.text.trim().length > 0) {
+    // text
+    if (typeof choice.text === 'string' && choice.text.trim()) {
         normalized.text = choice.text.trim();
     } else {
-        console.warn(`⚠️ Choice ${index}: Отсутствует text, используем fallback`);
         normalized.text = `Действие ${index + 1}`;
     }
     
-    // 2. DIFFICULTY_LEVEL
+    // difficulty_level
     if (typeof choice.difficulty_level === 'number') {
         normalized.difficulty_level = Math.max(1, Math.min(10, Math.round(choice.difficulty_level)));
     } else if (typeof choice.difficulty_level === 'string') {
         const parsed = parseInt(choice.difficulty_level, 10);
-        if (!isNaN(parsed)) {
-            normalized.difficulty_level = Math.max(1, Math.min(10, parsed));
-        }
+        if (!isNaN(parsed)) normalized.difficulty_level = Math.max(1, Math.min(10, parsed));
     }
     
-    // 3. REQUIREMENTS (массив строк вида "id:value" или "id:operator:value")
+    // requirements (оставляем как массив строк, фильтруем только непустые)
     if (Array.isArray(choice.requirements)) {
         normalized.requirements = choice.requirements
-            .filter(req => {
-                if (typeof req === 'string') {
-                    // Проверяем формат requirements для организаций
-                    if (req.includes('organization_rank:')) {
-                        // Может быть "organization_rank:oto" или "organization_rank:oto>=3"
-                        return true;
-                    }
-                    // Для других типов требуется двоеточие
-                    return req.includes(':');
-                }
-                console.warn(`⚠️ Choice ${index}: Некорректный requirement "${req}", пропускаем`);
-                return false;
-            })
+            .filter(req => req && typeof req === 'string' && req.includes(':'))
             .map(req => req.trim());
-    } else if (choice.requirements) {
-        console.warn(`⚠️ Choice ${index}: requirements не является массивом (${typeof choice.requirements}), пропускаем`);
     }
     
-    // 4. SUCCESS_REWARDS (массив операций)
+    // success_rewards
     if (Array.isArray(choice.success_rewards)) {
-        normalized.success_rewards = normalizeOperations(choice.success_rewards, `Choice ${index} success_rewards`);
-    } else if (choice.success_rewards) {
-        console.warn(`⚠️ Choice ${index}: success_rewards не является массивом, пропускаем`);
+        normalized.success_rewards = normalizeOperations(choice.success_rewards, `choice ${index} rewards`);
     }
     
-    // 5. FAIL_PENALTIES (массив операций)
+    // fail_penalties
     if (Array.isArray(choice.fail_penalties)) {
-        normalized.fail_penalties = normalizeOperations(choice.fail_penalties, `Choice ${index} fail_penalties`);
-    } else if (choice.fail_penalties) {
-        console.warn(`⚠️ Choice ${index}: fail_penalties не является массивом, пропускаем`);
+        normalized.fail_penalties = normalizeOperations(choice.fail_penalties, `choice ${index} penalties`);
     }
     
     return normalized;
 }
 
 /**
- * УЛУЧШЕННАЯ ФУНКЦИЯ: Безопасная нормализация одного event
- * @param {Object} event - Объект event
- * @param {number} index - Индекс event
- * @returns {Object|null} Нормализованный event или null
+ * Нормализует одно событие
  */
 function normalizeEvent(event, index) {
-    if (!event || typeof event !== 'object') {
-        console.warn(`⚠️ Event ${index}: Некорректный объект, пропускаем`);
-        return null;
-    }
+    if (!event || typeof event !== 'object') return null;
     
     const normalized = {
-        type: "world_event",
-        description: "",
+        type: 'world_event',
+        description: '',
         effects: [],
-        reason: ""
+        reason: ''
     };
     
-    // 1. TYPE
-    if (typeof event.type === 'string' && event.type.trim().length > 0) {
+    // type
+    if (typeof event.type === 'string' && event.type.trim()) {
         normalized.type = event.type.trim();
     }
     
-    // 2. DESCRIPTION (обязательное поле)
-    if (typeof event.description === 'string' && event.description.trim().length > 0) {
+    // description (обязательное)
+    if (typeof event.description === 'string' && event.description.trim()) {
         normalized.description = event.description.trim();
     } else {
-        console.warn(`⚠️ Event ${index}: Отсутствует description, пропускаем event`);
-        return null; // События без описания пропускаем
+        log.warn(LOG_CATEGORIES.API, `Event ${index} без description, пропускаем`);
+        return null;
     }
     
-    // 3. EFFECTS (массив операций)
+    // effects
     if (Array.isArray(event.effects)) {
-        normalized.effects = normalizeOperations(event.effects, `Event ${index} effects`);
+        normalized.effects = normalizeOperations(event.effects, `event ${index} effects`);
     }
     
-    // 4. REASON
+    // reason
     if (typeof event.reason === 'string') {
         normalized.reason = event.reason.trim();
     }
@@ -360,294 +183,289 @@ function normalizeEvent(event, index) {
 }
 
 /**
- * НОВАЯ ФУНКЦИЯ: Универсальная нормализация массива операций (для rewards, penalties, effects)
- * @param {Array} operations - Массив операций
- * @param {string} contextName - Контекст для логирования
- * @returns {Array} Нормализованные операции
+ * Извлекает иерархии организаций из ответа (ключи с префиксом)
  */
-function normalizeOperations(operations, contextName) {
-    if (!Array.isArray(operations)) {
-        console.warn(`⚠️ ${contextName}: Не является массивом, возвращаем []`);
-        return [];
-    }
-    
-    const validOps = [];
-    
-    operations.forEach((op, idx) => {
-        // Проверяем, что операция - это объект
-        if (!op || typeof op !== 'object') {
-            console.warn(`⚠️ ${contextName}[${idx}]: Не является объектом, пропускаем`);
-            return;
-        }
-        
-        // Проверяем обязательные поля: operation и id
-        if (!op.operation || typeof op.operation !== 'string') {
-            console.warn(`⚠️ ${contextName}[${idx}]: Отсутствует или некорректное поле "operation", пропускаем`);
-            return;
-        }
-        
-        if (!op.id || typeof op.id !== 'string') {
-            console.warn(`⚠️ ${contextName}[${idx}]: Отсутствует или некорректное поле "id", пропускаем`);
-            return;
-        }
-        
-        // Создаем нормализованную операцию
-        const normalizedOp = {
-            operation: op.operation.trim().toUpperCase(),
-            id: op.id.trim()
-        };
-        
-        // Добавляем опциональные поля в зависимости от типа операции
-        const opType = normalizedOp.operation;
-        
-        // Специальная обработка для organization_rank
-        if (normalizedOp.id.startsWith('organization_rank:')) {
-            // Для organization_rank требуем value для ADD/SET
-            if ((opType === 'ADD' || opType === 'SET') && op.value === undefined) {
-                console.warn(`⚠️ ${contextName}[${idx}]: Операция ${opType} для organization_rank без значения, пропускаем`);
-                return;
-            }
-            
-            // Для MODIFY требуем delta
-            if (opType === 'MODIFY' && op.delta === undefined) {
-                console.warn(`⚠️ ${contextName}[${idx}]: MODIFY для organization_rank без delta, пропускаем`);
-                return;
-            }
-        }
-        
-        if (opType === 'ADD' || opType === 'SET') {
-            // Для ADD и SET требуется value
-            if (op.value !== undefined && op.value !== null) {
-                normalizedOp.value = op.value;
-            } else {
-                console.warn(`⚠️ ${contextName}[${idx}]: Операция ${opType} без значения value, используем 0`);
-                normalizedOp.value = 0;
-            }
-            
-            // Опциональные поля
-            if (op.description) normalizedOp.description = String(op.description);
-            if (op.duration !== undefined) normalizedOp.duration = parseInt(op.duration, 10) || 0;
-            if (op.max !== undefined) normalizedOp.max = parseInt(op.max, 10);
-            if (op.min !== undefined) normalizedOp.min = parseInt(op.min, 10);
-        }
-        else if (opType === 'MODIFY') {
-            // Для MODIFY требуется delta
-            if (typeof op.delta === 'number') {
-                normalizedOp.delta = op.delta;
-            } else if (typeof op.delta === 'string') {
-                const parsed = parseInt(op.delta, 10);
-                if (!isNaN(parsed)) {
-                    normalizedOp.delta = parsed;
-                } else {
-                    console.warn(`⚠️ ${contextName}[${idx}]: MODIFY с некорректным delta "${op.delta}", используем 0`);
-                    normalizedOp.delta = 0;
+function extractOrganizationHierarchies(parsed) {
+    const hierarchies = {};
+    for (const key in parsed) {
+        if (key.startsWith('organization_rank_hierarchy:')) {
+            try {
+                const orgId = key.split(':')[1];
+                const value = parsed[key];
+                if (value && value.description && Array.isArray(value.description)) {
+                    hierarchies[orgId] = {
+                        id: key,
+                        value: value.value || orgId,
+                        description: value.description.map(r => ({
+                            lvl: Number(r.lvl) || 0,
+                            rank: String(r.rank || '')
+                        })).filter(r => r.rank)
+                    };
                 }
-            } else {
-                console.warn(`⚠️ ${contextName}[${idx}]: MODIFY без delta, используем 0`);
-                normalizedOp.delta = 0;
+            } catch (e) {
+                log.warn(LOG_CATEGORIES.API, `Ошибка извлечения иерархии ${key}`, e);
             }
-            
-            if (op.max !== undefined) normalizedOp.max = parseInt(op.max, 10);
-            if (op.min !== undefined) normalizedOp.min = parseInt(op.min, 10);
         }
-        else if (opType === 'REMOVE') {
-            // Для REMOVE достаточно только operation и id
-            // Никаких дополнительных полей не требуется
-        }
-        else {
-            console.warn(`⚠️ ${contextName}[${idx}]: Неизвестный тип операции "${opType}", пропускаем`);
-            return;
-        }
-        
-        validOps.push(normalizedOp);
-    });
+    }
+    return hierarchies;
+}
+
+// ===== НОВАЯ ФУНКЦИЯ: ИЗВЛЕЧЕНИЕ НЕИЗВЕСТНЫХ МЕТА-ПОЛЕЙ =====
+function extractUnknownMeta(parsedData) {
+    const meta = {
+        metaContext: '',
+        unknownFields: [],
+        unknownArrays: [],
+        unknownObjects: []
+    };
     
-    return validOps;
+    for (const key in parsedData) {
+        const lowerKey = key.toLowerCase();
+        if (KNOWN_ROOT_KEYS.has(key) || KNOWN_ROOT_KEYS.has(lowerKey)) { continue };
+        
+        if (!KNOWN_ROOT_KEYS.has(key) && parsedData.hasOwnProperty(key)) {
+            const value = parsedData[key];
+            if (key.startsWith('organization_rank_hierarchy:')) continue;
+            if (value === null || value === undefined) continue;
+            if (Array.isArray(value)) {
+                meta.unknownArrays.push({ key, value });
+            } else if (typeof value === 'object') {
+                meta.unknownObjects.push({ key, value });
+            } else {
+                meta.unknownFields.push({ key, value });
+            }
+        }
+    }
+    return meta;
 }
 
 /**
- * УЛУЧШЕННАЯ ФУНКЦИЯ: Валидация и нормализация нового формата ответа (ФОРМАТ 4.1)
- * Максимально устойчивая к ошибкам - пропускаем битые элементы, сохраняем остальное
- * @param {Object} parsedData - Распарсенные данные
- * @returns {Object} Нормализованные данные
+ * Безопасно извлекает контент из ответа API
+ */
+function safelyExtractContent(rawResponseText) {
+    try {
+        const parsed = JSON.parse(rawResponseText);
+        if (!parsed.choices || !Array.isArray(parsed.choices) || parsed.choices.length === 0) {
+            return { success: false, content: null, error: 'Ответ API не содержит choices', parsedResponse: null };
+        }
+        const content = parsed.choices[0]?.message?.content;
+        if (!content || typeof content !== 'string') {
+            return { success: false, content: null, error: 'Ответ API не содержит content', parsedResponse: null };
+        }
+        return { success: true, content, parsedResponse: parsed, error: null };
+    } catch (error) {
+        return { success: false, content: null, error: `Ошибка парсинга ответа API: ${error.message}`, parsedResponse: null };
+    }
+}
+
+/**
+ * Основной обработчик ответа API
+ */
+async function handleAPIResponse(url, headers, payload, apiRequestModule, abortCtrl) {
+    let rawResponseText = '';
+    try {
+        rawResponseText = await apiRequestModule.executeFetchRaw(url, headers, payload, abortCtrl);
+        const extractionResult = safelyExtractContent(rawResponseText);
+        if (!extractionResult.success) throw new Error(extractionResult.error);
+        const processedData = processAIResponse(extractionResult.content);
+        if (!processedData.scene || processedData.scene.length === 0) {
+            throw new Error("AI returned empty scene");
+        }
+        return { rawResponseText, processedData, extractionResult };
+    } catch (error) {
+        if (!error.rawResponse) error.rawResponse = rawResponseText;
+        throw error;
+    }
+}
+
+/**
+ * Улучшенный robustFetchWithRepair с четким разделением ответственности
+ */
+async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiRequestModule, abortCtrl) {
+    try {
+        return await handleAPIResponse(url, headers, payload, apiRequestModule, abortCtrl);
+    } catch (error) {
+        if (attemptsLeft > 0 && error.message !== "AI returned empty scene") {
+            console.warn(`⚠️ [AI Repair] Запуск ремонта... Осталось попыток: ${attemptsLeft}`);
+            const repairPayload = JSON.parse(JSON.stringify(payload));
+            repairPayload.messages.push({ role: "user", content: PROMPTS.injections.jsonRepair });
+            return robustFetchWithRepair(url, headers, repairPayload, attemptsLeft - 1, apiRequestModule, abortCtrl);
+        } else {
+            console.error(`🔥 CRITICAL: AI failed after ${CONFIG.autoRepairAttempts} attempts`);
+            if (error.rawResponse) {
+                try {
+                    const extractionResult = safelyExtractContent(error.rawResponse);
+                    if (extractionResult.success) {
+                        const emergencyData = extractDataFromBrokenJSON(extractionResult.content);
+                        if (emergencyData && emergencyData.scene) {
+                            console.warn('⚠️ Использован аварийный парсинг как последняя попытка');
+                            return {
+                                rawResponseText: error.rawResponse,
+                                processedData: validateAndNormalizeResponse(emergencyData)
+                            };
+                        }
+                    }
+                } catch (e) {
+                    console.error('❌ Даже аварийный парсинг не помог:', e);
+                }
+            }
+            const finalError = new Error(
+                `CRITICAL: AI failed to produce valid response after ${CONFIG.autoRepairAttempts} attempts. Last error: ${error.message}`
+            );
+            finalError.rawResponse = error.rawResponse || 'No response';
+            throw finalError;
+        }
+    }
+}
+
+
+/**
+ * Приводит все ключи объекта к нижнему регистру, кроме ключей с двоеточием (нормализация)
+ * @param {Object} obj - Исходный объект
+ * @returns {Object} Новый объект с нормализованными ключами
+ */
+function normalizeKeys(obj) {
+    if (!obj || typeof obj !== 'object') return obj;
+    const normalized = {};
+    Object.keys(obj).forEach(key => {
+        // Ключи с двоеточием от game_items не трогаем
+        if (key.includes(':')) {
+            normalized[key] = obj[key];
+        } else {
+            normalized[key.toLowerCase()] = obj[key];
+        }
+    });
+    return normalized;
+}
+
+/**
+ * Валидация и нормализация нового формата ответа (ФОРМАТ 4.1)
  */
 function validateAndNormalizeResponse(parsedData) {
     if (!parsedData || typeof parsedData !== 'object') {
         throw new Error('Ответ ИИ пуст или не является объектом');
     }
     
+    // Нормализуем регистр ключей
+    const normalizedData = normalizeKeys(parsedData);
+    
     const result = {
-        design_notes: "",
-        scene: "",
-        reflection: "",
-        typology: "",
+        design_notes: '',
+        scene: '',
+        reflection: '',
+        typology: '',
+        personality: '',
         choices: [],
         events: [],
         aiMemory: {},
         thoughts: [],
-        summary: "",
-        // НОВОЕ: храним извлеченные иерархии
+        summary: '',
         _organizationsHierarchy: {}
     };
     
     // 1. Извлекаем иерархии организаций
-    result._organizationsHierarchy = extractOrganizationHierarchies(parsedData);
+    result._organizationsHierarchy = extractOrganizationHierarchies(normalizedData);
     
-    // 2. DESIGN_NOTES (опциональное)
-    if (typeof parsedData.design_notes === 'string') {
-        result.design_notes = parsedData.design_notes;
+    // 2. DESIGN_NOTES
+    // может быть строкой или массивом строк
+    if (normalizedData.design_notes !== undefined) {
+        if (typeof normalizedData.design_notes === 'string') {
+            result.design_notes = normalizedData.design_notes;
+        } else if (Array.isArray(normalizedData.design_notes)) {
+            // объединяем массив строк через перенос строки
+            result.design_notes = normalizedData.design_notes
+                .filter(item => typeof item === 'string')
+                .join('\n');
+        } else {
+            // на всякий случай преобразуем в строку
+            result.design_notes = String(normalizedData.design_notes);
+        }
     }
     
     // 3. SCENE (обязательное поле)
-    if (!parsedData.scene || typeof parsedData.scene !== 'string') {
+    if (!normalizedData.scene || typeof normalizedData.scene !== 'string') {
         throw new Error('Отсутствует или неверное поле "scene"');
     }
-    result.scene = parsedData.scene;
+    result.scene = normalizedData.scene;
     
-    // 4. REFLECTION (опциональное)
-    if (typeof parsedData.reflection === 'string') {
-        result.reflection = parsedData.reflection;
-    }
+    // 4. REFLECTION
+    if (typeof normalizedData.reflection === 'string') result.reflection = normalizedData.reflection;
     
-    // 5. TYPOLOGY (опциональное)
-    if (typeof parsedData.typology === 'string') {
-        result.typology = parsedData.typology;
-    }
+    // 5. TYPOLOGY
+    if (typeof normalizedData.typology === 'string') result.typology = normalizedData.typology;
     
-    // 6. CHOICES - МАКСИМАЛЬНО УСТОЙЧИВЫЙ ПАРСИНГ
-    if (Array.isArray(parsedData.choices)) {
-        console.log(`📋 Обработка ${parsedData.choices.length} choices...`);
-        
-        parsedData.choices.forEach((choice, idx) => {
-            const normalized = normalizeChoice(choice, idx);
-            if (normalized) {
-                result.choices.push(normalized);
-            }
+    // 5. PERSONALITY
+    // может быть строкой или game_item
+    if (typeof normalizedData.personality === 'string') result.personality = normalizedData.personality;
+    
+    // 6. CHOICES
+    if (Array.isArray(normalizedData.choices)) {
+        normalizedData.choices.forEach((c, i) => {
+            const norm = normalizeChoice(c, i);
+            if (norm) result.choices.push(norm);
         });
-        
-        console.log(`✅ Успешно обработано ${result.choices.length} из ${parsedData.choices.length} choices`);
-        
-        // Если после парсинга не осталось ни одного choices, добавляем дефолтные
-        if (result.choices.length === 0) {
-            console.warn('⚠️ Не удалось извлечь ни одного choices, добавляем дефолтные');
-            result.choices = createDefaultChoices();
-        }
-        
-    } else if (parsedData.choices) {
-        console.warn('⚠️ Поле choices не является массивом, добавляем дефолтные');
+    }
+    if (result.choices.length === 0) {
+        log.warn(LOG_CATEGORIES.API, 'Нет валидных choices, добавляем дефолтные');
         result.choices = createDefaultChoices();
+    }
+    
+    // 7. EVENTS
+    if (Array.isArray(normalizedData.events)) {
+        normalizedData.events.forEach((e, i) => {
+            const norm = normalizeEvent(e, i);
+            if (norm) result.events.push(norm);
+        });
+    }
+    result.events = result.events.slice(0, 3);
+    
+    // 8. AI_MEMORY - сохраняем как есть (любой тип), но если нет, ставим пустой объект
+    if (normalizedData.aimemory !== undefined && normalizedData.aimemory !== null) {
+        result.aiMemory = normalizedData.aimemory; // может быть строкой, массивом, объектом...
     } else {
-        console.warn('⚠️ Отсутствует поле choices, добавляем дефолтные');
-        result.choices = createDefaultChoices();
+        result.aiMemory = {}; // пустой объект, чтобы не было undefined
     }
     
-    // 7. EVENTS - МАКСИМАЛЬНО УСТОЙЧИВЫЙ ПАРСИНГ
-    if (Array.isArray(parsedData.events)) {
-        console.log(`📋 Обработка ${parsedData.events.length} events...`);
-        
-        parsedData.events.forEach((event, idx) => {
-            const normalized = normalizeEvent(event, idx);
-            if (normalized) {
-                result.events.push(normalized);
-            }
-        });
-        
-        console.log(`✅ Успешно обработано ${result.events.length} из ${parsedData.events.length} events`);
-        
-        // Ограничиваем максимум 3 событиями
-        result.events = result.events.slice(0, 3);
-        
-    } else if (parsedData.events) {
-        console.warn('⚠️ Поле events не является массивом, пропускаем');
+    // 9. THOUGHTS
+    if (Array.isArray(normalizedData.thoughts)) {
+        result.thoughts = normalizedData.thoughts
+            .filter(t => typeof t === 'string' && t.trim())
+            .map(t => t.trim())
+            .slice(0, 20);
     }
-    
-    // 8. AI_MEMORY (опциональное)
-    if (parsedData.aiMemory && typeof parsedData.aiMemory === 'object' && !Array.isArray(parsedData.aiMemory)) {
-        result.aiMemory = parsedData.aiMemory;
-    }
-    
-    // 9. THOUGHTS - УСТОЙЧИВЫЙ ПАРСИНГ
-    if (Array.isArray(parsedData.thoughts)) {
-        result.thoughts = parsedData.thoughts
-            .filter(thought => {
-                if (typeof thought === 'string' && thought.trim().length > 0) {
-                    return true;
-                }
-                console.warn('⚠️ Некорректный thought, пропускаем');
-                return false;
-            })
-            .map(thought => thought.trim())
-            .slice(0, 20); // Ограничиваем 20 мыслями
-        
-        console.log(`✅ Обработано ${result.thoughts.length} thoughts`);
-    }
-    
-    // Если мыслей меньше 5, добавляем дефолтные
     if (result.thoughts.length < 5) {
-        console.warn(`⚠️ Мало thoughts (${result.thoughts.length}), добавляем дефолтные`);
         result.thoughts = result.thoughts.concat(createDefaultThoughts()).slice(0, 10);
     }
     
-    // 10. SUMMARY (опциональное, генерируем из сцены если отсутствует)
-    if (typeof parsedData.summary === 'string' && parsedData.summary.trim().length > 0) {
-        result.summary = parsedData.summary;
+    // 10. SUMMARY
+    if (typeof normalizedData.summary === 'string' && normalizedData.summary.trim()) {
+        result.summary = normalizedData.summary;
     } else {
-        // Генерируем краткую сводку из сцены
-        result.summary = parsedData.scene
-            .replace(/<[^>]*>/g, ' ') // Удаляем HTML теги
-            .substring(0, 200)
-            .trim() + '...';
+        result.summary = result.scene.replace(/<[^>]*>/g, ' ').substring(0, 200).trim() + '...';
     }
+    
+    // 11. Извлекаем неизвестные мета-поля
+    const metaParsed = extractUnknownMeta(normalizedData);
+    result._metaParsed = metaParsed;
     
     return result;
 }
 
 /**
  * НОВАЯ ФУНКЦИЯ: Создание дефолтных choices в случае полного провала парсинга
- * @returns {Array} Массив дефолтных choices
  */
 function createDefaultChoices() {
     return [
-    {
-        text: "[[парсинг не удался - попробуем снова]]",
-        difficulty_level: 3,
-        requirements: [],
-        success_rewards: [],
-        fail_penalties: []
-    },
-    {
-        text: "Подумать о ситуации",
-        difficulty_level: 2,
-        requirements: [],
-        success_rewards: [],
-        fail_penalties: []
-    },
-    {
-        text: "Действовать осторожно",
-        difficulty_level: 5,
-        requirements: [],
-        success_rewards: [],
-        fail_penalties: []
-    },
-    {
-        text: "Рискнуть и действовать смело",
-        difficulty_level: 7,
-        requirements: [],
-        success_rewards: [],
-        fail_penalties: []
-    },
-    {
-        text: "Попытаться вспомнить что-то важное",
-        difficulty_level: 4,
-        requirements: [],
-        success_rewards: [],
-        fail_penalties: []
-    }];
+        { text: "[[парсинг не удался - попробуем снова]]", difficulty_level: 3, requirements: [], success_rewards: [], fail_penalties: [] },
+        { text: "Подумать о ситуации", difficulty_level: 2, requirements: [], success_rewards: [], fail_penalties: [] },
+        { text: "Действовать осторожно", difficulty_level: 5, requirements: [], success_rewards: [], fail_penalties: [] },
+        { text: "Рискнуть и действовать смело", difficulty_level: 7, requirements: [], success_rewards: [], fail_penalties: [] },
+        { text: "Попытаться вспомнить что-то важное", difficulty_level: 4, requirements: [], success_rewards: [], fail_penalties: [] }
+    ];
 }
 
 /**
  * НОВАЯ ФУНКЦИЯ: Создание дефолтных мыслей
- * @returns {Array} Массив дефолтных мыслей
  */
 function createDefaultThoughts() {
     return [
@@ -661,8 +479,6 @@ function createDefaultThoughts() {
 
 /**
  * УЛУЧШЕННАЯ ФУНКЦИЯ: Основная функция обработки текстового ответа от ИИ (ФОРМАТ 4.1)
- * @param {string} rawText - Сырой текст ответа ИИ
- * @returns {Object} Обработанные данные
  */
 function processAIResponse(rawText) {
     if (!rawText || typeof rawText !== 'string') {
@@ -670,7 +486,6 @@ function processAIResponse(rawText) {
         return createFallbackResponse("Ошибка: ИИ не вернул текст сцены.");
     }
     
-    // 1. Очистка Markdown и лишних символов
     let cleanText = rawText.trim()
         .replace(/^```json\s*/i, '')
         .replace(/\s*```$/i, '')
@@ -678,66 +493,66 @@ function processAIResponse(rawText) {
         .replace(/^javascript\s*/i, '')
         .replace(/\s*$/, '');
     
-    // 2. Попытка парсинга JSON
     let parsedData;
     try {
         parsedData = JSON.parse(cleanText);
+        console.log('✅ [processAIResponse] Стандартный JSON.parse успешен');
     } catch (standardParseError) {
-        console.warn("⚠️ JSON.parse() failed. Attempting robust parsing.", standardParseError.message);
+        console.warn("⚠️ [processAIResponse] Стандартный JSON.parse() failed.", standardParseError.message);
         try {
-            parsedData = Utils.robustJsonParse(cleanText);
-        } catch (robustError) {
-            console.error("❌ Оба метода парсинга JSON провалились:", robustError.message);
-            
-            // НОВАЯ ЛОГИКА: Пытаемся извлечь хотя бы сцену регулярным выражением
-            const emergencyParsed = extractDataFromBrokenJSON(cleanText);
-            if (emergencyParsed && emergencyParsed.scene) {
-                console.warn("⚠️ Использован аварийный парсинг, данные частичны");
-                return validateAndNormalizeResponse(emergencyParsed);
+            const repaired = Utils.safeJsonRepair(cleanText);
+            if (repaired) {
+                parsedData = JSON.parse(repaired);
+                console.log('✅ [processAIResponse] jsonrepair + JSON.parse успешен');
+            } else {
+                throw new Error('jsonrepair вернул null');
             }
-            
-            return createFallbackResponse("ИИ вернул некорректный JSON. Сцена не сгенерирована.");
+        } catch (repairError) {
+            console.warn("⚠️ [processAIResponse] jsonrepair не помог.", repairError.message);
+            try {
+                parsedData = Utils.robustJsonParse(cleanText);
+                console.log('✅ [processAIResponse] Utils.robustJsonParse успешен');
+            } catch (robustError) {
+                console.error("❌ [processAIResponse] Все методы парсинга провалились:", robustError.message);
+                const emergencyParsed = extractDataFromBrokenJSON(cleanText);
+                if (emergencyParsed && emergencyParsed.scene) {
+                    console.warn("⚠️ [processAIResponse] Использован аварийный парсинг, данные частичны");
+                    return validateAndNormalizeResponse(emergencyParsed);
+                }
+                return createFallbackResponse("ИИ вернул некорректный JSON. Сцена не сгенерирована.");
+            }
         }
     }
     
-    // 3. Валидация и нормализация (ФОРМАТ 4.1)
     try {
         return validateAndNormalizeResponse(parsedData);
-        
     } catch (validationError) {
-        console.error('❌ Ошибка валидации ответа ИИ:', validationError.message);
-        
-        // Попытка частичного восстановления
+        console.error('❌ [processAIResponse] Ошибка валидации ответа ИИ:', validationError.message);
         if (parsedData && typeof parsedData === 'object') {
-            console.warn('⚠️ Пытаемся частично восстановить данные из битого JSON');
+            console.warn('⚠️ [processAIResponse] Пытаемся частично восстановить данные из битого JSON');
             const partial = createFallbackResponse(validationError.message);
-            
-            // Пытаемся взять то, что есть
             if (parsedData.scene) partial.scene = parsedData.scene;
             if (parsedData.reflection) partial.reflection = parsedData.reflection;
             if (parsedData.design_notes) partial.design_notes = parsedData.design_notes;
-            if (Array.isArray(parsedData.choices) && parsedData.choices.length > 0) {
+            if (parsedData.aiMemory) partial.aiMemory = parsedData.aiMemory; // <-- добавить эту строку
+            if (Array.isArray(parsedData.choices)) {
                 partial.choices = parsedData.choices.map((c, i) => normalizeChoice(c, i)).filter(Boolean);
             }
-            if (Array.isArray(parsedData.events) && parsedData.events.length > 0) {
+            if (Array.isArray(parsedData.events)) {
                 partial.events = parsedData.events.map((e, i) => normalizeEvent(e, i)).filter(Boolean);
             }
-            
+            partial._metaParsed = { metaContext: '', unknownFields: [], unknownArrays: [], unknownObjects: [] };
             return partial;
         }
-        
         return createFallbackResponse(`Ошибка валидации данных от ИИ: ${validationError.message}`);
     }
 }
 
 /**
  * НОВАЯ ФУНКЦИЯ: Аварийное извлечение данных из битого JSON с помощью регулярных выражений
- * @param {string} brokenText - Битый текст JSON
- * @returns {Object} Извлеченные данные
  */
 function extractDataFromBrokenJSON(brokenText) {
-    console.warn('🚨 Запущен аварийный парсинг через регулярные выражения');
-    
+    console.warn('🚨 [extractDataFromBrokenJSON] Запущен аварийный парсинг через регулярные выражения');
     const result = {
         design_notes: "",
         scene: "",
@@ -751,34 +566,20 @@ function extractDataFromBrokenJSON(brokenText) {
         _organizationsHierarchy: {}
     };
     
-    // Извлекаем scene (самое важное)
-    const sceneMatch = brokenText.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+    const sceneMatch = brokenText.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/s) || brokenText.match(/"scene"\s*:\s*"([^"]*)/s);
     if (sceneMatch && sceneMatch[1]) {
-        result.scene = sceneMatch[1]
-            .replace(/\\"/g, '"')
-            .replace(/\\n/g, '\n')
-            .replace(/\\t/g, '\t')
-            .replace(/\\\\/g, '\\');
-        console.log('✅ Извлечена сцена через regex');
+        result.scene = sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
+        console.log('✅ [extractDataFromBrokenJSON] Извлечена сцена через regex');
     }
     
-    // Извлекаем reflection
     const reflectionMatch = brokenText.match(/"reflection"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-    if (reflectionMatch && reflectionMatch[1]) {
-        result.reflection = reflectionMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-    }
+    if (reflectionMatch && reflectionMatch[1]) result.reflection = reflectionMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
     
-    // Извлекаем typology
     const typologyMatch = brokenText.match(/"typology"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-    if (typologyMatch && typologyMatch[1]) {
-        result.typology = typologyMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-    }
+    if (typologyMatch && typologyMatch[1]) result.typology = typologyMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
     
-    // Пытаемся извлечь choices через поиск массива
     const choicesMatch = brokenText.match(/"choices"\s*:\s*\[(.*?)\]/s);
     if (choicesMatch) {
-        console.log('⚠️ Найден массив choices, пытаемся распарсить отдельные элементы...');
-        // Простейший парсинг - ищем объекты с text
         const textMatches = choicesMatch[1].matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
         for (const match of textMatches) {
             if (match[1]) {
@@ -791,63 +592,51 @@ function extractDataFromBrokenJSON(brokenText) {
                 });
             }
         }
-        console.log(`✅ Извлечено ${result.choices.length} choices через regex`);
+        console.log(`✅ [extractDataFromBrokenJSON] Извлечено ${result.choices.length} choices через regex`);
     }
+    if (result.choices.length === 0) result.choices = createDefaultChoices();
     
-    // Добавляем дефолтные choices если ничего не нашли
-    if (result.choices.length === 0) {
-        result.choices = createDefaultChoices();
-    }
-    
-    // Извлекаем thoughts
     const thoughtsMatch = brokenText.match(/"thoughts"\s*:\s*\[(.*?)\]/s);
     if (thoughtsMatch) {
-        const thoughtMatches = thoughtsMatch[1].matchAll(/"((?:[^"\\]|\\.)*)"/g);
-        for (const match of thoughtMatches) {
-            if (match[1] && match[1].trim().length > 0) {
-                result.thoughts.push(match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'));
-            }
+        const thoughtMatches = thoughtsMatch[1].match(/"((?:[^"\\]|\\.)*?)"/g);
+        if (thoughtMatches) {
+            result.thoughts = thoughtMatches.map(s => s.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n')).filter(t => t.trim());
         }
-        console.log(`✅ Извлечено ${result.thoughts.length} thoughts через regex`);
     }
+    if (result.thoughts.length < 5) result.thoughts = result.thoughts.concat(createDefaultThoughts()).slice(0, 10);
     
-    if (result.thoughts.length < 5) {
-        result.thoughts = result.thoughts.concat(createDefaultThoughts()).slice(0, 10);
-    }
-    
-    // Пытаемся извлечь иерархии организаций
     const hierarchyMatches = brokenText.matchAll(/"organization_rank_hierarchy:([^"]+)"\s*:\s*(\{[^}]+\})/g);
     for (const match of hierarchyMatches) {
         try {
             const orgId = match[1];
             const hierarchyStr = match[2];
-            // Пытаемся парсить JSON
-            const hierarchy = JSON.parse(hierarchyStr + "}"); // Добавляем закрывающую скобку
+            let hierarchy = null;
+            try {
+                hierarchy = JSON.parse(hierarchyStr + "}");
+            } catch (e) {
+                const repaired = Utils.safeJsonRepair(hierarchyStr + "}");
+                if (repaired) hierarchy = JSON.parse(repaired);
+            }
             if (hierarchy && hierarchy.value && hierarchy.description) {
                 result._organizationsHierarchy[orgId] = {
                     id: `organization_rank_hierarchy:${orgId}`,
                     value: hierarchy.value,
                     description: hierarchy.description
                 };
-                console.log(`✅ Извлечена иерархия организации ${orgId} через regex`);
             }
         } catch (e) {
-            console.warn(`⚠️ Не удалось распарсить иерархию организации: ${e.message}`);
+            console.warn(`⚠️ [extractDataFromBrokenJSON] Не удалось распарсить иерархию организации: ${e.message}`);
         }
     }
     
-    // Генерируем summary из scene
     if (result.scene) {
         result.summary = result.scene.replace(/<[^>]*>/g, ' ').substring(0, 200).trim() + '...';
     }
-    
     return result;
 }
 
 /**
  * Создание fallback-ответа (ФОРМАТ 4.1)
- * @param {string} errorMessage - Сообщение об ошибке
- * @returns {Object} Fallback-ответ
  */
 function createFallbackResponse(errorMessage) {
     return {
@@ -870,7 +659,8 @@ function createFallbackResponse(errorMessage) {
             "История продолжается, несмотря на технические проблемы"
         ],
         summary: "Техническая ошибка в системе",
-        _organizationsHierarchy: {}
+        _organizationsHierarchy: {},
+        _metaParsed: { metaContext: '', unknownFields: [], unknownArrays: [], unknownObjects: [] }
     };
 }
 

@@ -114,11 +114,15 @@ const DEFAULT_HERO_STATE = [
      "value": 0,
      "description": "0° — Минервал (кандидат)"
    },*/
-  {
-    "id": "personality:hero",
-    "value": "Молодой искатель приключений, полный энтузиазма."
-  }
 ];
+
+// ===== НОВОЕ: дефолтное состояние для metaGameState =====
+const DEFAULT_META_GAME_STATE = {
+    metaContext: '',
+    unknownFields: [],      // { key, value } для примитивов
+    unknownArrays: [],      // любые массивы (кроме обработанных)
+    unknownObjects: []      // объекты без id/operation
+};
 
 export const DEFAULT_STATE = {
   version: '4.1.0',
@@ -160,7 +164,9 @@ export const DEFAULT_STATE = {
   lastTurnStatChanges: null,
   lastTurnUpdates: "",
   thoughtsOfHero: [],
-  pendingRequest: null
+  pendingRequest: null,
+  // ===== НОВОЕ поле для мета-контекста и неизвестных полей =====
+  metaGameState: { ...DEFAULT_META_GAME_STATE }
 };
 
 let state = null;
@@ -213,6 +219,9 @@ function initializeState() {
               state.ui = { ...defaultValue.ui, ...parsed[key] };
             } else if (key === 'settings' && typeof parsed[key] === 'object') {
               state.settings = { ...defaultValue.settings, ...parsed[key] };
+            } else if (key === 'metaGameState' && typeof parsed[key] === 'object') {
+              // ===== НОВОЕ: восстанавливаем metaGameState =====
+              state.metaGameState = { ...DEFAULT_META_GAME_STATE, ...parsed[key] };
             } else {
               state[key] = parsed[key];
             }
@@ -707,6 +716,7 @@ function exportFullState() {
     settings: { ...state.settings },
     auditLog: [...state.auditLog],
     models: [...state.models],
+    metaGameState: { ...state.metaGameState }, // ===== НОВОЕ =====
     metadata: {
       turnCount: state.turnCount,
       lastSaveTime: state.lastSaveTime,
@@ -780,6 +790,11 @@ function importFullState(importData) {
   if (importData.auditLog) {
     state.auditLog = importData.auditLog;
     saveAuditLogToLocalStorage();
+  }
+  
+  // ===== НОВОЕ: восстанавливаем metaGameState =====
+  if (importData.metaGameState) {
+    state.metaGameState = { ...DEFAULT_META_GAME_STATE, ...importData.metaGameState };
   }
   
   if (state.gameType === 'standard') {
@@ -1025,7 +1040,9 @@ function saveStateToLocalStorage() {
       freeModeText: currentState.freeModeText,
       lastTurnUpdates: currentState.lastTurnUpdates || "",
       lastTurnStatChanges: currentState.lastTurnStatChanges || null,
-      thoughtsOfHero: [...currentState.thoughtsOfHero]
+      thoughtsOfHero: [...currentState.thoughtsOfHero],
+      // ===== НОВОЕ: сохраняем metaGameState =====
+      metaGameState: { ...currentState.metaGameState }
     };
     
     // Основное сохранение в формате 4.1
@@ -1339,5 +1356,23 @@ export const State = {
   },
   emit: (event, data) => stateObserver.notify(event, data),
   
-  EVENTS: STATE_EVENTS
+  EVENTS: STATE_EVENTS,
+  
+  // ===== НОВЫЕ МЕТОДЫ ДЛЯ РАБОТЫ С META GAME STATE =====
+  setMetaContext: (context) => {
+    state.metaGameState.metaContext = context;
+    saveStateToLocalStorage();
+  },
+  addUnknownField: (field) => {
+    state.metaGameState.unknownFields.push(field);
+    saveStateToLocalStorage();
+  },
+  addUnknownArray: (arr) => {
+    state.metaGameState.unknownArrays.push(arr);
+    saveStateToLocalStorage();
+  },
+  addUnknownObject: (obj) => {
+    state.metaGameState.unknownObjects.push(obj);
+    saveStateToLocalStorage();
+  }
 };

@@ -312,14 +312,14 @@ class HistoryUI {
                 valueClass += ' array';
             } else if (typeof value === 'string') {
                 const safeValue = Utils.escapeHtml(value);
-                displayValue = value.length > 15 ? `"${safeValue.substring(0,15)}..."` : `"${safeValue}"`;
+                displayValue = `"${safeValue}"`;
                 valueClass += ' string';
             } else if (typeof value === 'object') {
                 displayValue = `{${Object.keys(value).length}}`;
                 valueClass += ' object';
             }
 
-            const safeKey = Utils.escapeHtml(key.length > 8 ? key.substring(0,8) + '...' : key);
+            const safeKey = Utils.escapeHtml(key);
 
             html += `<span class="memory-item">
                 <span class="memory-key">${safeKey}</span>

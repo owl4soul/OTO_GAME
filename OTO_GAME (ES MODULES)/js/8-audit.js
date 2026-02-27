@@ -227,7 +227,7 @@ function updateEntryError(entry, error, rawResponse = null) {
     const hasServerResponse = rawResponse !== undefined && rawResponse !== null;
     
     console.log(`[Audit updateEntryError] rawResponse:`, 
-        rawResponse ? (typeof rawResponse === 'string' ? rawResponse.substring(0, 200) : rawResponse) : 'null');
+        rawResponse ? rawResponse : 'null');
     
     if (hasServerResponse) {
         saveFullServerResponse(entry, rawResponse);

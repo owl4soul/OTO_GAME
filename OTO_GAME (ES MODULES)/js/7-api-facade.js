@@ -1,4 +1,4 @@
-// Модуль 7: API FACADE - Единый интерфейс взаимодействия с ИИ (7-api-facade.js)
+// Модуль 7: API FACADE - Единый интерфейс взаимодействия с ИИ (7-api-facade.js) v5.2
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -11,46 +11,35 @@ import { Audit } from './8-audit.js';
 import { PROMPTS } from './prompts.js';
 
 // ============================================================================
-// УНИВЕРСАЛЬНЫЙ КОНСТРУКТОР СИСТЕМНОГО ПРОМПТА
+// УНИВЕРСАЛЬНЫЙ КОНСТРУКТОР СИСТЕМНОГО ПРОМПТА (обновлён)
 // ============================================================================
 
 /**
  * Создает универсальный системный промпт для ЛЮБОГО сценария
- * Использует только компоненты из PROMPTS.js
  * @returns {string} Универсальный системный промпт
  */
 function constructUniversalInstructionsPrompt() {
-    return [
-        PROMPTS.system.gameMaster,
-        PROMPTS.corePrinciples,
-        PROMPTS.absoluteProhibitions,
-        PROMPTS.fundamentalProtocols,
-        PROMPTS.heroStateDescription,
-        PROMPTS.organizationsProtocol,
-        PROMPTS.gameItemProtocol,
-        PROMPTS.operationsProtocol,
-        PROMPTS.choicesProtocol,
-        PROMPTS.eventsProtocol,
-        PROMPTS.outputFormat,
-        `### ПРИДУМАЙ СЦЕНАРИЙ ИГРЫ:\n`
-    ].join('\n\n');
+    return PROMPTS.system.gameMaster; // уже полный, собранный из всех протоколов
+    //customGameOTO.system.gameMaster??
 }
 
 /**
  * Создает системный промпт для автора сценариев (генерации начальной сцены)
- * Использует универсальный промпт + специфичные инструкции из PROMPTS.js
  * @returns {string} Промпт для генерации начальных сцен
  */
 function constructScenarioWriterPrompt() {
-    return [
-        PROMPTS.customGameOTO.system.gameMaster
-    ].join('\n\n');
+    return PROMPTS.system.scenarioWriter;
 }
 
 // ============================================================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (без изменений)
 // ============================================================================
 
+/**
+ * Получает информацию о провайдере API на основе текущих настроек.
+ * @param {Object} state - Состояние игры
+ * @returns {Object} Объект с url, apiKey и флагом isVsegpt
+ */
 function getProviderInfo(state) {
     const isVsegpt = state.settings.apiProvider === 'vsegpt';
     const apiKey = isVsegpt ? state.settings.apiKeyVsegpt : state.settings.apiKeyOpenrouter;
@@ -101,6 +90,18 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
         
         updateAIMemory(processedData);
         
+        // ===== НОВОЕ: Обработка _metaParsed =====
+        if (processedData._metaParsed) {
+            const meta = processedData._metaParsed;
+            if (meta.metaContext) {
+                State.setMetaContext(meta.metaContext);
+            }
+            // Сохраняем остальные неизвестные поля (опционально)
+            meta.unknownFields.forEach(f => State.addUnknownField(f));
+            meta.unknownArrays.forEach(arr => State.addUnknownArray(arr));
+            meta.unknownObjects.forEach(obj => State.addUnknownObject(obj));
+        }
+        
         // Сохраняем успех с полным ответом
         Audit.updateEntrySuccess(auditEntry, rawResponseText);
         updateModelStats(state, responseTime);
@@ -129,7 +130,7 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
 /**
  * Генерирует кастомную начальную сцену на основе пользовательского промпта
  * @param {string} promptText - Пользовательский промпт для генерации сцены
- * @returns {Promise<string>} JSON-строка с начальной сценой
+ * @returns {Promise<Object>} Объект с распарсенными данными сцены
  */
 async function generateCustomScene(promptText) {
     const state = State.getState();
@@ -142,7 +143,6 @@ async function generateCustomScene(promptText) {
     const headers = prepareHeaders(apiKey, state.settings.apiProvider === 'vsegpt');
     
     const systemPrompt = constructScenarioWriterPrompt();
-    
     const universalInstructions = constructUniversalInstructionsPrompt();
     
     const userPrompt = `${promptText}
@@ -193,12 +193,16 @@ async function generateCustomScene(promptText) {
             content = rawResponseText;
         }
         
+        // Обрабатываем ответ через processAIResponse, чтобы получить полную структуру с _metaParsed
+        const processedData = API_Response.processAIResponse(content);
+        
         // Логируем успех (Сырой текст)
         Audit.updateEntrySuccess(auditEntry, rawResponseText);
         
-        return content;
+        return processedData; // теперь возвращаем объект, а не строку
     } catch (error) {
         // Логируем ошибку
+        console.error('❌ Ошибка генерации кастомной сцены:', error);
         Audit.updateEntryError(auditEntry, error, error.rawResponse);
         throw error;
     }
@@ -402,10 +406,7 @@ function prepareHeaders(apiKey, isVsegpt) {
  * @returns {Object} Payload запроса
  */
 function prepareGameRequestPayload(updatedState, selectedActions, d10) {
-    // Используем API_Request для подготовки
-    const payload = API_Request.prepareRequestPayload(updatedState, selectedActions, d10);
-    
-    return payload;
+    return API_Request.prepareRequestPayload(updatedState, selectedActions, d10);
 }
 
 /**
@@ -440,7 +441,7 @@ function createAuditEntryForGameTurn(selectedActions, payload, state, d10) {
         String(selectedActions);
     
     const auditEntry = Audit.createEntry(
-        `Игровой ход: ${actionsDescription.substring(0, 50)}...`,
+        `Игровой ход: ${actionsDescription}`,
         payload,
         state.settings.model,
         state.settings.apiProvider

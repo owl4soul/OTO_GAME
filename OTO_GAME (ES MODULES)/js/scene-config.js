@@ -90,7 +90,7 @@ export const SCENE_VISUAL_CONFIG = {
         titleFontSize: "0.9em"
     },
     
-    // Рефлексия ГМ
+    // Рефлексия героя
     reflection: {
         background: "rgba(72, 219, 251, 0.08)",
         borderLeft: "4px solid #48dbfb",

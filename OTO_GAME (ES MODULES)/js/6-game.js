@@ -1,5 +1,5 @@
 // Модуль 6: GAME - Игровая логика (ФОРМАТ 4.1 - УНИФИЦИРОВАННАЯ СИСТЕМА GAME_ITEM)
-// ИСПРАВЛЕННАЯ ВЕРСИЯ: удалены функции создания HTML, теперь они в turn-updates-ui.js
+// ИСПРАВЛЕННАЯ ВЕРСИЯ: добавлено подробное логирование событий и гарантированное применение эффектов
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -31,19 +31,16 @@ const OPERATION_TYPES = OPERATIONS;
  */
 function createOrganizationsHTML() {
     const organizations = State.getHeroOrganizations();
-    
-    if (organizations.length === 0) {
-        return '';
-    }
-    
+    if (organizations.length === 0) return '';
+
     let html = `
     <div class="organizations-container">
       <div class="organizations-header">
         <i class="fas fa-users"></i>
         <span>ВАШИ ОРГАНИЗАЦИИ</span>
       </div>
-  `;
-    
+    `;
+
     organizations.forEach(org => {
         html += `
       <div class="organization-item">
@@ -52,46 +49,67 @@ function createOrganizationsHTML() {
           <span class="organization-rank">${org.rankName}</span>
         </div>
         <div class="organization-description">${org.description}</div>
-    `;
-        
+        `;
         if (org.hierarchy && org.hierarchy.description) {
             html += `
         <div class="organization-hierarchy">
           <div class="hierarchy-title">Путь в организации:</div>
           <div class="hierarchy-ranks">
-      `;
-            
+          `;
             org.hierarchy.description.forEach(rank => {
                 const isCurrent = rank.lvl === org.rank;
                 const isPast = rank.lvl < org.rank;
-                
                 html += `
           <div class="hierarchy-rank ${isCurrent ? 'current' : isPast ? 'past' : 'future'}">
             ${rank.rank}
           </div>
-        `;
+                `;
             });
-            
             html += `</div></div>`;
         }
-        
         html += `</div>`;
     });
-    
     html += `</div>`;
-    
     return html;
 }
 
-// Функция calculateChoiceResult (без изменений, улучшенная версия)
+// ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+
+function checkRequirements(requirements) {
+    if (!Array.isArray(requirements) || requirements.length === 0) {
+        return { success: true, missing: [], stats: [] };
+    }
+    const missing = [];
+    const stats = [];
+    requirements.forEach(reqId => {
+        if (!State.hasGameItem(reqId)) missing.push(reqId);
+        if (reqId.startsWith('stat:')) {
+            const val = State.getGameItemValue(reqId);
+            if (val !== null) stats.push({ id: reqId, value: val });
+        }
+    });
+    return { success: missing.length === 0, missing, stats };
+}
+
+function modifyOperationsForPartialResult(operations) {
+    if (!Array.isArray(operations)) return [];
+    return operations.map(op => {
+        const newOp = JSON.parse(JSON.stringify(op));
+        if (newOp.operation === 'MODIFY' && typeof newOp.delta === 'number') {
+            newOp.delta = Math.ceil(newOp.delta * 0.5) || (newOp.delta > 0 ? 1 : -1);
+        }
+        return newOp;
+    });
+}
+
 function calculateChoiceResult(choice, d10) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'calculateChoiceResult', { choice, d10 });
-    
+
     if (!choice || typeof choice !== 'object') {
         log.error(LOG_CATEGORIES.VALIDATION, 'Некорректный choice для расчета', choice);
         return null;
     }
-    
+
     if (choice.difficulty_level === 0) {
         return {
             success: true,
@@ -102,23 +120,11 @@ function calculateChoiceResult(choice, d10) {
             operations: []
         };
     }
-    
-    const requirementsCheck = checkRequirements(choice.requirements || []);
-    
-    if (!requirementsCheck.success) {
-        return {
-            success: false,
-            partial: false,
-            reason: `Провал: отсутствуют требования: ${requirementsCheck.missing.join(', ')}`,
-            d10: d10,
-            difficulty: choice.difficulty_level,
-            operations: choice.fail_penalties || []
-        };
-    }
-    
-    const stats = requirementsCheck.stats;
+
+    const reqCheck = checkRequirements(choice.requirements || []);
     const difficulty = choice.difficulty_level || 5;
-    
+
+    // Критические броски
     if (d10 === 10) {
         return {
             success: true,
@@ -139,8 +145,9 @@ function calculateChoiceResult(choice, d10) {
             operations: choice.fail_penalties || []
         };
     }
-    
-    if (stats.length === 0) {
+
+    // Если нет требований по статам
+    if (reqCheck.stats.length === 0) {
         const success = d10 >= difficulty;
         return {
             success: success,
@@ -151,51 +158,44 @@ function calculateChoiceResult(choice, d10) {
             operations: success ? (choice.success_rewards || []) : (choice.fail_penalties || [])
         };
     }
-    
-    const TARGET_MULTIPLIER = 10;
-    const target = difficulty * TARGET_MULTIPLIER;
-    
-    const statChecks = stats.map(stat => {
-        const total = stat.value + d10;
-        const passed = total >= target;
-        return {
-            id: stat.id,
-            base: stat.value,
-            withLuck: total,
-            passed: passed,
-            target: target
-        };
-    });
-    
+
+    // Есть требования по статам – новая механика: порог = средний стат + сложность
+    const statValues = reqCheck.stats.map(s => s.value);
+    const avgStat = statValues.reduce((a, b) => a + b, 0) / statValues.length;
+    const threshold = avgStat + difficulty; // порог для каждого стата
+
+    const statChecks = reqCheck.stats.map(stat => ({
+        id: stat.id,
+        base: stat.value,
+        withLuck: stat.value + d10,
+        passed: (stat.value + d10) >= threshold
+    }));
+
     const passedCount = statChecks.filter(s => s.passed).length;
     const totalStats = statChecks.length;
-    
+
     let success, partial, reason;
     if (passedCount === totalStats) {
         success = true;
         partial = false;
-        reason = `Полный успех: все статы прошли проверку (цель ${target})`;
+        reason = `Полный успех: все статы прошли проверку (порог ${threshold.toFixed(1)})`;
     } else if (passedCount === 0) {
         success = false;
         partial = false;
-        reason = `Полный провал: ни один стат не прошёл проверку (цель ${target})`;
+        reason = `Полный провал: ни один стат не прошёл проверку (порог ${threshold.toFixed(1)})`;
     } else {
         success = true;
         partial = true;
-        reason = `Частичный успех: ${passedCount}/${totalStats} статов прошли проверку (цель ${target})`;
+        reason = `Частичный успех: ${passedCount}/${totalStats} статов прошли проверку (порог ${threshold.toFixed(1)})`;
     }
-    
+
     let operations = [];
-    if (success && !partial) {
-        operations = choice.success_rewards || [];
-    } else if (success && partial) {
-        operations = modifyOperationsForPartialResult(choice.success_rewards || []);
-    } else {
-        operations = choice.fail_penalties || [];
-    }
-    
-    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результат расчета', { success, partial, operationsCount: operations.length, target });
-    
+    if (success && !partial) operations = choice.success_rewards || [];
+    else if (success && partial) operations = modifyOperationsForPartialResult(choice.success_rewards || []);
+    else operations = choice.fail_penalties || [];
+
+    log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результат расчета', { success, partial, operationsCount: operations.length, threshold });
+
     return {
         success: success,
         partial: partial,
@@ -203,67 +203,15 @@ function calculateChoiceResult(choice, d10) {
         d10: d10,
         difficulty: difficulty,
         statChecks: statChecks,
-        threshold: target,
+        threshold: threshold,
         operations: operations
-    };
-}
-
-function modifyOperationsForPartialResult(operations) {
-    if (!Array.isArray(operations)) return [];
-    
-    return operations.map(op => {
-        if (op.operation === 'MODIFY' && typeof op.delta === 'number') {
-            const modifiedDelta = Math.ceil(op.delta * 0.5);
-            const finalDelta = modifiedDelta === 0 ?
-                (op.delta > 0 ? 1 : -1) :
-                modifiedDelta;
-            
-            return {
-                ...op,
-                delta: finalDelta,
-                description: `${op.description || ''} (частичный результат: ${finalDelta})`
-            };
-        }
-        return op;
-    });
-}
-
-function checkRequirements(requirements) {
-    if (!Array.isArray(requirements) || requirements.length === 0) {
-        return { success: true, missing: [], stats: [] };
-    }
-    
-    const missing = [];
-    const stats = [];
-    
-    requirements.forEach(reqId => {
-        const hasItem = State.hasGameItem(reqId);
-        if (!hasItem) {
-            missing.push(reqId);
-        }
-        
-        if (reqId.startsWith('stat:')) {
-            const statValue = State.getGameItemValue(reqId);
-            if (statValue !== null) {
-                stats.push({
-                    id: reqId,
-                    value: statValue
-                });
-            }
-        }
-    });
-    
-    return {
-        success: missing.length === 0,
-        missing: missing,
-        stats: stats
     };
 }
 
 function toggleChoice(idx) {
     const state = State.getState();
     const selectedActions = [...state.gameState.selectedActions];
-    
+
     const pos = selectedActions.indexOf(idx);
     if (pos >= 0) {
         selectedActions.splice(pos, 1);
@@ -272,25 +220,25 @@ function toggleChoice(idx) {
             selectedActions.push(idx);
         }
     }
-    
+
     State.setState({
         gameState: {
             ...state.gameState,
             selectedActions: selectedActions
         }
     });
-    
+
     Render.renderChoices();
     UI.updateActionButtons();
 }
 
-// Завершение и отправка хода (без изменений, кроме вызова TurnUpdatesUI)
+// Завершение и отправка хода
 async function submitTurn(retries = CONFIG.maxRetries) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'submitTurn called');
-    
+
     const state = State.getState();
     const turnNumber = state.turnCount;
-    
+
     // Начинаем логирование хода
     Logger.startTurnLogging(turnNumber);
     log.info(LOG_CATEGORIES.TURN_PROCESSING, `🔄 НАЧАЛО ОБРАБОТКИ ХОДА ${turnNumber}`, {
@@ -299,27 +247,27 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         freeMode: state.freeMode,
         freeText: state.freeMode ? state.freeModeText : null
     });
-    
+
     console.log('🔍 submitTurn called');
     console.log(`🎯 Отправка ХОДА ${state.turnCount} к ИИ...`);
-    
+
     if (activeAbortController) {
         activeAbortController.abort();
         activeAbortController = null;
     }
-    
+
     // Сбрасываем изменения статов за предыдущий ход
     State.setState({ lastTurnStatChanges: null });
-    
+
     let selectedChoicesData = [];
-    
+
     if (state.freeMode) {
         const requestText = state.freeModeText.trim();
         if (requestText.length === 0) {
             log.warn(LOG_CATEGORIES.VALIDATION, 'Свободный ввод пуст');
             return;
         }
-        
+
         selectedChoicesData = [{
             text: requestText,
             difficulty_level: 0,
@@ -327,7 +275,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             success_rewards: [],
             fail_penalties: []
         }];
-        
+
         dom.freeInputText.disabled = true;
         dom.freeInputText.style.opacity = '0.7';
     } else {
@@ -335,49 +283,47 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             log.warn(LOG_CATEGORIES.VALIDATION, 'Нет выбранных действий');
             return;
         }
-        
+
         log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Выбранные действия', state.gameState.selectedActions);
-        
+
         selectedChoicesData = state.gameState.selectedActions.map(i => {
             if (!state.gameState.currentScene || !state.gameState.currentScene.choices) {
                 log.error(LOG_CATEGORIES.ERROR_TRACKING, 'Нет currentScene или choices');
                 return null;
             }
-            
             if (!state.gameState.currentScene.choices[i]) {
                 log.error(LOG_CATEGORIES.ERROR_TRACKING, `Choice с индексом ${i} не найден`);
                 return null;
             }
             return state.gameState.currentScene.choices[i];
         }).filter(Boolean);
-        
+
         log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Данные выбранных choices', selectedChoicesData);
     }
-    
+
     if (selectedChoicesData.length === 0) {
         log.error(LOG_CATEGORIES.ERROR_TRACKING, 'Нет данных для выбранных действий');
         Render.showErrorAlert("Ошибка", "Нет выбранных действий или данных о них");
         return;
     }
-    
+
     const d10 = Math.round(Math.random() * 10) + 1;
     log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎲 Общий бросок удачи на ход: d10 = ${d10}`, {
         d10: d10,
         turn: turnNumber
     });
-    
+
     const actionResults = [];
-    
+
     selectedChoicesData.forEach((choice, idx) => {
-        const result = OperationsServiceInstance.calculateChoiceResult(choice, d10, state.heroState);
+        const result = calculateChoiceResult(choice, d10);
         if (result) {
             actionResults.push({
                 ...result,
                 choice_text: choice.text,
                 choice_index: state.freeMode ? null : state.gameState.selectedActions[idx]
             });
-            
-            // Логируем результат каждого действия
+
             log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎯 Результат действия ${idx + 1}`, {
                 success: result.success,
                 partial: result.partial,
@@ -388,28 +334,27 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             });
         }
     });
-    
+
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'Результаты действий', actionResults);
-    
+
     // Сохраняем оригинальное состояние и результаты действий
     pendingOriginalHeroState = JSON.parse(JSON.stringify(state.heroState));
     pendingActionResults = actionResults;
     pendingD10 = d10;
-    
-    // Логируем оригинальное состояние
+
     log.debug(LOG_CATEGORIES.GAME_STATE, 'Оригинальное состояние героя', {
         stats: pendingOriginalHeroState.filter(item => item.id.startsWith('stat:')).map(s => ({ id: s.id, value: s.value })),
         totalItems: pendingOriginalHeroState.length
     });
-    
+
     // Создаем расчетное состояние для ИИ с использованием OperationsService
     const stateForAI = OperationsServiceInstance.calculateStateForAI(pendingOriginalHeroState, actionResults);
-    
+
     log.info(LOG_CATEGORIES.TURN_PROCESSING, '🧮 Расчетное состояние для ИИ готово', {
         calculatedStats: stateForAI.filter(item => item.id.startsWith('stat:')).map(s => ({ id: s.id, value: s.value })),
         changesCount: actionResults.reduce((acc, r) => acc + (r.operations?.length || 0), 0)
     });
-    
+
     // Подготавливаем данные для отправки ИИ
     const selectedActions = actionResults.map(result => ({
         text: result.choice_text,
@@ -419,25 +364,25 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         partial_success: result.partial,
         d10_roll: result.d10
     }));
-    
+
     log.debug(LOG_CATEGORIES.AI_REQUESTS, 'Данные для отправки ИИ', selectedActions);
-    
+
     dom.btnSubmit.innerHTML = '<span class="spinner"></span>';
     dom.btnSubmit.disabled = true;
     dom.btnClear.disabled = true;
-    
+
     activeAbortController = new AbortController();
-    const timeoutId = setTimeout(() => {
-        if (activeAbortController) {
-            activeAbortController.abort();
-            Render.showErrorAlert(
-                "Таймаут запроса",
-                "Запрос превысил лимит времени (120 секунд). Попробуйте снова.",
-                new Error("Request timeout after 120000ms")
-            );
-        }
-    }, CONFIG.requestTimeout);
+        const requestTimeout = CONFIG.requestTimeout;
     
+    const timeoutId = setTimeout(() => {
+        abortController.abort();
+        Render.showErrorAlert(
+            "Таймаут запроса",
+            `Запрос превысил лимит времени (${requestTimeout / 1000} секунд). Попробуйте снова.`,
+            new Error(`Request timeout after ${requestTimeout} ms`)
+        );
+    }, requestTimeout);
+
     try {
         log.info(LOG_CATEGORIES.AI_REQUESTS, '📡 Отправляем запрос к ИИ с РАСЧЕТНЫМ состоянием...', {
             turn: turnNumber,
@@ -447,31 +392,29 @@ async function submitTurn(retries = CONFIG.maxRetries) {
                 items: stateForAI.length
             }
         });
-        
+
         Render.startThoughtsOfHeroDisplay();
-        
+
         // Создаем временное состояние с расчетными данными для отправки ИИ
         const stateForAIRequest = {
             ...state,
             heroState: stateForAI
         };
-        
-        // Логируем AI запрос
+
         log.aiRequest(stateForAIRequest, selectedActions, turnNumber);
-        
+
         const startTime = Date.now();
         const data = await API.sendAIRequest(stateForAIRequest, selectedActions, activeAbortController, d10);
         const processingTime = Date.now() - startTime;
-        
+
         clearTimeout(timeoutId);
         activeAbortController = null;
-        
+
         if (!data || !data.scene) {
-            // Очищаем pending данные
             pendingOriginalHeroState = null;
             pendingActionResults = null;
             pendingD10 = null;
-            
+
             if (retries > 0) {
                 log.warn(LOG_CATEGORIES.AI_REQUESTS, `Ответ ИИ не содержит сцены. Повторная попытка ${CONFIG.maxRetries - retries + 1}.`);
                 await new Promise(r => setTimeout(r, CONFIG.retryDelayMs));
@@ -480,7 +423,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
                 throw new Error("ИИ не смог сгенерировать сцену после нескольких попыток.");
             }
         }
-        
+
         log.info(LOG_CATEGORIES.AI_REQUESTS, '✅ Получен ответ от ИИ', {
             hasScene: !!data.scene,
             sceneLength: data.scene?.length || 0,
@@ -488,55 +431,53 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             eventsCount: data.events?.length || 0,
             hasOrganizationsHierarchy: !!data._organizationsHierarchy
         });
-        
-        // Логируем AI ответ
+
         log.aiResponse(data, processingTime);
-        
+
         // Обрабатываем ход с сохраненными данными
-        processTurn(data);
-        
+        await processTurn(data);
+
     } catch (e) {
         clearTimeout(timeoutId);
         activeAbortController = null;
-        
-        // Очищаем pending данные при ошибке
+
         pendingOriginalHeroState = null;
         pendingActionResults = null;
         pendingD10 = null;
-        
+
         Render.stopThoughtsOfHeroDisplay();
-        
+
         if (e.name === 'AbortError') {
             log.info(LOG_CATEGORIES.AI_REQUESTS, 'Запрос отменен');
             return;
         }
-        
+
         if (e.message.includes("парсинга JSON") && retries > 0) {
             log.warn(LOG_CATEGORIES.AI_REQUESTS, `JSON повреждён. Повторяем запрос... (${retries} попыток осталось)`);
             await new Promise(r => setTimeout(r, 1500));
             return submitTurn(retries - 1);
         }
-        
+
         log.error(LOG_CATEGORIES.ERROR_TRACKING, '💥 Ошибка в submitTurn', {
             error: e.message,
             stack: e.stack,
             turn: turnNumber
         });
-        
+
         if (state.freeMode) {
             dom.freeInputText.disabled = false;
             dom.freeInputText.style.opacity = '1';
         }
-        
+
         let errorMsg = e.message;
         if (e.message === 'Failed to fetch') {
             errorMsg += '\n\n🔍 Проверьте:\n- Запущен ли локальный сервер? (не file://)\n- Интернет/VPN?\n- DevTools → Network (ищите красный запрос).';
         } else if (e.message.includes('Введите API ключ')) {
             errorMsg += '\n\n🔑 Введите валидный API-ключ в настройках.';
         }
-        
+
         Render.showErrorAlert("Ошибка соединения", errorMsg, e);
-        
+
         dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
         dom.btnSubmit.disabled = false;
         dom.btnClear.disabled = false;
@@ -547,7 +488,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
             dom.freeInputText.focus();
         }
         State.saveStateToLocalStorage();
-        
+
         // Завершаем логирование хода
         Logger.endTurnLogging(turnNumber, {
             operationsCount: actionResults.reduce((acc, r) => acc + (r.operations?.length || 0), 0),
@@ -557,54 +498,55 @@ async function submitTurn(retries = CONFIG.maxRetries) {
     }
 }
 
-// Обработка результатов хода (изменён вызов создания HTML)
-// Обработка результатов хода (исправленная версия)
-function processTurn(data) {
+// Обработка результатов хода (исправленная версия с детальным логированием событий)
+async function processTurn(data) {
     log.debug(LOG_CATEGORIES.TURN_PROCESSING, 'processTurn called with pending data');
     Render.stopThoughtsOfHeroDisplay();
-    
+
     if (!pendingOriginalHeroState || !pendingActionResults) {
         log.error(LOG_CATEGORIES.ERROR_TRACKING, 'Нет pending данных для обработки хода');
         return;
     }
-    
+
     const state = State.getState();
     const completedTurn = state.turnCount;
-    
+
     log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎯 Обработка ответа на ХОД ${completedTurn}...`, {
         hasScene: !!data.scene,
         choicesCount: data.choices?.length || 0,
         eventsCount: data.events?.length || 0
     });
-    
+
     const previousScene = state.gameState.currentScene;
-    
+
     // ========== НОВЫЕ МАССИВЫ ДЛЯ РЕЗУЛЬТАТОВ ОПЕРАЦИЙ ==========
     const actionOperationResults = []; // для каждого действия массив результатов операций
     const eventOperationResults = []; // для каждого события массив результатов эффектов
-    
+
     // 1. Уменьшаем длительность эффектов в реальном состоянии
     const buffResult = OperationsServiceInstance.decreaseBuffDurations(state.heroState);
     log.info(LOG_CATEGORIES.OPERATIONS, `🕐 Уменьшена длительность эффектов`, {
         processed: buffResult.processed,
         removed: buffResult.removed
     });
-    
+
     // 2. Применяем операции от действий к реальному состоянию и сохраняем результаты
     pendingActionResults.forEach((result, idx) => {
         if (result.operations && Array.isArray(result.operations)) {
-            const operationResult = OperationsServiceInstance.applyOperations(result.operations, state.heroState);
-            if (!operationResult.success) {
-                log.warn(LOG_CATEGORIES.OPERATIONS, 'Некоторые операции от действий не были применены', operationResult);
+            const opResult = OperationsServiceInstance.applyOperations(result.operations, state.heroState);
+            actionOperationResults[idx] = opResult.results || [];
+            if (!opResult.success) {
+                log.warn(LOG_CATEGORIES.OPERATIONS, 'Некоторые операции от действий не были применены', opResult);
             }
-            actionOperationResults[idx] = operationResult.results || []; // сохраняем массив результатов
         } else {
             actionOperationResults[idx] = [];
         }
     });
-    
+
     // 3. Применяем операции от событий и сохраняем результаты
     if (data.events && Array.isArray(data.events)) {
+        log.info(LOG_CATEGORIES.EVENTS, `📅 Обработка ${data.events.length} событий...`);
+
         // Собираем все эффекты событий в один массив для применения
         const eventEffects = [];
         data.events.forEach(event => {
@@ -612,13 +554,14 @@ function processTurn(data) {
                 eventEffects.push(...event.effects);
             }
         });
-        
+
         if (eventEffects.length > 0) {
+            log.info(LOG_CATEGORIES.EVENTS, `⚡ Применение ${eventEffects.length} эффектов от событий`);
             const eventResult = OperationsServiceInstance.applyOperations(eventEffects, state.heroState);
             if (!eventResult.success) {
                 log.warn(LOG_CATEGORIES.OPERATIONS, 'Некоторые операции от событий не были применены', eventResult);
             }
-            
+
             // Разбиваем результаты обратно по событиям
             let effectIndex = 0;
             data.events.forEach((event, evIdx) => {
@@ -635,8 +578,10 @@ function processTurn(data) {
                 eventOperationResults[evIdx] = [];
             });
         }
+    } else {
+        log.info(LOG_CATEGORIES.EVENTS, '📭 События отсутствуют');
     }
-    
+
     // 4. Рассчитываем изменения статов
     const changes = OperationsServiceInstance.calculateChanges(pendingOriginalHeroState, state.heroState);
     log.info(LOG_CATEGORIES.GAME_STATE, '📊 Изменения за ход', {
@@ -644,12 +589,11 @@ function processTurn(data) {
         stats: changes.stats ? Object.keys(changes.stats).length : 0,
         items: changes.items ? Object.keys(changes.items).length : 0
     });
-    
-    // Логируем детальные изменения состояния
+
     if (changes.stats && Object.keys(changes.stats).length > 0) {
         log.stateChange(changes.stats, pendingOriginalHeroState, state.heroState);
     }
-    
+
     // Сохраняем изменения статов для отображения
     const statChanges = {};
     if (changes.stats) {
@@ -657,30 +601,79 @@ function processTurn(data) {
             statChanges[statId] = changes.stats[statId].delta;
         });
     }
+
+// 5. Обновляем память ИИ и сцену
+let updatedAiMemory = state.gameState.aiMemory; // по умолчанию старое
+
+if (data.aiMemory !== undefined && data.aiMemory !== null) {
+    const newMemory = data.aiMemory;
+    let isEmpty = false;
     
-    // 5. Обновляем память ИИ и сцену
-    const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && Object.keys(data.aiMemory).length > 0) ?
-        data.aiMemory : state.gameState.aiMemory;
-    
-    if (data.thoughts && Array.isArray(data.thoughts)) {
-        State.addHeroPhrases(data.thoughts);
-        log.info(LOG_CATEGORIES.GAME_STATE, '💭 Получены мысли героя', {
-            thoughtsCount: data.thoughts.length
-        });
+    // Определяем пустоту в зависимости от типа
+    if (typeof newMemory === 'string') {
+        isEmpty = newMemory.trim() === '';
+    } else if (Array.isArray(newMemory)) {
+        isEmpty = newMemory.length === 0;
+    } else if (typeof newMemory === 'object') {
+        isEmpty = Object.keys(newMemory).length === 0;
+    } else {
+        // Примитивы (числа, boolean) считаем непустыми – они несут информацию
+        isEmpty = false;
     }
     
-    const updatedScene = {
-        scene: data.scene || state.gameState.currentScene.scene,
-        reflection: data.reflection || "",
-        choices: data.choices || state.gameState.currentScene.choices,
-        typology: data.typology || "",
-        design_notes: data.design_notes || "",
-        aiMemory: updatedAiMemory,
-        thoughts: data.thoughts || [],
-        summary: data.summary || "",
-        personality: data.personality || ""
-    };
-    
+    if (!isEmpty) {
+        updatedAiMemory = newMemory;
+        log.info(LOG_CATEGORIES.GAME_STATE, '🧠 Память ГМ обновлена из ответа ИИ', {
+            type: typeof newMemory,
+            isEmpty: false
+        });
+    } else {
+        log.info(LOG_CATEGORIES.GAME_STATE, '🧠 Память ГМ в ответе ИИ пуста, оставляем предыдущую');
+    }
+} else {
+    log.info(LOG_CATEGORIES.GAME_STATE, '🧠 Память ГМ отсутствует в ответе, оставляем предыдущую');
+}
+
+if (data.thoughts && Array.isArray(data.thoughts)) {
+    State.addHeroPhrases(data.thoughts);
+    log.info(LOG_CATEGORIES.GAME_STATE, '💭 Получены мысли героя', {
+        thoughtsCount: data.thoughts.length
+    });
+}
+
+// Обновляем typology и personality только при реальном изменении
+const currentScene = state.gameState.currentScene;
+
+let updatedTypology = currentScene.typology;
+if (data.typology && typeof data.typology === 'string' && data.typology !== currentScene.typology) {
+    updatedTypology = data.typology;
+    log.info(LOG_CATEGORIES.GAME_STATE, '🏷️ Типология обновлена в сцене', {
+        old: currentScene.typology,
+        new: updatedTypology
+    });
+}
+
+let updatedPersonality = currentScene.personality;
+if (data.personality && typeof data.personality === 'string' && data.personality !== currentScene.personality) {
+    updatedPersonality = data.personality;
+    log.info(LOG_CATEGORIES.GAME_STATE, '👤 Личность обновлена в сцене', {
+        old: currentScene.personality,
+        new: updatedPersonality
+    });
+}
+
+const updatedScene = {
+    scene: data.scene || currentScene.scene,
+    reflection: data.reflection || "",
+    choices: data.choices || currentScene.choices,
+    typology: updatedTypology,
+    design_notes: data.design_notes || "",
+    aiMemory: updatedAiMemory,
+    thoughts: data.thoughts || [],
+    summary: data.summary || "",
+    personality: updatedPersonality
+};
+
     // Добавляем запись в историю
     const newHistoryEntry = {
         fullText: data.scene || "",
@@ -693,16 +686,16 @@ function processTurn(data) {
             partial: a.partial
         }))
     };
-    
+
     const updatedHistory = [...state.gameState.history, newHistoryEntry];
     if (updatedHistory.length > CONFIG.historyContext) {
         updatedHistory.shift();
     }
-    
+
     // 6. ОБРАБОТКА ОРГАНИЗАЦИЙ
     if (data._organizationsHierarchy && typeof data._organizationsHierarchy === 'object') {
         log.info(LOG_CATEGORIES.ORGANIZATIONS, '🏛️ Обновление иерархий организаций из ответа ИИ');
-        
+
         let updatedHierarchies = 0;
         for (const orgId in data._organizationsHierarchy) {
             const hierarchy = data._organizationsHierarchy[orgId];
@@ -714,12 +707,12 @@ function processTurn(data) {
                 }
             }
         }
-        
+
         if (updatedHierarchies > 0) {
             log.info(LOG_CATEGORIES.ORGANIZATIONS, `✅ Обновлено иерархий организаций: ${updatedHierarchies}`);
         }
     }
-    
+
     // 7. Проверяем операции с организациями
     const organizationOperations = [];
     pendingActionResults.forEach(result => {
@@ -738,7 +731,7 @@ function processTurn(data) {
             });
         }
     });
-    
+
     if (data.events && Array.isArray(data.events)) {
         data.events.forEach(event => {
             if (event.effects && Array.isArray(event.effects)) {
@@ -757,28 +750,27 @@ function processTurn(data) {
             }
         });
     }
-    
+
     if (organizationOperations.length > 0) {
         log.info(LOG_CATEGORIES.ORGANIZATIONS, 'Найдены операции с организациями', {
             operationsCount: organizationOperations.length
         });
     }
-    
-    
+
     let totalActionOperations = 0;
-pendingActionResults.forEach(result => {
-    if (result.operations) totalActionOperations += result.operations.length;
-});
-let totalEventOperations = 0;
-if (data.events) {
-    data.events.forEach(event => {
-        if (event.effects) totalEventOperations += event.effects.length;
+    pendingActionResults.forEach(result => {
+        if (result.operations) totalActionOperations += result.operations.length;
     });
-}
-    
+    let totalEventOperations = 0;
+    if (data.events) {
+        data.events.forEach(event => {
+            if (event.effects) totalEventOperations += event.effects.length;
+        });
+    }
+
     // ========== ВЫЗОВ МЕТОДА ДЛЯ ГЕНЕРАЦИИ И СОХРАНЕНИЯ HTML ==========
     TurnUpdatesUI.generateUpdatesHTML(pendingActionResults, data.events || [], completedTurn, actionOperationResults, eventOperationResults);
-    
+
     // 9. Увеличиваем счетчик ходов
     const nextTurn = State.incrementTurnCount();
     log.info(LOG_CATEGORIES.TURN_PROCESSING, `➡️ Переход к ХОДУ ${nextTurn}`, {
@@ -786,7 +778,7 @@ if (data.events) {
         nextTurn: nextTurn,
         totalOperations: totalActionOperations + totalEventOperations
     });
-    
+
     // 10. Сохраняем все изменения
     State.setState({
         gameState: {
@@ -800,104 +792,105 @@ if (data.events) {
         },
         thoughtsOfHero: State.getHeroPhrasesCount() > 0 ? state.thoughtsOfHero : [],
         lastTurnStatChanges: statChanges,
-        // lastTurnUpdates уже обновлён в TurnUpdatesUI.generateUpdatesHTML
     });
-    
+
     // 11. Очищаем pending данные
     pendingOriginalHeroState = null;
     pendingActionResults = null;
     pendingD10 = null;
-    
+
     // 12. Обновляем UI
     UI.setFreeModeUI(false);
-    
+
     // 13. Эмитим события
     const safePreviousScene = previousScene || {
         scene: "В начале игры предыдущая сцена отсутствует.",
         choices: []
     };
-    
+
     State.emit(State.EVENTS.HERO_CHANGED, {
         statChanges: statChanges,
         actionResults: pendingActionResults,
         events: data.events || [],
         changes: changes
     });
-    
+
     State.emit(State.EVENTS.SCENE_CHANGED, {
         scene: updatedScene,
         previousScene: safePreviousScene
     });
-    
+
     State.emit(State.EVENTS.TURN_COMPLETED, {
         actions: pendingActionResults,
         statChanges: statChanges,
         turnNumber: completedTurn,
         operationsCount: totalActionOperations + totalEventOperations
     });
-    
+
     // 14. Восстанавливаем UI
     dom.freeInputText.disabled = false;
     dom.freeInputText.style.opacity = '1';
     dom.freeModeToggle.checked = false;
     dom.btnSubmit.innerHTML = '<i class="fas fa-paper-plane"></i> ОТПРАВИТЬ';
     UI.updateActionButtons();
-    
+
     // 15. Сохраняем состояние
     State.saveStateToLocalStorage();
-    
+
     log.info(LOG_CATEGORIES.TURN_PROCESSING, '✅ processTurn завершен с сохранением состояния', {
         turn: completedTurn,
         sceneLength: updatedScene.scene?.length || 0,
-        choicesCount: updatedScene.choices?.length || 0
+        choicesCount: updatedScene.choices?.length || 0,
+        eventsApplied: data.events?.length || 0
     });
-    
+
     State.checkHeroDeath();
     Render.applyStateEffects();
 }
 
 function showEndScreen(title, msg, color, isVictory = false) {
     log.info(LOG_CATEGORIES.GAME_STATE, "showEndScreen called", { title, isVictory });
-    
+
     const canvas = document.getElementById('matrixCanvas');
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    
+
     const letters = '93 ΘΈΛΗΜΑ 93 ἈΓΆΠΗ 93 THELEMA 93 AGAPE93';
     let letterIndex = 0;
-    
+
     const layers = [
-    {
-        fontSize: 18,
-        speed: 1.8,
-        alpha: 0.9,
-        colorFactor: 1.0,
-        density: 0.7,
-        resetChance: 0.98
-    },
-    {
-        fontSize: 14,
-        speed: 1.0,
-        alpha: 0.7,
-        colorFactor: 0.7,
-        density: 0.85,
-        resetChance: 0.975
-    },
-    {
-        fontSize: 10,
-        speed: 0.6,
-        alpha: 0.4,
-        colorFactor: 0.4,
-        density: 1.0,
-        resetChance: 0.97
-    }];
-    
+        {
+            fontSize: 18,
+            speed: 1.8,
+            alpha: 0.9,
+            colorFactor: 1.0,
+            density: 0.7,
+            resetChance: 0.98
+        },
+        {
+            fontSize: 14,
+            speed: 1.0,
+            alpha: 0.7,
+            colorFactor: 0.7,
+            density: 0.85,
+            resetChance: 0.975
+        },
+        {
+            fontSize: 10,
+            speed: 0.6,
+            alpha: 0.4,
+            colorFactor: 0.4,
+            density: 1.0,
+            resetChance: 0.97
+        }
+    ];
+
     const layerData = [];
     for (let i = 0; i < layers.length; i++) {
         const layer = layers[i];
         const columns = Math.floor(canvas.width / layer.fontSize);
-        
+
         layerData.push({
             fontSize: layer.fontSize,
             speed: layer.speed,
@@ -910,33 +903,33 @@ function showEndScreen(title, msg, color, isVictory = false) {
             waveSpeed: 0.05 + Math.random() * 0.05
         });
     }
-    
+
     function adjustColor(factor) {
         var red = Math.floor(0x88 * factor);
         return 'rgb(' + red + ',0,0)';
     }
-    
+
     if (matrixInterval) clearInterval(matrixInterval);
-    
+
     matrixInterval = setInterval(function() {
         ctx.fillStyle = 'rgba(0,0,0,0.05)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
+
         for (let layerIdx = 0; layerIdx < layerData.length; layerIdx++) {
             const layer = layerData[layerIdx];
             ctx.globalAlpha = layer.alpha;
             ctx.fillStyle = adjustColor(layer.colorFactor);
             ctx.font = 'bold ' + layer.fontSize + 'px monospace';
-            
+
             for (let i = 0; i < layer.drops.length; i++) {
                 if (Math.random() > layer.density) continue;
-                
+
                 const x = i * layer.fontSize + Math.sin(layer.waves[i]) * layer.fontSize * 0.3;
                 layer.waves[i] += layer.waveSpeed;
                 const text = letters.charAt(letterIndex % letters.length);
                 letterIndex++;
                 const y = layer.drops[i] * layer.fontSize;
-                
+
                 if (y > -layer.fontSize && y < canvas.height) {
                     if (layerIdx === 0) {
                         ctx.shadowColor = '#880000';
@@ -946,19 +939,19 @@ function showEndScreen(title, msg, color, isVictory = false) {
                     ctx.shadowColor = 'transparent';
                     ctx.shadowBlur = 0;
                 }
-                
+
                 layer.drops[i] += layer.speed;
-                
+
                 if (layer.drops[i] * layer.fontSize > canvas.height && Math.random() > layer.resetChance) {
                     layer.drops[i] = 0;
                     layer.waves[i] = Math.random() * Math.PI * 2;
                 }
             }
         }
-        
+
         ctx.globalAlpha = 1.0;
     }, 33);
-    
+
     document.getElementById('endTitle').textContent = title;
     document.getElementById('endTitle').style.color = color;
     document.getElementById('endMsg').textContent = msg;
@@ -987,7 +980,7 @@ function restartGame() {
 
 function handleClear() {
     const state = State.getState();
-    
+
     if (state.freeMode) {
         state.freeModeText = '';
         dom.freeInputText.value = '';
@@ -1002,52 +995,52 @@ function handleClear() {
         });
         Render.renderChoices();
     }
-    
+
     UI.updateActionButtons();
 }
 
 function handleFreeModeToggle(e) {
     const state = State.getState();
     const isFreeMode = e.target.checked;
-    
+
     log.info(LOG_CATEGORIES.UI_EVENTS, 'Переключение режима', {
         mode: isFreeMode ? 'free' : 'choices',
         previousMode: state.freeMode ? 'free' : 'choices'
     });
-    
+
     State.setState({
         freeMode: isFreeMode,
     });
-    
+
     UI.setFreeModeUI(isFreeMode);
     UI.updateActionButtons();
-    
+
     State.emit(State.EVENTS.MODE_CHANGED, { mode: isFreeMode ? 'free' : 'choices' });
 }
 
 // Подписка на события состояния
 function setupGameObservers() {
     log.debug(LOG_CATEGORIES.GAME_STATE, 'Настройка игровых подписок...');
-    
+
     // Обработка ритуалов
     State.on(State.EVENTS.RITUAL_STARTED, (data) => {
         log.info(LOG_CATEGORIES.GAME_STATE, '🕯️ Начался ритуал', data);
         document.body.classList.add('ritual-mode');
     });
-    
+
     State.on(State.EVENTS.RITUAL_PROGRESS, (data) => {
         const ritualProgress = document.getElementById('ritualProgress');
         if (ritualProgress) {
             ritualProgress.style.width = `${data.progress}%`;
         }
     });
-    
+
     State.on(State.EVENTS.DEGREE_UPGRADED, (data) => {
         log.info(LOG_CATEGORIES.ORGANIZATIONS, `🎓 Повышение степени: ${data.oldDegree} → ${data.newDegree}`, data);
         Render.showSuccessAlert('🎓 Новый ранг!',
             `Вы достигли степени: ${data.degreeName}. Получен бонус ко всем характеристикам!`);
     });
-    
+
     // Подписка на мысли героя
     State.on(State.EVENTS.THOUGHTS_UPDATED, (data) => {
         const thoughtsContainer = document.getElementById('heroThoughts');
@@ -1057,13 +1050,13 @@ function setupGameObservers() {
                 .join('');
         }
     });
-    
+
     // Подписка на смерть героя
     State.on(State.EVENTS.HERO_DEATH, (data) => {
         log.error(LOG_CATEGORIES.GAME_STATE, '☠️ Герой умер', data);
         showEndScreen("ПОРАЖЕНИЕ", "Твоя воля иссякла, рассудок померк, скрытность раскрыта, влияние утрачено.", "#800");
     });
-    
+
     // Подписка на победу
     State.on(State.EVENTS.VICTORY, () => {
         log.info(LOG_CATEGORIES.GAME_STATE, '🎉 Победа достигнута');
@@ -1079,7 +1072,6 @@ export const Game = {
     handleClear,
     handleFreeModeToggle,
     checkRequirements,
-    // createTurnUpdatesHTML больше не экспортируется
     createOrganizationsHTML,
     setupGameObservers
 };

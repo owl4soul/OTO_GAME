@@ -17,7 +17,7 @@ export const CONFIG = {
     autoRepairAttempts: 2,
     
     retryDelayMs: 1000,
-    requestTimeout: 120000,
+    requestTimeout: 240000,
     stateVersion: '4.1.0', // Обновляем версию
     
     // Шаги масштабирования

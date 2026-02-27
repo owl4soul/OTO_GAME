@@ -471,7 +471,10 @@ class GameItemUIManager {
 
     renderPersonality() {
         try {
-            const val = State.getGameItemValue('personality:hero');
+            let val = State.getState().gameState.currentScene?.personality || '';
+            if (val === ''){
+                val = State.getGameItemValue('personality:hero');
+            }
             const config = this.typeConfigs.personality;
             const colors = config.colors;
             const content = this.config.CONTENT;
