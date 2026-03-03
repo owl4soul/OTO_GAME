@@ -35,16 +35,36 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   
-  <!-- === ВНЕДРЕННЫЕ БИБЛИОТЕКИ VIA CDN === -->
-  <!-- Zod для валидации JSON-схем -->
+<!-- === ВНЕДРЕННЫЕ БИБЛИОТЕКИ VIA CDN === -->
+  <!-- Zod для валидации JSON-схем (используем рабочий UMD, экспортирующий window.Zod) -->
   <script src="https://cdn.jsdelivr.net/npm/zod@3.23.8/lib/index.umd.min.js"></script>
-  <!-- jsonrepair для ремонта broken JSON -->
-  <script src="./lib/jsonrepair.js"></script>
-  
-  <!-- Yup для альтернативной валидации объектов -->
-  <script src="https://cdn.jsdelivr.net/npm/yup@1.4.0/dist/yup.umd.min.js"></script>
-  <!-- DOMPurify для санитизации HTML -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.7/purify.min.js"></script>
+ <!-- Приводим window.Zod к единообразному window.zod -->
+ <script>
+   (function() {
+     // Если библиотека создала window.Zod, делаем её доступной как window.zod
+     if (window.Zod && typeof window.Zod.object === 'function' && !window.zod) {
+       window.zod = window.Zod;
+       console.log('✅ Zod загружен, доступен как window.zod');
+     } else if (!window.zod) {
+       console.warn('⚠️ Zod не обнаружен. Валидация импорта будет отключена.');
+       // Создаём заглушку, чтобы код State не падал
+       window.zod = {
+         object: function() {
+           console.warn('Zod не загружен, используется заглушка');
+           return { parse: (data) => data, safeParse: (data) => ({ success: true, data }) };
+         }
+       };
+     }
+   })();
+ </script>
+ 
+ <!-- Lodash для удобной работы с данными -->
+ <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+
+<!-- Yup для альтернативной валидации объектов -->
+<script src="https://cdn.jsdelivr.net/npm/yup@1.4.0/dist/yup.umd.min.js"></script>
+<!-- DOMPurify для санитизации HTML -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.7/purify.min.js"></script>
 </head>
 
 <body>
@@ -370,6 +390,9 @@
   <script type="module">
     import { DebugUI } from './js/debug-state.js';
   </script>
+  <script type="module">
+  import './js/unit-test.js';
+</script>
   
   <!-- Глаз ожидания (появляется вместе с мыслями героя) -->
   <img src="./assets/images/eye.webp" id="waitingEye" class="waiting-eye" alt="глаз" style="display: none;">

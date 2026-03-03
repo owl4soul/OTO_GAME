@@ -1,4 +1,4 @@
-// Модуль 5: RENDER - Отрисовка сцены и мета-блоков
+// Модуль 5: RENDER - Отрисовка сцены и мета-блоков (АДАПТИРОВАН ПОД STATE 5.1)
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -10,7 +10,7 @@ import { Game } from './6-game.js';
 import { Audit } from './8-audit.js';
 import { showEye, hideEye } from './eye.js';
 
-// Импортируем функции рендеринга секций сцены
+// Импортируем функции рендеринга секций сцены (они уже адаптированы под State 5.1)
 import {
     renderDesignNotes,
     renderAiMemory,
@@ -31,11 +31,13 @@ let thoughtsOfHeroInterval = null;
 
 /**
  * Основная функция рендеринга сцены и всех мета-блоков
+ * Использует state.game.currentScene как источник данных сцены.
  */
 function renderScene() {
     const state = State.getState();
     
-    if (!state.gameState.currentScene) {
+    // Проверяем наличие сцены в game.currentScene (новая структура)
+    if (!state.game.currentScene) {
         console.error('❌ renderScene: currentScene отсутствует в состоянии игры');
         dom.sceneArea.innerHTML = `
             <div style="color: #ff3838; padding: 20px; text-align: center;">
@@ -47,10 +49,10 @@ function renderScene() {
         return;
     }
     
-    const currentScene = state.gameState.currentScene;
+    const currentScene = state.game.currentScene;
     const sceneContainer = dom.sceneArea;
     
-    // Сохраняем turnUpdatesContainer перед очисткой
+    // Сохраняем turnUpdatesContainer перед очисткой (он находится в sceneArea)
     const existingTurnUpdates = document.getElementById('turnUpdatesContainer');
     let savedTurnUpdatesHTML = '';
     let savedTurnUpdatesDisplay = 'block';
@@ -68,11 +70,10 @@ function renderScene() {
     renderAiMemory(sceneContainer, currentScene.aiMemory);
     renderSummary(sceneContainer, currentScene.summary);
     
-    // Восстанавливаем/создаём контейнер для изменений за ход (он будет заполняться отдельно)
+    // Восстанавливаем/создаём контейнер для изменений за ход
     if (savedTurnUpdatesHTML) {
         const restoredTurnUpdates = document.createElement('div');
         restoredTurnUpdates.id = 'turnUpdatesContainer';
-        // Убираем margin-bottom, так как отступы теперь управляются глобально
         restoredTurnUpdates.style.cssText = `
             display: ${savedTurnUpdatesDisplay};
             transition: all 0.3s ease;
@@ -83,7 +84,7 @@ function renderScene() {
     } else {
         const newTurnUpdates = document.createElement('div');
         newTurnUpdates.id = 'turnUpdatesContainer';
-        newTurnUpdates.style.cssText = 'min-height: 20px;'; // margin-bottom убран
+        newTurnUpdates.style.cssText = 'min-height: 20px;';
         sceneContainer.appendChild(newTurnUpdates);
         console.log('📝 Создан новый пустой turnUpdatesContainer');
     }
@@ -228,6 +229,7 @@ function formatCompactOperations(operations, type) {
 
 /**
  * Основная функция рендеринга вариантов выбора
+ * Использует state.game.currentScene.choices и state.ui.selectedActions.
  */
 function renderChoices() {
     const state = State.getState();
@@ -239,7 +241,7 @@ function renderChoices() {
     
     dom.choicesList.innerHTML = '';
     
-    if (!state.gameState || !state.gameState.currentScene) {
+    if (!state.game.currentScene) {
         console.error('❌ renderChoices: currentScene отсутствует в состоянии игры');
         dom.choicesList.innerHTML = `
             <div style="color: #888; text-align: center; padding: 20px; font-style: italic;">
@@ -249,7 +251,7 @@ function renderChoices() {
         return;
     }
     
-    const currentScene = state.gameState.currentScene;
+    const currentScene = state.game.currentScene;
     const choices = currentScene.choices;
     
     if (!choices || !Array.isArray(choices)) {
@@ -271,12 +273,9 @@ function renderChoices() {
         }
         
         const btn = document.createElement('button');
-        const isSelected = state.gameState.selectedActions &&
-            Array.isArray(state.gameState.selectedActions) ?
-            state.gameState.selectedActions.includes(idx) : false;
+        const isSelected = state.ui.selectedActions && state.ui.selectedActions.includes(idx);
         
         btn.className = `choice-btn ${isSelected ? 'selected' : ''}`;
-        // Убираем инлайн margin-bottom, он будет задан через тему
         btn.style.cssText = `
             text-align: left;
             padding: 12px 15px;
@@ -347,7 +346,7 @@ function renderChoices() {
         dom.choicesList.appendChild(btn);
     });
     
-    const count = state.gameState.selectedActions ? state.gameState.selectedActions.length : 0;
+    const count = state.ui.selectedActions ? state.ui.selectedActions.length : 0;
     if (dom.choicesCounter) {
         dom.choicesCounter.textContent = `${count}/${CONFIG.maxChoices}`;
         dom.choicesCounter.style.color = count >= CONFIG.maxChoices ? '#4cd137' : '#fbc531';
@@ -357,35 +356,30 @@ function renderChoices() {
 }
 
 // ====================================================================
-// ОБНОВЛЕНИЕ РЕЖИМОВ ИНТЕРФЕЙСА
+// ОБНОВЛЕНИЕ РЕЖИМОВ: ВЫБОР/ВВОД
 // ====================================================================
 
 /**
  * Обновляет интерфейс в зависимости от режима игры (обычный/свободный ввод)
+ * Использует state.ui.freeMode.
  */
 function updateUIMode() {
     const state = State.getState();
     
-    dom.freeModeToggle.checked = state.freeMode;
+    dom.freeModeToggle.checked = state.ui.freeMode.enabled;
     
-    if (state.freeMode) {
+    if (state.ui.freeMode.enabled) {
         dom.choicesList.style.display = 'none';
         dom.freeInputWrapper.style.display = 'block';
         dom.modeIcon.innerHTML = '<i class="fas fa-keyboard"></i>';
         dom.modeText.textContent = 'Режим: Свободный ввод';
         dom.modeText.classList.add('free-mode');
         
-        const hasText = state.freeModeText && state.freeModeText.trim().length > 0;
+        const hasText = state.ui.freeMode.text && state.ui.freeMode.text.trim().length > 0;
         dom.choicesCounter.textContent = hasText ? '✓ Готово' : 'Введите текст...';
         
-        dom.freeInputText.value = state.freeModeText || '';
+        dom.freeInputText.value = state.ui.freeMode.text || '';
         dom.freeInputText.disabled = false;
-        
-        const scale = state.settings.scale || 1;
-        const baseHeight = 140;
-        const adjustedHeight = baseHeight * scale;
-        dom.freeInputText.style.height = `${adjustedHeight}px`;
-        dom.freeInputText.style.minHeight = `${adjustedHeight}px`;
         
         setTimeout(() => {
             dom.freeInputText.focus();
@@ -402,7 +396,7 @@ function updateUIMode() {
         dom.modeText.textContent = 'Режим: Варианты выбора';
         dom.modeText.classList.remove('free-mode');
         
-        const count = state.gameState.selectedActions ? state.gameState.selectedActions.length : 0;
+        const count = state.ui.selectedActions ? state.ui.selectedActions.length : 0;
         dom.choicesCounter.textContent = `${count}/${CONFIG.maxChoices}`;
         
         console.log('🔄 UI переключен в обычный режим (варианты выбора)');
@@ -452,7 +446,7 @@ function renderModelSelectorByProvider() {
     select.innerHTML = '';
     
     const currentProvider = state.settings.apiProvider;
-    const filteredModels = state.models.filter(m => m.provider === currentProvider);
+    const filteredModels = state.settings.models.filter(m => m.provider === currentProvider);
     
     if (filteredModels.length === 0) {
         const opt = document.createElement('option');
@@ -488,7 +482,8 @@ function renderModelSelectorByProvider() {
         select.value = state.settings.model;
         console.log(`✅ Модель "${state.settings.model}" выбрана для провайдера ${currentProvider}`);
     } else if (filteredModels.length > 0) {
-        state.settings.model = filteredModels[0].id;
+        // Устанавливаем первую модель по умолчанию
+        State.updateSettings({ model: filteredModels[0].id });
         select.value = state.settings.model;
         console.log(`✅ Установлена модель по умолчанию: ${state.settings.model}`);
     }
@@ -511,7 +506,7 @@ function updateModelDetails() {
         return;
     }
     
-    const model = state.models.find(m => m.id === modelId);
+    const model = state.settings.models.find(m => m.id === modelId);
     
     if (!model) {
         details.innerHTML = '<span style="color: #e84118; font-style: italic;">Выбранная модель не найдена</span>';
@@ -577,7 +572,7 @@ function applyStateEffects() {
     const state = State.getState();
     const body = document.body;
     
-    if (state.isRitualActive) {
+    if (state.hero.ritual.active) {
         body.classList.add('ritual-mode');
         console.log('🔮 Активирован режим ритуала');
     } else {
@@ -876,7 +871,7 @@ function setupStateObservers() {
     
     State.on(State.EVENTS.SCENE_CHANGED, (data) => {
         console.log('🎯 RENDER: SCENE_CHANGED событие получено', {
-            hasScene: !!data?.currentScene,
+            hasScene: !!data?.scene,
             timestamp: new Date().toISOString()
         });
         try {
@@ -900,16 +895,16 @@ function setupStateObservers() {
         }
     });
     
-    State.on(State.EVENTS.GAME_MODE_CHANGED, (data) => {
-        console.log('🎯 RENDER: GAME_MODE_CHANGED событие получено', {
-            freeMode: data?.freeMode,
+    State.on(State.EVENTS.MODE_CHANGED, (data) => {
+        console.log('🎯 RENDER: MODE_CHANGED событие получено', {
+            freeMode: data?.mode === 'free',
             timestamp: new Date().toISOString()
         });
         try {
             updateUIMode();
-            console.log('✅ RENDER: Режим UI обновлен после GAME_MODE_CHANGED');
+            console.log('✅ RENDER: Режим UI обновлен после MODE_CHANGED');
         } catch (error) {
-            console.error('❌ RENDER: Ошибка при обработке GAME_MODE_CHANGED:', error);
+            console.error('❌ RENDER: Ошибка при обработке MODE_CHANGED:', error);
         }
     });
     
@@ -925,17 +920,17 @@ function setupStateObservers() {
         }
     });
     
-    State.on(State.EVENTS.MODELS_CHANGED, (data) => {
-        console.log('🎯 RENDER: MODELS_CHANGED событие получено', {
-            modelsCount: data?.models?.length || 0
+    State.on(State.EVENTS.MODEL_CHANGED, (data) => {
+        console.log('🎯 RENDER: MODEL_CHANGED событие получено', {
+            modelId: data?.modelId
         });
         try {
             renderModelSelectorByProvider();
             updateModelDetails();
             updateModelStats();
-            console.log('✅ RENDER: Модели обновлены после MODELS_CHANGED');
+            console.log('✅ RENDER: Модели обновлены после MODEL_CHANGED');
         } catch (error) {
-            console.error('❌ RENDER: Ошибка при обработке MODELS_CHANGED:', error);
+            console.error('❌ RENDER: Ошибка при обработке MODEL_CHANGED:', error);
         }
     });
     
@@ -985,4 +980,4 @@ export const Render = {
 // Глобальные ссылки для алертов и мыслей героя (оставлены, если нужны)
 window.showNotification = Utils.showToast; // для совместимости
 
-console.log('✅ Модуль 5-render.js загружен успешно');
+console.log('✅ Модуль 5-render.js загружен успешно (адаптирован под State 5.1)');

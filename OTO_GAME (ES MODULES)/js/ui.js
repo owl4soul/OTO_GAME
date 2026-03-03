@@ -1,4 +1,4 @@
-// Модуль 12: UI - Контроллер интерфейса (ФОРМАТ 4.1)
+// Модуль 12: UI - Контроллер интерфейса
 'use strict';
 
 import { State } from './3-state.js';
@@ -51,16 +51,16 @@ function round(num) {
 function distributeDebit(amountNeeded, val1, val2) {
     const surplus1 = Math.max(0, val1 - MIN_PCT);
     const surplus2 = Math.max(0, val2 - MIN_PCT);
-    
+
     let take1 = 0,
         take2 = 0;
     const halfNeed = amountNeeded / 2;
-    
+
     if (surplus1 >= halfNeed) take1 = halfNeed;
     else take1 = surplus1;
     if (surplus2 >= halfNeed) take2 = halfNeed;
     else take2 = surplus2;
-    
+
     const remainingNeed = amountNeeded - (take1 + take2);
     if (remainingNeed > 0.0001) {
         if (surplus1 > take1) {
@@ -71,15 +71,15 @@ function distributeDebit(amountNeeded, val1, val2) {
             take2 += Math.min(canTake, remainingNeed);
         }
     }
-    
+
     let finalNeed = amountNeeded - (take1 + take2);
     if (finalNeed > 0.0001) {
         let rem1 = val1 - take1;
         let rem2 = val2 - take2;
-        
+
         if (rem1 >= rem2) take1 += Math.min(rem1, finalNeed);
         else take2 += Math.min(rem2, finalNeed);
-        
+
         finalNeed = amountNeeded - (take1 + take2);
         if (finalNeed > 0.0001) {
             rem1 = val1 - take1;
@@ -88,16 +88,16 @@ function distributeDebit(amountNeeded, val1, val2) {
             if (rem2 > 0) take2 += Math.min(rem2, finalNeed);
         }
     }
-    
+
     return { take1, take2 };
 }
 
 function normalizeHeights(top, mid, bot, isBotFixed) {
     const sum = top + mid + bot;
     const diff = 100.0 - sum;
-    
+
     if (Math.abs(diff) < 0.001) return { top, mid, bot };
-    
+
     if (isBotFixed) {
         if (top >= mid) top += diff;
         else mid += diff;
@@ -107,7 +107,7 @@ function normalizeHeights(top, mid, bot, isBotFixed) {
         else if (max === mid) mid += diff;
         else bot += diff;
     }
-    
+
     return {
         top: Math.max(0, round(top)),
         mid: Math.max(0, round(mid)),
@@ -120,21 +120,21 @@ function redistributeHeights(action) {
     const ui = state.ui;
     const vh = getViewportHeight();
     const currentHeaderPct = (HEADER_PX / vh) * 100;
-    
-    let top = ui.hTop;
-    let mid = ui.hMid;
-    let bot = ui.hBot;
-    
+
+    let top = ui.layout.hTop;
+    let mid = ui.layout.hMid;
+    let bot = ui.layout.hBot;
+
     if (action === 'collapse') {
         if (bot > currentHeaderPct + 2) {
             State.setHBotBeforeCollapse(bot);
         } else if (!State.getHBotBeforeCollapse()) {
             State.setHBotBeforeCollapse(20);
         }
-        
+
         const targetBot = currentHeaderPct;
         const freedSpace = bot - targetBot;
-        
+
         if (freedSpace > 0) {
             bot = targetBot;
             top += freedSpace / 2;
@@ -143,10 +143,10 @@ function redistributeHeights(action) {
     }
     else if (action === 'expand') {
         let targetBot = State.getHBotBeforeCollapse() || 20;
-        
+
         if (targetBot < currentHeaderPct + 1) targetBot = 20;
         const needed = targetBot - bot;
-        
+
         if (needed > 0) {
             const debit = distributeDebit(needed, top, mid);
             top -= debit.take1;
@@ -154,7 +154,7 @@ function redistributeHeights(action) {
             bot += needed;
         }
     }
-    else if (action === 'sync' && ui.isCollapsed) {
+    else if (action === 'sync' && ui.layout.isCollapsed) {
         const diff = currentHeaderPct - bot;
         if (Math.abs(diff) > 0.001) {
             if (diff > 0) {
@@ -170,13 +170,13 @@ function redistributeHeights(action) {
             }
         }
     }
-    
+
     const normalized = normalizeHeights(top, mid, bot, true);
-    ui.hTop = normalized.top;
-    ui.hMid = normalized.mid;
-    ui.hBot = normalized.bot;
-    
-    applyCssVars(ui.hTop, ui.hMid, ui.hBot);
+    ui.layout.hTop = normalized.top;
+    ui.layout.hMid = normalized.mid;
+    ui.layout.hBot = normalized.bot;
+
+    applyCssVars(ui.layout.hTop, ui.layout.hMid, ui.layout.hBot);
     State.saveUiState();
 }
 
@@ -194,17 +194,15 @@ function applyCssVars(top, mid, bot) {
 function init() {
     Logger.info('UI', 'Инициализация подсистемы интерфейса...');
     const dom = DOM.getDOM();
-    
+
     restoreLayout();
     initResizers();
-    
-    // Исправленный обработчик для клика на заголовок нижней панели
+
     if (dom.botHeader) {
-        // Удаляем предыдущие обработчики, чтобы избежать дублирования
         dom.botHeader.onclick = null;
         dom.botHeader.addEventListener('click', handleBotHeaderClick);
     }
-    
+
     if (window.visualViewport) {
         window.visualViewport.addEventListener('resize', handleViewportResize);
     } else {
@@ -213,77 +211,75 @@ function init() {
 }
 
 function handleBotHeaderClick(e) {
-    // Предотвращаем всплытие события, чтобы не мешать другим обработчикам
     e.stopPropagation();
     e.preventDefault();
-    
+
     Logger.info('UI', 'Клик по заголовку нижней панели');
     toggleBottomCollapse(null, false);
 }
 
 function restoreLayout() {
-    const ui = State.getState().ui;
+    const ui = State.getUI();
     const vh = getViewportHeight();
     document.documentElement.style.setProperty('--vh', `${vh}px`);
-    
-    if (ui.isCollapsed) {
+
+    if (ui.layout.isCollapsed) {
         DOM.getDOM().secBot.classList.add('collapsed');
         if (DOM.getDOM().collapseIcon) DOM.getDOM().collapseIcon.innerHTML = '<i class="fas fa-chevron-up"></i>';
         redistributeHeights('sync');
     } else {
         DOM.getDOM().secBot.classList.remove('collapsed');
         if (DOM.getDOM().collapseIcon) DOM.getDOM().collapseIcon.innerHTML = '<i class="fas fa-chevron-down"></i>';
-        applyCssVars(ui.hTop, ui.hMid, ui.hBot);
+        applyCssVars(ui.layout.hTop, ui.layout.hMid, ui.layout.hBot);
     }
 }
 
 function toggleBottomCollapse(forceState = null, isAuto = false) {
-    const state = State.getState();
-    const currentState = state.ui.isCollapsed;
+    const ui = State.getUI();
+    const currentState = ui.layout.isCollapsed;
     const newState = (forceState !== null) ? forceState : !currentState;
-    
+
     Logger.info('UI', `toggleBottomCollapse: current=${currentState}, new=${newState}, isAuto=${isAuto}`);
-    
+
     if (isAuto) {
         if (newState === true) {
-            if (state.ui.isCollapsed) {
-                state.ui.isAutoCollapsed = false;
+            if (ui.layout.isCollapsed) {
+                ui.layout.isAutoCollapsed = false;
                 redistributeHeights('sync');
             } else {
-                state.ui.isAutoCollapsed = true;
-                state.ui.isCollapsed = true;
+                ui.layout.isAutoCollapsed = true;
+                ui.layout.isCollapsed = true;
                 redistributeHeights('collapse');
             }
         } else {
-            if (state.ui.isAutoCollapsed) {
-                state.ui.isAutoCollapsed = false;
-                state.ui.isCollapsed = false;
+            if (ui.layout.isAutoCollapsed) {
+                ui.layout.isAutoCollapsed = false;
+                ui.layout.isCollapsed = false;
                 redistributeHeights('expand');
             } else {
                 redistributeHeights('sync');
             }
         }
     } else {
-        state.ui.isAutoCollapsed = false;
-        state.ui.isCollapsed = newState;
-        
+        ui.layout.isAutoCollapsed = false;
+        ui.layout.isCollapsed = newState;
+
         if (newState) {
             redistributeHeights('collapse');
         } else {
             redistributeHeights('expand');
         }
     }
-    
+
     const dom = DOM.getDOM();
-    if (state.ui.isCollapsed) {
+    if (ui.layout.isCollapsed) {
         dom.secBot.classList.add('collapsed');
         if (dom.collapseIcon) dom.collapseIcon.innerHTML = '<i class="fas fa-chevron-up"></i>';
     } else {
         dom.secBot.classList.remove('collapsed');
         if (dom.collapseIcon) dom.collapseIcon.innerHTML = '<i class="fas fa-chevron-down"></i>';
     }
-    
-    // Сохраняем состояние
+
     State.saveUiState();
 }
 
@@ -292,13 +288,13 @@ function handleViewportResize() {
         window.requestAnimationFrame(() => {
             const vh = getViewportHeight();
             document.documentElement.style.setProperty('--vh', `${vh}px`);
-            
+
             const screenH = window.screen.height > 0 ? window.screen.height : window.innerHeight;
             const isKeyboardOpen = vh < (screenH * 0.75);
-            
+
             if (isKeyboardOpen) toggleBottomCollapse(true, true);
             else toggleBottomCollapse(false, true);
-            
+
             ticking = false;
         });
         ticking = true;
@@ -320,74 +316,74 @@ function setupDrag(el, mode) {
     if (!el) return;
     let startY, startH1, startH2, containerH;
     let isDragging = false;
-    
+
     el.onpointerdown = (e) => {
         e.preventDefault();
-        e.stopPropagation(); // Предотвращаем всплытие
-        const state = State.getState();
-        if (mode === 'mid' && state.ui.isCollapsed) return;
-        
+        e.stopPropagation();
+        const ui = State.getUI();
+        if (mode === 'mid' && ui.layout.isCollapsed) return;
+
         el.setPointerCapture(e.pointerId);
         if (Utils.vibrate) Utils.vibrate(50);
-        
+
         const dom = DOM.getDOM();
         dom.secTop.classList.add('no-anim');
         dom.secMid.classList.add('no-anim');
         dom.secBot.classList.add('no-anim');
-        
+
         el.classList.add('active');
         isDragging = false;
         startY = e.clientY;
         containerH = dom.mainContainer ? dom.mainContainer.clientHeight : window.innerHeight;
-        
-        startH1 = (mode === 'top') ? state.ui.hTop : state.ui.hMid;
-        startH2 = (mode === 'top') ? state.ui.hMid : state.ui.hBot;
+
+        startH1 = (mode === 'top') ? ui.layout.hTop : ui.layout.hMid;
+        startH2 = (mode === 'top') ? ui.layout.hMid : ui.layout.hBot;
     };
-    
+
     el.onpointermove = (e) => {
         e.preventDefault();
         if (!el.classList.contains('active')) return;
-        
+
         const deltaPx = e.clientY - startY;
         if (!isDragging && Math.abs(deltaPx) < 10) return;
         isDragging = true;
-        
+
         const deltaPerc = (deltaPx / containerH) * 100;
         let newH1 = startH1 + deltaPerc;
         let newH2 = startH2 - deltaPerc;
-        
+
         if (newH1 < MIN_PCT || newH2 < MIN_PCT) return;
-        
-        const state = State.getState();
+
+        const ui = State.getUI();
         if (mode === 'top') {
-            state.ui.hTop = newH1;
-            state.ui.hMid = newH2;
+            ui.layout.hTop = newH1;
+            ui.layout.hMid = newH2;
         } else {
-            state.ui.hMid = newH1;
-            state.ui.hBot = newH2;
+            ui.layout.hMid = newH1;
+            ui.layout.hBot = newH2;
         }
-        
-        const norm = normalizeHeights(state.ui.hTop, state.ui.hMid, state.ui.hBot, false);
+
+        const norm = normalizeHeights(ui.layout.hTop, ui.layout.hMid, ui.layout.hBot, false);
         applyCssVars(norm.top, norm.mid, norm.bot);
     };
-    
+
     el.onpointerup = (e) => {
         e.preventDefault();
         e.stopPropagation();
         el.releasePointerCapture(e.pointerId);
         el.classList.remove('active');
         if (Utils.vibrate) Utils.vibrate(30);
-        
+
         const dom = DOM.getDOM();
         dom.secTop.classList.remove('no-anim');
         dom.secMid.classList.remove('no-anim');
         dom.secBot.classList.remove('no-anim');
-        
-        const state = State.getState();
-        const norm = normalizeHeights(state.ui.hTop, state.ui.hMid, state.ui.hBot, false);
-        state.ui.hTop = norm.top;
-        state.ui.hMid = norm.mid;
-        state.ui.hBot = norm.bot;
+
+        const ui = State.getUI();
+        const norm = normalizeHeights(ui.layout.hTop, ui.layout.hMid, ui.layout.hBot, false);
+        ui.layout.hTop = norm.top;
+        ui.layout.hMid = norm.mid;
+        ui.layout.hBot = norm.bot;
         State.saveUiState();
     };
 }
@@ -397,43 +393,43 @@ function setupVerticalDrag(el) {
     let startX, startW;
     let isDragging = false;
     const dom = DOM.getDOM();
-    
+
     el.onpointerdown = (e) => {
         e.preventDefault();
         e.stopPropagation();
         el.setPointerCapture(e.pointerId);
         if (Utils.vibrate) Utils.vibrate(50);
-        
-        const state = State.getState();
+
+        const ui = State.getUI();
         startX = e.clientX;
-        startW = state.ui.wBotLeft;
+        startW = ui.layout.wBotLeft;
         el.classList.add('active');
         isDragging = false;
     };
-    
+
     el.onpointermove = (e) => {
         e.preventDefault();
         if (!el.classList.contains('active')) return;
-        
+
         const deltaPx = e.clientX - startX;
         if (!isDragging && Math.abs(deltaPx) < 10) return;
         isDragging = true;
-        
+
         const containerW = dom.bottomArea ? dom.bottomArea.clientWidth : window.innerWidth;
         const deltaPerc = (deltaPx / containerW) * 100;
         let newW = startW + deltaPerc;
-        
+
         if (newW < 20 || newW > 80) return;
-        
+
         const paneLeft = dom.bottomArea.querySelector('.pane-left');
         const paneRight = dom.bottomArea.querySelector('.pane-right');
         if (paneLeft) paneLeft.style.flex = `0 0 ${newW}%`;
         if (paneRight) paneRight.style.flex = `0 0 ${100 - newW}%`;
-        
-        const state = State.getState();
-        state.ui.wBotLeft = newW;
+
+        const ui = State.getUI();
+        ui.layout.wBotLeft = newW;
     };
-    
+
     el.onpointerup = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -449,13 +445,14 @@ function setupVerticalDrag(el) {
 // =============================================================================
 
 function setFreeModeUI(isFreeMode) {
-    const state = State.getState();
+    const ui = State.getUI();
     const dom = DOM.getDOM();
-    
-    State.setState({ freeMode: isFreeMode });
-    
+
+    // Обновляем состояние свободного режима
+    State.updateUI({ freeMode: { enabled: isFreeMode, text: ui.freeMode.text } });
+
     if (isFreeMode) {
-        state.ui._tempSavedState = state.ui.isCollapsed;
+        ui.layout._tempSavedState = ui.layout.isCollapsed;
         if (dom.choicesList) dom.choicesList.style.display = 'none';
         if (dom.freeInputWrapper) dom.freeInputWrapper.style.display = 'flex';
         if (dom.modeText) dom.modeText.textContent = "Свободный ввод";
@@ -467,61 +464,60 @@ function setFreeModeUI(isFreeMode) {
         if (dom.modeText) dom.modeText.textContent = "Варианты";
         if (dom.modeIcon) dom.modeIcon.innerHTML = '<i class="fas fa-list-ul"></i>';
         if (dom.freeInputText) dom.freeInputText.blur();
-        
-        if (typeof state.ui._tempSavedState !== 'undefined') {
-            toggleBottomCollapse(state.ui._tempSavedState);
-            delete state.ui._tempSavedState;
+
+        if (typeof ui.layout._tempSavedState !== 'undefined') {
+            toggleBottomCollapse(ui.layout._tempSavedState);
+            delete ui.layout._tempSavedState;
         }
     }
 }
 
 function checkSubmitButtonState() {
-    const state = State.getState();
+    const ui = State.getUI();
     const dom = DOM.getDOM();
-    
+
     if (!dom.btnSubmit) return;
-    
+
     let shouldEnable = false;
-    
-    if (state.freeMode) {
+
+    if (ui.freeMode.enabled) {
         const text = dom.freeInputText ? dom.freeInputText.value.trim() : '';
         shouldEnable = text.length > 0;
-        
+
         if (dom.choicesCounter) {
             dom.choicesCounter.textContent = shouldEnable ? '✓/∞' : '0/∞';
         }
     } else {
-        // Используем gameState.selectedActions вместо старого selectedChoices
-        const selectedActions = state.gameState.selectedActions || [];
+        const selectedActions = ui.selectedActions || [];
         shouldEnable = selectedActions.length > 0;
-        
+
         if (dom.choicesCounter) {
             const max = CONFIG.maxChoices || 3;
             const current = selectedActions.length;
             dom.choicesCounter.textContent = `${current}/${max}`;
         }
     }
-    
+
     dom.btnSubmit.disabled = !shouldEnable;
     dom.btnSubmit.style.opacity = shouldEnable ? '1' : '0.5';
     dom.btnSubmit.style.cursor = shouldEnable ? 'pointer' : 'not-allowed';
 }
 
 function checkClearButtonState() {
-    const state = State.getState();
+    const ui = State.getUI();
     const dom = DOM.getDOM();
     if (!dom.btnClear) return;
-    
+
     let shouldEnable = false;
-    
-    if (state.freeMode) {
+
+    if (ui.freeMode.enabled) {
         const text = dom.freeInputText ? dom.freeInputText.value : '';
         shouldEnable = text.length > 0;
     } else {
-        const selectedActions = state.gameState.selectedActions || [];
+        const selectedActions = ui.selectedActions || [];
         shouldEnable = selectedActions.length > 0;
     }
-    
+
     dom.btnClear.disabled = !shouldEnable;
     dom.btnClear.style.opacity = shouldEnable ? '1' : '0.5';
     dom.btnClear.style.cursor = shouldEnable ? 'pointer' : 'not-allowed';
@@ -553,7 +549,7 @@ function scaleDown() {
 function updateScaleDisplay(scale) {
     const scaleDisplay = document.getElementById('currentScale');
     if (scaleDisplay) {
-        const s = scale || State.getState().settings.scale;
+        const s = scale || State.getSettings().scale;
         scaleDisplay.textContent = `${Math.round(s * 100)}%`;
     }
 }
@@ -575,17 +571,18 @@ function openSettingsModal() {
     if (modal) {
         modal.classList.add('active');
         if (DOM.refresh) DOM.refresh();
-        const state = State.getState();
+        const settings = State.getSettings();
+        const game = State.getGame();
         const elProvider = document.getElementById('providerInput');
         const elKeyOr = document.getElementById('apiKeyOpenrouterInput');
         const elKeyVse = document.getElementById('apiKeyVsegptInput');
         const elModel = document.getElementById('modelInput');
-        
-        if (elProvider) elProvider.value = state.settings.apiProvider;
-        if (elKeyOr) elKeyOr.value = state.settings.apiKeyOpenrouter;
-        if (elKeyVse) elKeyVse.value = state.settings.apiKeyVsegpt;
-        if (elModel) elModel.value = state.settings.model;
-        
+
+        if (elProvider) elProvider.value = settings.apiProvider;
+        if (elKeyOr) elKeyOr.value = settings.apiKeyOpenrouter;
+        if (elKeyVse) elKeyVse.value = settings.apiKeyVsegpt;
+        if (elModel) elModel.value = settings.model;
+
         if (Render.updateApiKeyFields) Render.updateApiKeyFields();
         if (Render.renderModelSelectorByProvider) Render.renderModelSelectorByProvider();
         if (Render.updateModelDetails) Render.updateModelDetails();

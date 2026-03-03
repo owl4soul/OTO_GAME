@@ -1,4 +1,5 @@
 // Модуль 7.1: API REQUEST - Построение и отправка запросов (v5.1)
+// АДАПТИРОВАН ПОД СТРУКТУРУ STATE 5.1
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -12,22 +13,20 @@ import { PROMPTS } from './prompts.js';
 /**
  * Конструирует системный промпт в зависимости от типа игры:
  * - 'standard'  → универсальный + контекст мира ОТО
- * - другие      → универсальный + worldContext из настроек (если задан)
+ * - другие      → универсальный (без дополнительного контекста)
  * + добавляет metaContext из состояния, если есть
  */
 function constructFullSystemPrompt(state) {
   let prompt;
-  if (state.gameType === 'standard') {
+  if (state.game.type === 'standard') {
     prompt = PROMPTS.standardGameOTO.system.gameMaster;
   } else {
-    const base = PROMPTS.system.gameMaster;
-    const worldCtx = state.settings?.worldContext || '';
-    prompt = worldCtx ? base + '\n\n' + worldCtx : base;
+    prompt = PROMPTS.system.gameMaster; // worldContext удалён, так как его нет в настройках
   }
   
-  // ===== НОВОЕ: добавляем metaContext, если он есть =====
-  if (state.metaGameState?.metaContext) {
-    prompt += `\n\n### META CONTEXT\n${state.metaGameState.metaContext}`;
+  // Мета-контекст теперь лежит в state.game.meta.context
+  if (state.game.meta?.context) {
+    prompt += `\n\n### META CONTEXT\n${state.game.meta.context}`;
   }
   
   return prompt;
@@ -39,7 +38,7 @@ function constructFullSystemPrompt(state) {
 
 function getDynamicSystemInjections(state) {
   const injections = [];
-  const turn = state.turnCount;
+  const turn = state.game.turnCount; // было state.turnCount
   
   if (turn > 0 && turn % 15 === 0) {
     injections.push(`>>> [TURN ${turn}] ${PROMPTS.injections.twist}`);
@@ -50,7 +49,8 @@ function getDynamicSystemInjections(state) {
     injections.push(`>>> [LOW SANITY: ${sanityItem.value}] ${PROMPTS.injections.insanity}`);
   }
   
-  if (state.gameType === 'standard' && state.isRitualActive) {
+  // Ритуал теперь в state.hero.ritual.active
+  if (state.game.type === 'standard' && state.hero.ritual.active) {
     injections.push(PROMPTS.injections.otoRitual);
   }
   
@@ -89,17 +89,17 @@ function truncateScene(text, maxChars = 400) {
 function buildContextBlock(state) {
   const parts = [];
   
-  // А. Глобальная летопись
-  if (state.gameState.summary?.length > 0) {
-    parts.push(`### ГЛОБАЛЬНАЯ ЛЕТОПИСЬ\n${state.gameState.summary}`);
+  // А. Глобальная летопись (теперь в state.game.summary)
+  if (state.game.summary?.length > 0) {
+    parts.push(`### ГЛОБАЛЬНАЯ ЛЕТОПИСЬ\n${state.game.summary}`);
   }
   
-  // Б. Память гейм-мастера
-  if (state.gameState.aiMemory && Object.keys(state.gameState.aiMemory).length > 0) {
-    parts.push(`### ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(state.gameState.aiMemory, null, 2)}`);
+  // Б. Память гейм-мастера (state.game.currentScene.aiMemory)
+  if (state.game.currentScene.aiMemory && Object.keys(state.game.currentScene.aiMemory).length > 0) {
+    parts.push(`### ПАМЯТЬ ГЕЙМ-МАСТЕРА\n${JSON.stringify(state.game.currentScene.aiMemory, null, 2)}`);
   }
   
-  // В. Иерархии организаций героя
+  // В. Иерархии организаций героя (через State API)
   const heroOrgHierarchies = State.getHeroOrganizationHierarchies();
   if (Object.keys(heroOrgHierarchies).length > 0) {
     const hierarchiesText = Object.entries(heroOrgHierarchies)
@@ -108,11 +108,11 @@ function buildContextBlock(state) {
     parts.push(`### ИЕРАРХИИ ОРГАНИЗАЦИЙ ГЕРОЯ\n${hierarchiesText}`);
   }
   
-  // Г. История (сжатая для старых ходов, полная для последнего)
-  const turnsToTake = state.gameState.summary ?
+  // Г. История (state.game.history)
+  const turnsToTake = state.game.summary ?
     CONFIG.activeContextTurns :
     CONFIG.fullTurnsToSendInContext;
-  const historySlice = state.gameState.history.slice(-turnsToTake);
+  const historySlice = state.game.history.slice(-turnsToTake);
   
   if (historySlice.length > 0) {
     const historyString = historySlice.map((entry, idx) => {
@@ -150,8 +150,8 @@ function formatSelectedActionsForPrompt(selectedActions) {
   }).join('\n');
 }
 
-function formatHeroStateForPrompt(heroState) {
-  if (!Array.isArray(heroState) || heroState.length === 0) {
+function formatHeroStateForPrompt(heroItems) {
+  if (!Array.isArray(heroItems) || heroItems.length === 0) {
     return "Состояние героя: Нет данных";
   }
   
@@ -168,7 +168,7 @@ function formatHeroStateForPrompt(heroState) {
     other: []
   };
   
-  heroState.forEach(item => {
+  heroItems.forEach(item => {
     const [type] = item.id.split(':');
     let extra = '';
     if (item.description) extra += ` (${item.description})`;
@@ -234,9 +234,12 @@ function formatHeroStateForPrompt(heroState) {
 function prepareRequestPayload(state, selectedActions, d10) {
   const systemPrompt = constructFullSystemPrompt(state);
   const contextBlock = buildContextBlock(state);
-  const heroStateSummary = formatHeroStateForPrompt(state.heroState);
+  const heroStateSummary = formatHeroStateForPrompt(state.hero.items); // было state.heroState
   const needsThoughts = State.needsHeroPhrases();
   const dynamicInjections = getDynamicSystemInjections(state);
+  
+  // Текущая сцена – в state.game.currentScene
+  const sceneText = state.game.currentScene?.scene || 'Сцена отсутствует';
   
   const userPrompt = `${dynamicInjections}
 
@@ -246,7 +249,7 @@ function prepareRequestPayload(state, selectedActions, d10) {
 ${contextBlock}
 
 ### ТЕКУЩАЯ СЦЕНА:
-${state.gameState.currentScene.scene}
+${sceneText}
 
 ### СОСТОЯНИЕ ГЕРОЯ:
 ${heroStateSummary}

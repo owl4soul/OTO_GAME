@@ -4,6 +4,8 @@
 // Адаптирован под State 5.1. Отображает все поля четырёх разделов:
 // game, hero, ui, settings. Поддерживает сворачивание/разворачивание.
 // Стиль: индастриал-готика, стеклянный, компактный, кроваво-чёрный.
+// Добавлены кнопки копирования для каждого раздела.
+// История закомментирована (не удалена).
 // Глобальные команды: debugUI(), d().
 // ===============================================================
 
@@ -34,7 +36,7 @@ function generateFullDebugText() {
     lines.push(`🎮 Тип игры: ${state.game.type}`);
     lines.push(`📦 Всего game_item в герое: ${state.hero.items.length}`);
     lines.push(`🧠 Мыслей в очереди: ${state.hero.thoughts.length}`);
-    lines.push(`📜 История: ${state.game.history.length} записей`);
+    // lines.push(`📜 История: ${state.game.history.length} записей`); // история закомментирована
     lines.push(`✨ Бессмертие: ${state.hero.immortal ? 'ДА' : 'нет'}`);
     lines.push(`💾 Версия состояния: ${state.version}`);
     lines.push(`🕒 Последнее сохранение: ${state.lastSaveTime}`);
@@ -46,10 +48,10 @@ function generateFullDebugText() {
     lines.push(`  type: ${state.game.type}`);
     lines.push(`  turnCount: ${state.game.turnCount}`);
     lines.push(`  summary: ${state.game.summary || '""'}`);
-    lines.push(`  history (${state.game.history.length} записей):`);
-    state.game.history.forEach((entry, i) => {
-        lines.push(`    [${i}] turn: ${entry.turn}, choice: ${entry.choice}, fullText: ${(entry.fullText || '').substring(0, 100)}…`);
-    });
+    // lines.push(`  history (${state.game.history.length} записей):`); // история закомментирована
+    // state.game.history.forEach((entry, i) => {
+    //     lines.push(`    [${i}] turn: ${entry.turn}, choice: ${entry.choice}, fullText: ${(entry.fullText || '').substring(0, 100)}…`);
+    // });
 
     // Текущая сцена
     lines.push(`  currentScene:`);
@@ -186,10 +188,11 @@ function generateGameSectionText() {
     lines.push(`type: ${state.game.type}`);
     lines.push(`turnCount: ${state.game.turnCount}`);
     lines.push(`summary: ${state.game.summary || '""'}`);
-    lines.push(`history (${state.game.history.length} записей):`);
-    state.game.history.forEach((entry, i) => {
-        lines.push(`  [${i}] turn: ${entry.turn}, choice: ${entry.choice}, fullText: ${(entry.fullText || '').substring(0, 100)}…`);
-    });
+    // lines.push(`history (${state.game.history.length} записей):`); // история закомментирована
+    // state.game.history.forEach((entry, i) => {
+    //     lines.push(`  [${i}] turn: ${entry.turn}, choice: ${entry.choice}, fullText: ${(entry.fullText || '').substring(0, 100)}…`);
+    // });
+    lines.push(`aiMemory: ${JSON.stringify(state.game.currentScene.aiMemory, null, 2).replace(/\n/g, '\n  ')}`);
     lines.push(`currentScene:`);
     const scene = state.game.currentScene;
     if (scene) {
@@ -392,7 +395,7 @@ function openDebugModal() {
                 font-weight: 500;
                 transition: 0.15s;
                 line-height: 1.4;
-            ">📋 КОПИРОВАТЬ</button>
+            ">📋 КОПИРОВАТЬ ВСЁ</button>
             <button id="debug-close-btn" style="
                 background: transparent;
                 border: 1px solid #5a1e1e;
@@ -451,14 +454,36 @@ function openDebugModal() {
             border-radius: 4px 4px 0 0;
             user-select: none;
             list-style: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
         #oto-debug-modal summary::-webkit-details-marker {
             color: #8B0000;
             font-size: 11px;
+            margin-right: 6px;
         }
         #oto-debug-modal details[open] summary {
             border-bottom-color: #b30000;
             background: rgba(40,40,40,0.9);
+        }
+        #oto-debug-modal .section-copy-btn {
+            background: transparent;
+            border: 1px solid #5a1e1e;
+            color: #ccc;
+            padding: 2px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10px;
+            font-weight: 400;
+            transition: 0.15s;
+            line-height: 1.2;
+            margin-left: 8px;
+        }
+        #oto-debug-modal .section-copy-btn:hover {
+            background: #8B0000;
+            border-color: #b30000;
+            color: #fff;
         }
         #oto-debug-modal pre {
             margin: 0;
@@ -499,40 +524,68 @@ function openDebugModal() {
     `;
     sectionsWrapper.appendChild(infoDiv);
 
-    // Вспомогательная функция для создания раздела
-    function createSection(summaryText, contentText, defaultOpen = true) {
+    // Массив с данными разделов
+    const sections = [
+        { title: '📁 GAME', content: generateGameSectionText(), defaultOpen: true },
+        { title: '🦸 HERO', content: generateHeroSectionText(), defaultOpen: true },
+        { title: '🖥️ UI', content: generateUISectionText(), defaultOpen: true },
+        { title: '⚙️ SETTINGS', content: generateSettingsSectionText(), defaultOpen: true },
+    ];
+
+    // Функция создания раздела с кнопкой копирования
+    function createSectionWithCopy(sectionData) {
         const details = document.createElement('details');
-        if (defaultOpen) details.open = true;
+        if (sectionData.defaultOpen) details.open = true;
+
         const summary = document.createElement('summary');
-        summary.textContent = summaryText;
+        // Левый блок: маркер и заголовок
+        const leftSpan = document.createElement('span');
+        leftSpan.textContent = sectionData.title;
+
+        // Правая кнопка копирования
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'section-copy-btn';
+        copyBtn.textContent = '📋';
+        copyBtn.title = 'Копировать содержимое раздела';
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // чтобы не сворачивался раздел при клике на кнопку
+            navigator.clipboard.writeText(sectionData.content).then(() => {
+                Utils.showToast('Раздел скопирован', 'success', 1000);
+            }).catch(err => {
+                Utils.showToast('Ошибка', 'error', 1000);
+                console.error(err);
+            });
+        });
+
+        summary.appendChild(leftSpan);
+        summary.appendChild(copyBtn);
         details.appendChild(summary);
+
         const pre = document.createElement('pre');
-        pre.textContent = contentText;
+        pre.textContent = sectionData.content;
         details.appendChild(pre);
+
         return details;
     }
 
-    // Добавляем четыре раздела
-    sectionsWrapper.appendChild(createSection('📁 GAME', generateGameSectionText(), true));
-    sectionsWrapper.appendChild(createSection('🦸 HERO', generateHeroSectionText(), true));
-    sectionsWrapper.appendChild(createSection('🖥️ UI', generateUISectionText(), true));
-    sectionsWrapper.appendChild(createSection('⚙️ SETTINGS', generateSettingsSectionText(), true));
+    // Добавляем разделы
+    sections.forEach(s => sectionsWrapper.appendChild(createSectionWithCopy(s)));
 
     container.appendChild(header);
     container.appendChild(sectionsWrapper);
     modal.appendChild(container);
     document.body.appendChild(modal);
 
-    // Обработчики кнопок
+    // Обработчики кнопок (общая копия и закрытие)
     const closeBtn = document.getElementById('debug-close-btn');
     closeBtn.onclick = () => {
         document.body.removeChild(modal);
         document.head.removeChild(style); // опционально
     };
-    const copyBtn = document.getElementById('debug-copy-btn');
-    copyBtn.onclick = () => {
+    const copyBtnGlobal = document.getElementById('debug-copy-btn');
+    copyBtnGlobal.onclick = () => {
         navigator.clipboard.writeText(fullText).then(() => {
-            Utils.showToast('Скопировано', 'success', 1500);
+            Utils.showToast('Всё скопировано', 'success', 1500);
         }).catch(err => {
             Utils.showToast('Ошибка копирования', 'error', 1500);
             console.error(err);

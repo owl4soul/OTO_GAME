@@ -1,6 +1,6 @@
 // Файл: turn-updates-ui.js 
 // Модуль отображения блока "ИЗМЕНЕНИЯ ЗА ХОД". Теперь сам генерирует HTML и сохраняет в State.
-// Использует прямые обработчики для тултипов
+// Использует прямые обработчики для тултипов. Адаптирован под State 5.1.
 'use strict';
 
 import { State } from './3-state.js';
@@ -17,17 +17,17 @@ class TurnUpdatesUI {
         console.log('🔧 TurnUpdatesUI: конструктор');
         this.container = null;
         this.initialized = false;
-        
+
         // Единый обработчик для клика/тапа (привязан к контексту класса)
         this.tooltipHandler = (e) => {
             const target = e.currentTarget; // сам элемент, на который навешен обработчик
             const encodedDetails = target.dataset.details;
             if (!encodedDetails) return;
-            
+
             try {
                 const details = JSON.parse(decodeURIComponent(encodedDetails));
                 const html = TurnUpdatesUI.buildTooltipHTML(details);
-                
+
                 if (TooltipUI && typeof TooltipUI.show === 'function') {
                     TooltipUI.show(target, html, {
                         autoHide: true,
@@ -43,7 +43,7 @@ class TurnUpdatesUI {
             }
         };
     }
-    
+
     initialize() {
         if (this.initialized) return;
         console.log('🎮 Инициализация TurnUpdatesUI...');
@@ -53,7 +53,7 @@ class TurnUpdatesUI {
         this.initialized = true;
         console.log('✅ TurnUpdatesUI готов');
     }
-    
+
     ensureContainer() {
         this.container = document.getElementById('turnUpdatesContainer');
         if (!this.container) {
@@ -71,7 +71,7 @@ class TurnUpdatesUI {
             this.container.classList.add('turn-updates-container');
         }
     }
-    
+
     setupEventListeners() {
         State.on(State.EVENTS.TURN_COMPLETED, () => {
             this.ensureContainer();
@@ -92,7 +92,7 @@ class TurnUpdatesUI {
             }
         });
     }
-    
+
     /**
      * Назначает обработчики напрямую каждому элементу с data-details
      */
@@ -109,10 +109,10 @@ class TurnUpdatesUI {
         });
         console.log(`🔧 Назначены обработчики для ${elements.length} элементов`);
     }
-    
+
     static buildTooltipHTML(details) {
         let html = `<div class="tooltip-calculation">`;
-        
+
         let title = '';
         if (details.type === 'event') {
             title = '🔍 СОБЫТИЕ';
@@ -124,11 +124,11 @@ class TurnUpdatesUI {
             title = `<span style="color:${resultColor};">${resultText}</span>`;
         }
         html += `<div class="tooltip-header" style="font-weight:bold; margin-bottom:10px;">${title}</div>`;
-        
+
         if (details.reason) {
             html += `<div class="tooltip-reason" style="margin-bottom:8px; font-size:0.9em;">${details.reason}</div>`;
         }
-        
+
         if (details.requirementsList && details.requirementsList.length > 0) {
             html += `<div class="tooltip-section" style="margin-top:10px;"><span style="font-weight:bold;">📋 Требования:</span>`;
             details.requirementsList.forEach(req => {
@@ -139,12 +139,12 @@ class TurnUpdatesUI {
             });
             html += `</div>`;
         }
-        
+
         if (details.type !== 'event') {
             html += `<div class="tooltip-section" style="margin-top:10px;"><span style="font-weight:bold;">🎲 Расчёт:</span>`;
             html += `<div style="margin-left:10px; font-size:0.9em;">Бросок удачи d10: ${details.d10}</div>`;
             html += `<div style="margin-left:10px; font-size:0.9em;">Сложность действия: ${details.difficulty}</div>`;
-            
+
             let algoDescription = '';
             if (details.d10 === 10) {
                 algoDescription = '🎉 Критический успех: бросок 10 автоматически приносит успех независимо от сложности и требований.';
@@ -172,7 +172,7 @@ class TurnUpdatesUI {
                 `;
             }
             html += `<div style="margin-left:10px; font-size:0.95em; background:#222; padding:5px; border-radius:4px;">${algoDescription}</div>`;
-            
+
             if (details.statChecks && details.statChecks.length > 0) {
                 html += `<div style="margin-top:10px; font-weight:bold;">📊 Проверки статов:</div>`;
                 details.statChecks.forEach(stat => {
@@ -183,13 +183,13 @@ class TurnUpdatesUI {
             }
             html += `</div>`;
         }
-        
+
         if (details.operations && details.operations.length > 0) {
             html += `<div class="tooltip-section" style="margin-top:15px;"><span style="font-weight:bold;">⚙️ Эффекты:</span>`;
             details.operations.forEach(op => {
                 const opSuccess = op.success !== false;
                 const opIcon = opSuccess ? '✅' : '❌';
-                
+
                 let opText = `${op.operation} ${op.id}`;
                 if (op.delta !== undefined) {
                     const sign = op.delta > 0 ? '+' : '';
@@ -208,35 +208,36 @@ class TurnUpdatesUI {
             });
             html += `</div>`;
         }
-        
+
         html += `</div>`;
         return html;
     }
-    
+
     generateUpdatesHTML(actionResults, events, turnNumber, actionOperationResults = [], eventOperationResults = []) {
         log.debug(LOG_CATEGORIES.TURN_PROCESSING, `TurnUpdatesUI.generateUpdatesHTML for turn ${turnNumber}`, { actionResults, events });
-        
+
         const innerHTML = this._createUpdatesInnerHTML(actionResults, events, turnNumber, actionOperationResults, eventOperationResults);
-        State.setState({ lastTurnUpdates: innerHTML });
-        
+        // Сохраняем сгенерированный HTML в State.ui.turnDisplay.updates
+        State.updateUI({ turnDisplay: { updates: innerHTML } });
+
         if (this.initialized && this.container) {
             this.renderFromState();
         }
-        
+
         return innerHTML;
     }
-    
+
     _createUpdatesInnerHTML(actionResults, events, turnNumber, actionOperationResults = [], eventOperationResults = []) {
         let html = '';
-        
+
         const hasActions = actionResults && actionResults.length > 0;
         const hasEvents = events && events.length > 0;
-        
+
         if (!hasActions && !hasEvents) {
             html += `<div class="turn-updates-empty">Нет изменений за этот ход</div>`;
             return html;
         }
-        
+
         if (hasActions) {
             html += `
                 <div class="turn-updates-actions-section">
@@ -245,17 +246,17 @@ class TurnUpdatesUI {
                     </div>
                     <div class="turn-updates-list actions-list">
             `;
-            
+
             actionResults.forEach((result, actionIdx) => {
                 const operations = result.operations || [];
                 if (operations.length === 0 && !result.reason) return;
-                
+
                 const statusClass = result.success ?
                     (result.partial ? 'action-partial' : 'action-success') :
                     'action-failure';
-                
+
                 const opResults = actionOperationResults[actionIdx] || [];
-                
+
                 const details = {
                     success: result.success,
                     partial: result.partial,
@@ -270,9 +271,9 @@ class TurnUpdatesUI {
                         success: opResults[opIdx]?.success ?? true
                     }))
                 };
-                
+
                 const encodedDetails = encodeURIComponent(JSON.stringify(details));
-                
+
                 html += `
                     <div class="turn-update-action ${statusClass}" data-details="${encodedDetails}" role="button" tabindex="0" style="cursor: pointer;">
                         <div class="action-header">
@@ -286,7 +287,7 @@ class TurnUpdatesUI {
                             <span class="action-reason">${result.reason || ''}</span>
                         </div>
                 `;
-                
+
                 if (operations.length > 0) {
                     html += `<div class="action-operations">`;
                     operations.forEach(op => {
@@ -294,13 +295,13 @@ class TurnUpdatesUI {
                     });
                     html += `</div>`;
                 }
-                
+
                 html += `</div>`;
             });
-            
+
             html += `</div></div>`;
         }
-        
+
         if (hasEvents) {
             html += `
                 <div class="turn-updates-events-section">
@@ -309,10 +310,10 @@ class TurnUpdatesUI {
                     </div>
                     <div class="turn-updates-list events-list">
             `;
-            
+
             events.forEach((event, eventIdx) => {
                 const effects = event.effects || [];
-                
+
                 const eventTypeIcons = {
                     discovery: 'fa-search',
                     character_interaction: 'fa-comments',
@@ -320,12 +321,12 @@ class TurnUpdatesUI {
                     ritual: 'fa-fire',
                     twist: 'fa-random'
                 };
-                
+
                 const icon = eventTypeIcons[event.type] || 'fa-star';
                 const eventDesc = event.description || 'Событие';
-                
+
                 const effectResults = eventOperationResults[eventIdx] || [];
-                
+
                 const eventDetails = {
                     type: 'event',
                     description: eventDesc,
@@ -336,7 +337,7 @@ class TurnUpdatesUI {
                     }))
                 };
                 const encodedEventDetails = encodeURIComponent(JSON.stringify(eventDetails));
-                
+
                 html += `
                     <div class="turn-update-event" data-details="${encodedEventDetails}" role="button" tabindex="0" style="cursor: pointer;">
                         <div class="event-header">
@@ -346,7 +347,7 @@ class TurnUpdatesUI {
                         <div class="event-description">${eventDesc}</div>
                         <div class="event-reason">${event.reason || 'Нет описания'}</div>
                 `;
-                
+
                 if (effects.length > 0) {
                     html += `<div class="event-effects">`;
                     effects.forEach(effect => {
@@ -354,37 +355,37 @@ class TurnUpdatesUI {
                     });
                     html += `</div>`;
                 }
-                
+
                 html += `</div>`;
             });
-            
+
             html += `</div></div>`;
         }
-        
+
         return html;
     }
-    
+
     _createCompactOperationHTML(operation, source) {
         if (!operation || !operation.id || !operation.operation) {
             log.warn(LOG_CATEGORIES.VALIDATION, 'Некорректная операция', operation);
             return '';
         }
-        
+
         const sourceClass = source === 'action' ? 'action-operation' : 'event-operation';
         const [type, name] = operation.id.split(':');
-        
+
         let displayName = name;
         let icon = 'fa-question';
         let colorClass = 'operation-default';
         let valueDisplay = '';
-        
+
         let displayValue = operation.value || '';
-        
+
         let displayDuration = '';
         if (operation.duration !== undefined) {
             displayDuration = `[${operation.duration} ход.]`;
         }
-        
+
         switch (type) {
             case 'stat':
                 icon = 'fa-chart-line';
@@ -447,7 +448,7 @@ class TurnUpdatesUI {
                 displayName = displayValue || name || 'Организация';
                 break;
         }
-        
+
         switch (operation.operation) {
             case OPERATIONS.ADD:
                 if (type === 'buff' || type === 'debuff') {
@@ -462,19 +463,19 @@ class TurnUpdatesUI {
                     </span>`;
                 }
                 break;
-                
+
             case OPERATIONS.REMOVE:
                 valueDisplay = `<span class="operation-remove">
                     Удалить: ${displayName}
                 </span>`;
                 break;
-                
+
             case OPERATIONS.SET:
                 valueDisplay = `<span class="operation-set">
                     Установить ${displayName}: "${String(displayValue).substring(0, 50)}"
                 </span>`;
                 break;
-                
+
             case OPERATIONS.MODIFY:
                 const sign = operation.delta > 0 ? '+' : '';
                 const deltaClass = operation.delta > 0 ? 'positive' : 'negative';
@@ -483,15 +484,15 @@ class TurnUpdatesUI {
                 </span>`;
                 break;
         }
-        
+
         let description = '';
         if (operation.description) {
             description = `<div class="operation-description">${operation.description}</div>`;
         }
-        
+
         let extraFields = '';
         const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta'];
-        
+
         Object.keys(operation).forEach(key => {
             if (!ignoredKeys.includes(key)) {
                 const val = operation[key];
@@ -500,7 +501,7 @@ class TurnUpdatesUI {
                 }
             }
         });
-        
+
         return `
             <div class="operation-item ${sourceClass} ${colorClass}">
                 <div class="operation-icon"><i class="fas ${icon}"></i></div>
@@ -514,13 +515,13 @@ class TurnUpdatesUI {
             </div>
         `;
     }
-    
+
     renderFromState() {
         try {
-            const state = State.getState();
+            const ui = State.getUI();
             if (!this.container) return;
-            
-            const innerContent = state.lastTurnUpdates || '<div class="turn-update-empty">Ожидание хода...</div>';
+
+            const innerContent = ui.turnDisplay?.updates || '<div class="turn-update-empty">Ожидание хода...</div>';
             this.container.innerHTML = `
                 <div class="turn-updates-header">
                     <i class="fas fa-exchange-alt"></i> ИЗМЕНЕНИЯ ЗА ПОСЛЕДНИЙ ХОД
@@ -529,10 +530,10 @@ class TurnUpdatesUI {
                     ${innerContent}
                 </div>
             `;
-            
+
             // Назначаем обработчики на свежесозданные элементы
             this.attachTooltipHandlers();
-            
+
             this.scrollToUpdates();
             console.log('✅ TurnUpdatesUI: обновлён');
         } catch (e) {
@@ -545,7 +546,7 @@ class TurnUpdatesUI {
             }
         }
     }
-    
+
     scrollToUpdates() {
         if (!this.container) return;
         setTimeout(() => {
@@ -554,15 +555,15 @@ class TurnUpdatesUI {
             }
         }, 300);
     }
-    
+
     clear() {
         if (this.container) this.container.innerHTML = '';
     }
-    
+
     forceUpdate() {
         this.renderFromState();
     }
-    
+
     destroy() {
         this.clear();
         this.container = null;

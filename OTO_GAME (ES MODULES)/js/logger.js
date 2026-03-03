@@ -1,4 +1,53 @@
 // Модуль: ЛОГГЕР - Расширенная система логирования для отслеживания операций и хода игры
+/**
+ * Модуль логгера для отслеживания операций и хода игры.
+ *
+ * Экспортирует:
+ * - LOG_LEVELS - константы уровней логирования (DEBUG, INFO, WARN, ERROR, NONE).
+ * - LOG_CATEGORIES - константы категорий логов.
+ * - GameLogger - класс логгера.
+ * - Logger - экземпляр класса GameLogger (синглтон). Используйте его для специализированных методов,
+ *   таких как startTurnLogging, logOperation, logStateChange, getLogs и т.д.
+ * - log - объект с готовыми методами для логирования по уровням:
+ *     log.debug(category, message, data?)
+ *     log.info(category, message, data?)
+ *     log.warn(category, message, data?)
+ *     log.error(category, message, data?)
+ *   Также включает специализированные методы для конкретных операций:
+ *     log.operation(operation, context) - начало операции
+ *     log.operationResult(operationId, result) - результат операции
+ *     log.stateChange(changes, previousState, newState) - изменение состояния
+ *     log.aiRequest(requestData, turnNumber) - запрос к ИИ
+ *     log.aiResponse(responseData, processingTime) - ответ ИИ
+ *     log.performance(marker, startTime, data) - замер производительности
+ *     log.organization(operation, org, oldRank, newRank) - операции с организациями
+ *     log.startTurn(turnNumber) - начало хода
+ *     log.endTurn(turnNumber, summary) - конец хода
+ *     log.getStats() - статистика логов
+ *     log.getLogs(filter) - получение логов по фильтру
+ *     log.getReport() - отчёт о сессии
+ *     log.getHTMLReport() - базовый HTML-отчёт
+ *     log.ui() - открывает модальное окно с **детальным** HTML-отчётом (аналитика, поиск, графики)
+ *     log.exportToFile() - экспорт всех логов в JSON-файл
+ *     log.clear() - очистка логов
+ *     log.setLevel(level) - установка уровня логирования
+ *     log.toggleCategory(category, enabled) - включение/отключение категории
+ *
+ * Правила использования:
+ * - Для простого логирования используйте log.info(), log.error() и т.д.
+ * - Для отслеживания операций, ходов, состояний используйте методы Logger напрямую
+ *   (например, Logger.startTurnLogging(5)) или соответствующие обёртки log.startTurn().
+ *
+ * Примеры:
+ *   import { log, Logger } from './logger.js';
+ *
+ *   log.info('UI', 'Кнопка нажата');
+ *   log.error('API', 'Ошибка запроса', { status: 500 });
+ *   Logger.startTurnLogging(10);
+ *   log.operation({ id: '123', operation: 'ADD' }, { item: 'sword' });
+ *   log.operationResult('123', { success: true });
+ *   log.ui(); // открыть подробный отчёт
+ */
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -84,14 +133,17 @@ class GameLogger {
     constructor() {
         this.logLevel = this.getLogLevelFromStorage();
         this.logBuffer = [];
-        this.maxBufferSize = 500;
+        this.maxBufferSize = 1000;
         this.enabledCategories = new Set(Object.values(LOG_CATEGORIES));
         this.turnLogs = new Map(); // Хранит логи по номерам ходов
         this.operationTracker = new Map(); // Трекер операций по ID
+        this.completedOperations = []; // История завершённых операций
+        this.turnDurations = []; // Длительности ходов {turnNumber, duration}
         this.sessionId = this.generateSessionId();
         this.startTime = Date.now();
+        this.currentTurn = null;
+        this.turnStartTime = null;
         
-        // Инициализация логирования
         this.log(LOG_CATEGORIES.PERFORMANCE, 'Инициализация логгера', {
             sessionId: this.sessionId,
             logLevel: this.logLevel,
@@ -99,33 +151,21 @@ class GameLogger {
         });
     }
     
-    /**
-     * Генерация ID сессии
-     */
     generateSessionId() {
         return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
     
-    /**
-     * Получение уровня логирования из хранилища
-     */
     getLogLevelFromStorage() {
         const savedLevel = localStorage.getItem('oto_log_level');
         return savedLevel !== null ? parseInt(savedLevel) : LOG_LEVELS.DEBUG;
     }
     
-    /**
-     * Установка уровня логирования
-     */
     setLogLevel(level) {
         this.logLevel = level;
         localStorage.setItem('oto_log_level', level.toString());
         this.log(LOG_CATEGORIES.PERFORMANCE, `Уровень логирования установлен: ${this.getLevelName(level)}`);
     }
     
-    /**
-     * Получение имени уровня логирования
-     */
     getLevelName(level) {
         const names = {
             [LOG_LEVELS.DEBUG]: 'DEBUG',
@@ -137,25 +177,13 @@ class GameLogger {
         return names[level] || 'UNKNOWN';
     }
     
-    /**
-     * Включение/выключение категории логирования
-     */
     toggleCategory(category, enabled) {
-        if (enabled) {
-            this.enabledCategories.add(category);
-        } else {
-            this.enabledCategories.delete(category);
-        }
+        if (enabled) this.enabledCategories.add(category);
+        else this.enabledCategories.delete(category);
     }
     
-    /**
-     * ОСНОВНОЙ МЕТОД: Логирование сообщения
-     */
     log(category, message, data = null, level = LOG_LEVELS.INFO) {
-        // Проверка уровня и категории
-        if (level < this.logLevel || !this.enabledCategories.has(category)) {
-            return;
-        }
+        if (level < this.logLevel || !this.enabledCategories.has(category)) return;
         
         const timestamp = new Date().toISOString();
         const logEntry = {
@@ -171,42 +199,26 @@ class GameLogger {
             turnNumber: this.currentTurn || null
         };
         
-        // Добавление в буфер
         this.logBuffer.unshift(logEntry);
-        if (this.logBuffer.length > this.maxBufferSize) {
-            this.logBuffer.pop();
-        }
+        if (this.logBuffer.length > this.maxBufferSize) this.logBuffer.pop();
         
-        // Добавление в логи текущего хода
         if (this.currentTurn) {
-            if (!this.turnLogs.has(this.currentTurn)) {
-                this.turnLogs.set(this.currentTurn, []);
-            }
+            if (!this.turnLogs.has(this.currentTurn)) this.turnLogs.set(this.currentTurn, []);
             this.turnLogs.get(this.currentTurn).push(logEntry);
         }
         
-        // Вывод в консоль
         this.printToConsole(logEntry);
-        
         return logEntry.id;
     }
     
-    /**
-     * Генерация ID лога
-     */
     generateLogId() {
         return 'log_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
     
-    /**
-     * Безопасное клонирование данных
-     */
     safeClone(obj) {
         try {
             if (obj === null || obj === undefined) return obj;
             if (typeof obj !== 'object') return obj;
-            
-            // Обработка циклических ссылок
             const seen = new WeakSet();
             return JSON.parse(JSON.stringify(obj, (key, value) => {
                 if (typeof value === 'object' && value !== null) {
@@ -220,25 +232,16 @@ class GameLogger {
         }
     }
     
-    /**
-     * Вывод в консоль с форматированием (исправлено)
-     */
     printToConsole(entry) {
         const time = new Date(entry.timestamp).toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            fractionalSecondDigits: 3
+            hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3
         });
-        
         const icon = CATEGORY_ICONS[entry.category] || '📝';
         const levelIcon = entry.level === LOG_LEVELS.ERROR ? '❌' :
             entry.level === LOG_LEVELS.WARN ? '⚠️' :
             entry.level === LOG_LEVELS.INFO ? 'ℹ️' : '🔍';
-        
         const turnInfo = entry.turnNumber ? `[Ход ${entry.turnNumber}] ` : '';
         
-        // Заголовок группы – всё корректно, оставляем как есть
         console.groupCollapsed(
             `%c${icon} ${turnInfo}${entry.category}%c %c${entry.levelName}%c ${entry.message}`,
             CONSOLE_STYLES[entry.category],
@@ -248,72 +251,41 @@ class GameLogger {
             entry.level === LOG_LEVELS.INFO ? CONSOLE_STYLES.INFO : CONSOLE_STYLES.DEBUG,
             CONSOLE_STYLES.reset
         );
-        
-        // Детализация – стили уже правильно расставлены
         console.log(`%c⏰ Время: ${time}`, 'color: #636e72;');
         console.log(`%c🎯 Уровень: ${entry.levelName} ${levelIcon}`, 'color: #dfe6e9;');
-        
-        if (entry.turnNumber) {
-            console.log(`%c🔄 Ход: ${entry.turnNumber}`, 'color: #74b9ff;');
-        }
-        
-        // Вывод данных – убран лишний заголовок, сразу вызывается printData
-        if (entry.data) {
-            this.printData(entry.data);
-        }
-        
+        if (entry.turnNumber) console.log(`%c🔄 Ход: ${entry.turnNumber}`, 'color: #74b9ff;');
+        if (entry.data) this.printData(entry.data);
         if (entry.stackTrace) {
             console.log('%c🔍 Стек вызовов:', 'color: #fd79a8; font-weight: bold;');
             console.log(entry.stackTrace);
         }
-        
         console.groupEnd();
     }
     
-    /**
-     * Форматированный вывод данных (полностью переработан)
-     * Теперь все строки используют %c, нет сырой конкатенации, цвета применяются единообразно.
-     */
     printData(data, indent = 0) {
-        const indentStr = '  '.repeat(indent); // два пробела на уровень
-        
-        // Примитивы
+        const indentStr = '  '.repeat(indent);
         if (data === null || data === undefined || typeof data !== 'object') {
-            const style = this.getStyleForValue(data);
-            console.log(`%c${indentStr}${this.formatValue(data)}`, style);
+            console.log(`%c${indentStr}${this.formatValue(data)}`, this.getStyleForValue(data));
             return;
         }
-        
-        // Массив
         if (Array.isArray(data)) {
             console.log(`%c${indentStr}📋 Массив [${data.length} элементов]:`, 'color: #74b9ff;');
             data.forEach((item, index) => {
-                const valueStr = this.formatValue(item);
-                const style = this.getStyleForValue(item);
-                // индекс — зелёный, значение — по типу
-                console.log(`%c${indentStr}  ${index}:%c ${valueStr}`, 'color: #00b894;', style);
+                console.log(`%c${indentStr}  ${index}:%c ${this.formatValue(item)}`, 'color: #00b894;', this.getStyleForValue(item));
             });
             return;
         }
-        
-        // Объект
         console.log(`%c${indentStr}📁 Объект:`, 'color: #a29bfe;');
         Object.entries(data).forEach(([key, value]) => {
             if (typeof value === 'object' && value !== null) {
-                // Вложенный объект/массив – сначала ключ, потом рекурсивно данные с увеличенным отступом
                 console.log(`%c${indentStr}  ${key}:`, 'color: #00b894;');
                 this.printData(value, indent + 2);
             } else {
-                const valueStr = this.formatValue(value);
-                const style = this.getStyleForValue(value);
-                console.log(`%c${indentStr}  ${key}:%c ${valueStr}`, 'color: #00b894;', style);
+                console.log(`%c${indentStr}  ${key}:%c ${this.formatValue(value)}`, 'color: #00b894;', this.getStyleForValue(value));
             }
         });
     }
     
-    /**
-     * Возвращает строковое представление значения для вывода в консоль
-     */
     formatValue(value) {
         if (value === null) return 'null';
         if (value === undefined) return 'undefined';
@@ -322,188 +294,107 @@ class GameLogger {
         return String(value);
     }
     
-    /**
-     * Возвращает CSS-стиль для значения в зависимости от его типа
-     */
     getStyleForValue(value) {
-        if (value === null || value === undefined) {
-            return 'color: #636e72; font-style: italic;'; // серый
-        }
+        if (value === null || value === undefined) return 'color: #636e72; font-style: italic;';
         switch (typeof value) {
-            case 'number':
-                return 'color: #0984e3;'; // синий
-            case 'boolean':
-                return 'color: #fdcb6e;'; // жёлтый
-            case 'string':
-                return 'color: #dfe6e9;'; // светло-серый
-            case 'function':
-                return 'color: #e84393; font-style: italic;'; // розовый
-            default:
-                return 'color: #dfe6e9;';
+            case 'number': return 'color: #0984e3;';
+            case 'boolean': return 'color: #fdcb6e;';
+            case 'string': return 'color: #dfe6e9;';
+            case 'function': return 'color: #e84393; font-style: italic;';
+            default: return 'color: #dfe6e9;';
         }
     }
     
-    /**
-     * Начало логирования хода
-     */
     startTurnLogging(turnNumber) {
         this.currentTurn = turnNumber;
         this.turnLogs.set(turnNumber, []);
-        
+        this.turnStartTime = Date.now();
         this.log(LOG_CATEGORIES.TURN_PROCESSING, `🔄 НАЧАЛО ОБРАБОТКИ ХОДА ${turnNumber}`, {
-            timestamp: new Date().toISOString(),
-            sessionId: this.sessionId
+            timestamp: new Date().toISOString(), sessionId: this.sessionId
         }, LOG_LEVELS.INFO);
-        
         return turnNumber;
     }
     
-    /**
-     * Завершение логирования хода
-     */
     endTurnLogging(turnNumber, summary = {}) {
         const turnLogs = this.turnLogs.get(turnNumber) || [];
-        
+        const turnDuration = this.turnStartTime ? Date.now() - this.turnStartTime : 0;
+        this.turnDurations.push({ turnNumber, duration: turnDuration });
         this.log(LOG_CATEGORIES.TURN_PROCESSING, `✅ ЗАВЕРШЕНИЕ ОБРАБОТКИ ХОДА ${turnNumber}`, {
             totalLogs: turnLogs.length,
             operationsCount: summary.operationsCount || 0,
             successfulOperations: summary.successfulOperations || 0,
             failedOperations: summary.failedOperations || 0,
-            processingTime: Date.now() - this.startTime
+            processingTime: turnDuration
         }, LOG_LEVELS.INFO);
-        
         this.currentTurn = null;
-        
-        // Экспорт логов хода при необходимости
-        if (CONFIG.debugMode) {
-            this.exportTurnLogs(turnNumber);
-        }
+        this.turnStartTime = null;
+        if (CONFIG.debugMode) this.exportTurnLogs(turnNumber);
     }
     
-    /**
-     * Логирование операции с детализацией
-     */
-    logOperation(operation, context = {}, result = null) {
+    logOperation(operation, context = {}) {
         const operationId = operation.id || 'unknown';
         const operationType = operation.operation || 'unknown';
-        
-        // Начало трекинга операции
         this.operationTracker.set(operationId, {
-            id: operationId,
-            type: operationType,
-            startTime: Date.now(),
-            context,
+            id: operationId, type: operationType, startTime: Date.now(), context,
             operation: this.safeClone(operation)
         });
-        
         const icon = OPERATION_ICONS[operationType] || '🔧';
-        
         this.log(LOG_CATEGORIES.OPERATIONS, `${icon} НАЧАЛО ОПЕРАЦИИ: ${operationType} над ${operationId}`, {
-            operation: this.safeClone(operation),
-            context,
-            turn: this.currentTurn
+            operation: this.safeClone(operation), context, turn: this.currentTurn
         }, LOG_LEVELS.DEBUG);
-        
         return operationId;
     }
     
-    /**
-     * Завершение логирования операции
-     */
     logOperationResult(operationId, result) {
         const operationData = this.operationTracker.get(operationId);
-        
         if (!operationData) {
             this.log(LOG_CATEGORIES.ERROR_TRACKING, `❌ ОПЕРАЦИЯ НЕ НАЙДЕНА: ${operationId}`, {}, LOG_LEVELS.ERROR);
             return;
         }
-        
         const processingTime = Date.now() - operationData.startTime;
         const operationType = operationData.type;
         const icon = OPERATION_ICONS[operationType] || '🔧';
-        
+        this.completedOperations.push({
+            id: operationId, type: operationType, duration: processingTime,
+            success: result.success, timestamp: new Date().toISOString(), turn: this.currentTurn
+        });
         const status = result.success ? '✅ УСПЕШНО' : '❌ ОШИБКА';
-        const statusStyle = result.success ? CONSOLE_STYLES.STATUS_SUCCESS : CONSOLE_STYLES.STATUS_FAILED;
-        
         this.log(LOG_CATEGORIES.OPERATIONS, `${icon} ${status}: ${operationType} над ${operationId}`, {
-            result: this.safeClone(result),
-            processingTime: `${processingTime}ms`,
-            originalOperation: operationData.operation,
-            context: operationData.context
+            result: this.safeClone(result), processingTime: `${processingTime}ms`,
+            originalOperation: operationData.operation, context: operationData.context
         }, result.success ? LOG_LEVELS.INFO : LOG_LEVELS.WARN);
-        
-        // Удаление из трекера
         this.operationTracker.delete(operationId);
     }
     
-    /**
-     * Логирование изменения состояния игры
-     */
     logStateChange(changes, previousState = null, newState = null) {
-        if (!changes || Object.keys(changes).length === 0) {
-            return;
-        }
-        
+        if (!changes || Object.keys(changes).length === 0) return;
         const changeCount = Object.keys(changes).length;
         this.log(LOG_CATEGORIES.GAME_STATE, `📊 ИЗМЕНЕНИЕ СОСТОЯНИЯ: ${changeCount} элементов`, {
-            changes: this.safeClone(changes),
-            summary: this.calculateChangesSummary(changes),
-            hasPreviousState: !!previousState,
-            hasNewState: !!newState
+            changes: this.safeClone(changes), summary: this.calculateChangesSummary(changes),
+            hasPreviousState: !!previousState, hasNewState: !!newState
         }, LOG_LEVELS.INFO);
-        
-        // Детализация по типам изменений
         Object.entries(changes).forEach(([id, change]) => {
             const [type, name] = id.split(':');
-            const icon = type === 'stat' ? '📈' :
-                type === 'skill' ? '📚' :
-                type === 'inventory' ? '🎒' :
-                type === 'buff' ? '⬆️' : '📝';
-            
+            const icon = type === 'stat' ? '📈' : type === 'skill' ? '📚' : type === 'inventory' ? '🎒' : type === 'buff' ? '⬆️' : '📝';
             this.log(LOG_CATEGORIES.GAME_STATE, `${icon} ${name}: ${change.old} → ${change.new} (Δ${change.delta})`, {
-                id,
-                type,
-                name,
-                oldValue: change.old,
-                newValue: change.new,
-                delta: change.delta
+                id, type, name, oldValue: change.old, newValue: change.new, delta: change.delta
             }, LOG_LEVELS.DEBUG);
         });
     }
     
-    /**
-     * Расчет сводки изменений
-     */
     calculateChangesSummary(changes) {
-        const summary = {
-            total: Object.keys(changes).length,
-            byType: {},
-            positive: 0,
-            negative: 0,
-            neutral: 0
-        };
-        
+        const summary = { total: Object.keys(changes).length, byType: {}, positive: 0, negative: 0, neutral: 0 };
         Object.entries(changes).forEach(([id, change]) => {
             const [type] = id.split(':');
-            
-            // Подсчет по типам
-            if (!summary.byType[type]) {
-                summary.byType[type] = 0;
-            }
+            if (!summary.byType[type]) summary.byType[type] = 0;
             summary.byType[type]++;
-            
-            // Подсчет по направлению изменений
             if (change.delta > 0) summary.positive++;
             else if (change.delta < 0) summary.negative++;
             else summary.neutral++;
         });
-        
         return summary;
     }
     
-    /**
-     * Логирование AI запроса
-     */
     logAIRequest(requestData, turnNumber) {
         this.log(LOG_CATEGORIES.AI_REQUESTS, '🤖 ОТПРАВКА ЗАПРОСА К ИИ', {
             turn: turnNumber,
@@ -517,9 +408,6 @@ class GameLogger {
         }, LOG_LEVELS.INFO);
     }
     
-    /**
-     * Логирование AI ответа
-     */
     logAIResponse(responseData, processingTime) {
         this.log(LOG_CATEGORIES.AI_REQUESTS, '🤖 ПОЛУЧЕН ОТВЕТ ОТ ИИ', {
             processingTime: `${processingTime}ms`,
@@ -532,182 +420,88 @@ class GameLogger {
         }, LOG_LEVELS.INFO);
     }
     
-    /**
-     * Логирование ошибки с детализацией
-     */
     logError(context, error, additionalData = {}) {
         const errorId = 'err_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-        
         this.log(LOG_CATEGORIES.ERROR_TRACKING, `❌ ОШИБКА: ${error.message || 'Unknown error'}`, {
-            errorId,
-            context,
-            error: {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-                code: error.code
-            },
-            ...additionalData,
-            timestamp: new Date().toISOString(),
-            turn: this.currentTurn
+            errorId, context,
+            error: { name: error.name, message: error.message, stack: error.stack, code: error.code },
+            ...additionalData, timestamp: new Date().toISOString(), turn: this.currentTurn
         }, LOG_LEVELS.ERROR);
-        
         return errorId;
     }
     
-    /**
-     * Логирование производительности
-     */
     logPerformance(marker, startTime, data = {}) {
         const duration = Date.now() - startTime;
-        
         let level = LOG_LEVELS.DEBUG;
         if (duration > 1000) level = LOG_LEVELS.WARN;
         if (duration > 5000) level = LOG_LEVELS.ERROR;
-        
-        this.log(LOG_CATEGORIES.PERFORMANCE, `⏱️ ${marker}: ${duration}ms`, {
-            marker,
-            duration,
-            ...data
-        }, level);
-        
+        this.log(LOG_CATEGORIES.PERFORMANCE, `⏱️ ${marker}: ${duration}ms`, { marker, duration, ...data }, level);
         return duration;
     }
     
-    /**
-     * Логирование операций с организациями
-     */
     logOrganizationOperation(operation, organization, oldRank = null, newRank = null) {
         const icon = OPERATION_ICONS[operation] || '🏛️';
-        
         this.log(LOG_CATEGORIES.ORGANIZATIONS, `${icon} ОПЕРАЦИЯ С ОРГАНИЗАЦИЕЙ: ${organization}`, {
-            operation,
-            organization,
-            oldRank,
-            newRank,
+            operation, organization, oldRank, newRank,
             rankChange: oldRank !== null && newRank !== null ? newRank - oldRank : null,
             timestamp: new Date().toISOString()
         }, LOG_LEVELS.INFO);
     }
     
-    /**
-     * Экспорт логов хода
-     */
     exportTurnLogs(turnNumber) {
         const logs = this.turnLogs.get(turnNumber) || [];
-        
-        if (logs.length === 0) {
-            return null;
-        }
-        
-        const exportData = {
-            sessionId: this.sessionId,
-            turnNumber,
-            exportTime: new Date().toISOString(),
-            totalLogs: logs.length,
-            logs: logs
-        };
-        
-        // Сохранение в localStorage для отладки
-        const key = `oto_turn_logs_${turnNumber}`;
-        localStorage.setItem(key, JSON.stringify(exportData, null, 2));
-        
+        if (logs.length === 0) return null;
+        const exportData = { sessionId: this.sessionId, turnNumber, exportTime: new Date().toISOString(), totalLogs: logs.length, logs };
+        localStorage.setItem(`oto_turn_logs_${turnNumber}`, JSON.stringify(exportData, null, 2));
         return exportData;
     }
     
-    /**
-     * Получение логов по фильтру
-     */
     getLogs(filter = {}) {
         let filteredLogs = [...this.logBuffer];
-        
-        if (filter.category) {
-            filteredLogs = filteredLogs.filter(log => log.category === filter.category);
-        }
-        
-        if (filter.level !== undefined) {
-            filteredLogs = filteredLogs.filter(log => log.level >= filter.level);
-        }
-        
-        if (filter.turnNumber) {
-            filteredLogs = filteredLogs.filter(log => log.turnNumber === filter.turnNumber);
-        }
-        
+        if (filter.category) filteredLogs = filteredLogs.filter(l => l.category === filter.category);
+        if (filter.level !== undefined) filteredLogs = filteredLogs.filter(l => l.level >= filter.level);
+        if (filter.turnNumber) filteredLogs = filteredLogs.filter(l => l.turnNumber === filter.turnNumber);
         if (filter.search) {
             const searchLower = filter.search.toLowerCase();
-            filteredLogs = filteredLogs.filter(log =>
-                log.message.toLowerCase().includes(searchLower) ||
-                JSON.stringify(log.data).toLowerCase().includes(searchLower)
+            filteredLogs = filteredLogs.filter(l => 
+                l.message.toLowerCase().includes(searchLower) ||
+                JSON.stringify(l.data).toLowerCase().includes(searchLower)
             );
         }
-        
-        if (filter.limit) {
-            filteredLogs = filteredLogs.slice(0, filter.limit);
-        }
-        
+        if (filter.limit) filteredLogs = filteredLogs.slice(0, filter.limit);
         return filteredLogs;
     }
     
-    /**
-     * Получение статистики логов
-     */
     getLogStats() {
-        const stats = {
-            total: this.logBuffer.length,
-            byCategory: {},
-            byLevel: {},
-            byTurn: {},
-            errorCount: 0,
-            warnCount: 0
-        };
-        
+        const stats = { total: this.logBuffer.length, byCategory: {}, byLevel: {}, byTurn: {}, errorCount: 0, warnCount: 0 };
         this.logBuffer.forEach(log => {
-            // По категориям
-            if (!stats.byCategory[log.category]) {
-                stats.byCategory[log.category] = 0;
-            }
+            if (!stats.byCategory[log.category]) stats.byCategory[log.category] = 0;
             stats.byCategory[log.category]++;
-            
-            // По уровням
-            if (!stats.byLevel[log.levelName]) {
-                stats.byLevel[log.levelName] = 0;
-            }
+            if (!stats.byLevel[log.levelName]) stats.byLevel[log.levelName] = 0;
             stats.byLevel[log.levelName]++;
-            
-            // По ходам
             if (log.turnNumber) {
-                if (!stats.byTurn[log.turnNumber]) {
-                    stats.byTurn[log.turnNumber] = 0;
-                }
+                if (!stats.byTurn[log.turnNumber]) stats.byTurn[log.turnNumber] = 0;
                 stats.byTurn[log.turnNumber]++;
             }
-            
-            // Счетчики ошибок и предупреждений
             if (log.level === LOG_LEVELS.ERROR) stats.errorCount++;
             if (log.level === LOG_LEVELS.WARN) stats.warnCount++;
         });
-        
         return stats;
     }
     
-    /**
-     * Очистка логов
-     */
     clearLogs() {
         this.logBuffer = [];
         this.turnLogs.clear();
         this.operationTracker.clear();
+        this.completedOperations = [];
+        this.turnDurations = [];
         this.log(LOG_CATEGORIES.PERFORMANCE, '🗑️ Все логи очищены', {}, LOG_LEVELS.INFO);
     }
     
-    /**
-     * Создание отчета о сессии
-     */
     createSessionReport() {
         const stats = this.getLogStats();
         const sessionDuration = Date.now() - this.startTime;
-        
-        const report = {
+        return {
             sessionId: this.sessionId,
             startTime: new Date(this.startTime).toISOString(),
             duration: sessionDuration,
@@ -721,167 +515,835 @@ class GameLogger {
             logLevel: this.getLevelName(this.logLevel),
             enabledCategories: Array.from(this.enabledCategories)
         };
-        
-        return report;
     }
     
-    /**
-     * Форматирование длительности
-     */
     formatDuration(ms) {
         const seconds = Math.floor(ms / 1000);
         const minutes = Math.floor(seconds / 60);
         const hours = Math.floor(minutes / 60);
-        
-        if (hours > 0) {
-            return `${hours}ч ${minutes % 60}м ${seconds % 60}с`;
-        } else if (minutes > 0) {
-            return `${minutes}м ${seconds % 60}с`;
-        } else {
-            return `${seconds}с`;
-        }
+        if (hours > 0) return `${hours}ч ${minutes % 60}м ${seconds % 60}с`;
+        else if (minutes > 0) return `${minutes}м ${seconds % 60}с`;
+        else return `${seconds}с`;
+    }
+    
+    generateHTMLReport() {
+        const report = this.createSessionReport();
+        let html = `<div style="font-family: monospace; background: #1a1a1a; color: #fff; padding: 20px; border-radius: 8px;"><h2 style="color: #00b894;">📊 ОТЧЕТ ЛОГГЕРА - Сессия ${report.sessionId}</h2>`;
+        html += `<div>Начало: ${new Date(report.startTime).toLocaleString()}</div>`;
+        html += `<div>Длительность: ${report.durationFormatted}</div>`;
+        html += `<div>Всего логов: ${report.totalLogs}</div>`;
+        html += `<div>Ошибки: ${report.errors}, Предупреждения: ${report.warnings}</div>`;
+        html += `</div>`;
+        return html;
     }
     
     /**
-     * Генерация HTML отчета
+     * Генерация ДЕТАЛЬНОГО HTML отчета (для log.ui) в стиле индастриал-готика (стеклянный, чёрно-красный)
      */
-    generateHTMLReport() {
+    generateDetailedHTMLReport() {
         const report = this.createSessionReport();
+        const stats = this.getLogStats();
+        const recentLogs = this.logBuffer.slice(0, 200);
+        const ongoingOps = Array.from(this.operationTracker.values());
+        const completedOps = this.completedOperations.slice(-100);
+        const turnDurations = this.turnDurations;
+        
+        // Анализ производительности операций
+        const perfByType = {};
+        completedOps.forEach(op => {
+            if (!perfByType[op.type]) perfByType[op.type] = { count: 0, totalDuration: 0, success: 0, fail: 0 };
+            perfByType[op.type].count++;
+            perfByType[op.type].totalDuration += op.duration;
+            if (op.success) perfByType[op.type].success++; else perfByType[op.type].fail++;
+        });
+        
+        const avgTurnDuration = turnDurations.length 
+            ? turnDurations.reduce((sum, td) => sum + td.duration, 0) / turnDurations.length 
+            : 0;
+        
+        // Цветовая схема: кроваво-чёрно-стеклянная
+        const colors = {
+            bg: '#0a0a0a',           // глубокий чёрный
+            card: '#151515',          // тёмно-серый с полупрозрачностью (стекло)
+            cardRgba: 'rgba(20,20,20,0.85)',
+            border: '#3a2a2a',        // тёмно-красновато-серый
+            text: '#e0d0d0',          // светлый, чуть красноватый
+            accent: '#8b0000',        // тёмно-красный (кровь)
+            accentLight: '#a52a2a',   // светлее для ховера
+            gray: '#5a4a4a',
+            error: '#cf6679',
+            warn: '#b85c00',
+            info: '#4a6c8f',
+            debug: '#5a5a5a'
+        };
         
         let html = `
-        <div style="font-family: monospace; background: #1a1a1a; color: #fff; padding: 20px; border-radius: 8px;">
-            <h2 style="color: #00b894; border-bottom: 2px solid #00b894; padding-bottom: 10px;">
-                📊 ОТЧЕТ ЛОГГЕРА - Сессия ${report.sessionId}
-            </h2>
+        <div class="logger-detailed-report" style="font-family: 'Segoe UI', 'Roboto', 'Helvetica', monospace; background: ${colors.bg}; color: ${colors.text}; padding: 12px; border-radius: 10px; max-width: 1400px; margin: 0 auto; font-size: 12px; line-height: 1.4;">
+            <style>
+                .logger-detailed-report {
+                    scrollbar-width: thin;
+                    scrollbar-color: ${colors.accent} ${colors.card};
+                }
+                .logger-detailed-report::-webkit-scrollbar {
+                    width: 6px;
+                }
+                .logger-detailed-report::-webkit-scrollbar-track {
+                    background: ${colors.card};
+                }
+                .logger-detailed-report::-webkit-scrollbar-thumb {
+                    background: ${colors.accent};
+                    border-radius: 3px;
+                }
+                .logger-detailed-report .section {
+                    background: ${colors.cardRgba};
+                    backdrop-filter: blur(2px);
+                    border: 1px solid ${colors.border};
+                    border-radius: 6px;
+                    padding: 10px;
+                    margin-bottom: 12px;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+                }
+                .logger-detailed-report h2 {
+                    color: ${colors.accent};
+                    margin: 0 0 8px 0;
+                    border-bottom: 1px solid ${colors.accent};
+                    padding-bottom: 4px;
+                    font-size: 16px;
+                    font-weight: 400;
+                    letter-spacing: 0.5px;
+                }
+                .logger-detailed-report h3 {
+                    color: ${colors.accentLight};
+                    margin: 0 0 8px 0;
+                    font-size: 14px;
+                    font-weight: 300;
+                    border-left: 2px solid ${colors.accent};
+                    padding-left: 6px;
+                }
+                .logger-detailed-report .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                    gap: 6px;
+                    margin-bottom: 6px;
+                }
+                .logger-detailed-report .stat-card {
+                    background: ${colors.bg};
+                    border: 1px solid ${colors.border};
+                    border-radius: 4px;
+                    padding: 6px 8px;
+                    text-align: center;
+                }
+                .logger-detailed-report .stat-card .label {
+                    color: ${colors.gray};
+                    font-size: 0.75rem;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                .logger-detailed-report .stat-card .value {
+                    font-size: 1.4rem;
+                    font-weight: 400;
+                    color: ${colors.accent};
+                    line-height: 1.2;
+                }
+                .logger-detailed-report .progress-bar {
+                    background: ${colors.border};
+                    height: 4px;
+                    border-radius: 2px;
+                    margin: 4px 0;
+                    overflow: hidden;
+                }
+                .logger-detailed-report .progress-fill {
+                    height: 100%;
+                    background: ${colors.accent};
+                    border-radius: 2px;
+                }
+                .logger-detailed-report .log-entry {
+                    background: ${colors.bg};
+                    border: 1px solid ${colors.border};
+                    margin: 4px 0;
+                    padding: 6px;
+                    border-radius: 4px;
+                    border-left-width: 3px;
+                    border-left-style: solid;
+                    cursor: pointer;
+                    transition: background 0.1s;
+                }
+                .logger-detailed-report .log-entry:hover {
+                    background: #1f1f1f;
+                }
+                .logger-detailed-report .log-header {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    flex-wrap: wrap;
+                    font-size: 11px;
+                }
+                .logger-detailed-report .log-time {
+                    color: ${colors.gray};
+                    font-size: 0.7rem;
+                }
+                .logger-detailed-report .log-category {
+                    font-weight: 600;
+                    padding: 1px 4px;
+                    border-radius: 3px;
+                    background: #2a2a2a;
+                    font-size: 0.7rem;
+                }
+                .logger-detailed-report .log-level {
+                    padding: 1px 6px;
+                    border-radius: 10px;
+                    font-size: 0.65rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                }
+                .logger-detailed-report .log-level.error { background: ${colors.error}; color: #000; }
+                .logger-detailed-report .log-level.warn { background: ${colors.warn}; color: #000; }
+                .logger-detailed-report .log-level.info { background: ${colors.info}; color: #fff; }
+                .logger-detailed-report .log-level.debug { background: ${colors.debug}; color: #fff; }
+                .logger-detailed-report .log-details {
+                    margin-top: 6px;
+                    padding: 6px;
+                    background: #0d0d0d;
+                    border-radius: 3px;
+                    display: none;
+                    overflow-x: auto;
+                    font-size: 11px;
+                }
+                .logger-detailed-report .log-entry.expanded .log-details { display: block; }
+                .logger-detailed-report .search-box {
+                    width: 100%;
+                    padding: 6px 8px;
+                    margin-bottom: 8px;
+                    background: ${colors.bg};
+                    border: 1px solid ${colors.border};
+                    color: ${colors.text};
+                    border-radius: 4px;
+                    font-size: 11px;
+                }
+                .logger-detailed-report .button {
+                    background: transparent;
+                    border: 1px solid ${colors.accent};
+                    color: ${colors.accentLight};
+                    padding: 4px 12px;
+                    border-radius: 16px;
+                    font-size: 10px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    margin-right: 6px;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    transition: all 0.1s;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                .logger-detailed-report .button:hover {
+                    background: ${colors.accent};
+                    color: #fff;
+                    border-color: ${colors.accentLight};
+                }
+                .logger-detailed-report .button.secondary {
+                    border-color: ${colors.gray};
+                    color: ${colors.gray};
+                }
+                .logger-detailed-report .button.secondary:hover {
+                    background: ${colors.gray};
+                    color: #000;
+                }
+                .logger-detailed-report .button.danger {
+                    border-color: ${colors.error};
+                    color: ${colors.error};
+                }
+                .logger-detailed-report .button.danger:hover {
+                    background: ${colors.error};
+                    color: #000;
+                }
+                .logger-detailed-report .flex-row {
+                    display: flex;
+                    gap: 8px;
+                    flex-wrap: wrap;
+                    align-items: center;
+                }
+                .logger-detailed-report .mt-2 { margin-top: 8px; }
+                .logger-detailed-report .table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 11px;
+                }
+                .logger-detailed-report .table td, .logger-detailed-report .table th {
+                    padding: 4px 6px;
+                    border-bottom: 1px solid ${colors.border};
+                    text-align: left;
+                }
+                .logger-detailed-report .table th {
+                    color: ${colors.gray};
+                    font-weight: 400;
+                }
+                .logger-detailed-report .filter-panel {
+                    display: flex;
+                    gap: 4px;
+                    flex-wrap: wrap;
+                    margin-bottom: 8px;
+                }
+                .logger-detailed-report .filter-btn {
+                    background: ${colors.bg};
+                    border: 1px solid ${colors.border};
+                    color: ${colors.text};
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    cursor: pointer;
+                    font-size: 9px;
+                    text-transform: uppercase;
+                }
+                .logger-detailed-report .filter-btn.active {
+                    background: ${colors.accent};
+                    color: #000;
+                    border-color: ${colors.accent};
+                }
+                .logger-detailed-report .compact {
+                    font-size: 10px;
+                }
+                @media (max-width: 600px) {
+                    .logger-detailed-report .stats-grid { grid-template-columns: 1fr; }
+                }
+            </style>
             
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-top: 20px;">
-        `;
-        
-        // Блок основной информации
-        html += `
-            <div style="background: #2d3436; padding: 15px; border-radius: 6px;">
-                <h3 style="color: #74b9ff; margin-top: 0;">📈 ОБЩАЯ ИНФОРМАЦИЯ</h3>
-                <div style="color: #dfe6e9;">
-                    <div><strong>Начало:</strong> ${new Date(report.startTime).toLocaleString('ru-RU')}</div>
-                    <div><strong>Длительность:</strong> ${report.durationFormatted}</div>
-                    <div><strong>Всего логов:</strong> ${report.totalLogs}</div>
-                    <div><strong>Уровень логирования:</strong> ${report.logLevel}</div>
+            <!-- Шапка -->
+            <div class="section">
+                <h2>⚙️ ДЕТАЛЬНЫЙ ОТЧЁТ ЛОГГЕРА</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="label">Сессия</div>
+                        <div class="value" style="font-size:1rem;">${report.sessionId.slice(0,12)}…</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Длительность</div>
+                        <div class="value">${report.durationFormatted}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Логов</div>
+                        <div class="value">${report.totalLogs}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">Ош/Пр</div>
+                        <div class="value" style="color:${colors.error};">${report.errors}<span style="color:${colors.warn};">/${report.warnings}</span></div>
+                    </div>
+                </div>
+                <div class="flex-row compact" style="justify-content:space-between;">
+                    <span>🔹 Ход: <strong>${this.currentTurn !== null ? this.currentTurn : '—'}</strong></span>
+                    <span>🔹 Уровень: <strong>${report.logLevel}</strong></span>
+                    <span>🔹 Категорий: <strong>${report.enabledCategories.length}</strong></span>
                 </div>
             </div>
+            
+            <!-- Распределение по категориям и уровням -->
+            <div class="section">
+                <h3>📊 РАСПРЕДЕЛЕНИЕ ПО КАТЕГОРИЯМ</h3>
+                <div style="max-height: 200px; overflow-y: auto; padding-right: 4px;">
         `;
         
-        // Блок ошибок и предупреждений
-        html += `
-            <div style="background: #2d3436; padding: 15px; border-radius: 6px;">
-                <h3 style="color: #ff7675; margin-top: 0;">⚠️ ОШИБКИ И ПРЕДУПРЕЖДЕНИЯ</h3>
-                <div style="color: #dfe6e9;">
-                    <div><strong>Ошибки:</strong> <span style="color: #ff7675;">${report.errors}</span></div>
-                    <div><strong>Предупреждения:</strong> <span style="color: #fdcb6e;">${report.warnings}</span></div>
-                    <div><strong>Уровень логирования:</strong> ${report.logLevel}</div>
-                </div>
-            </div>
-        `;
-        
-        // Блок категорий
-        html += `
-            <div style="background: #2d3436; padding: 15px; border-radius: 6px;">
-                <h3 style="color: #a29bfe; margin-top: 0;">📂 РАСПРЕДЕЛЕНИЕ ПО КАТЕГОРИЯМ</h3>
-                <div style="color: #dfe6e9;">
-        `;
-        
-        Object.entries(report.categories).forEach(([category, count]) => {
-            const percentage = ((count / report.totalLogs) * 100).toFixed(1);
+        Object.entries(stats.byCategory).forEach(([cat, cnt]) => {
+            const pct = (cnt / report.totalLogs * 100).toFixed(1);
             html += `
-                <div style="margin: 5px 0;">
-                    <span style="color: ${this.getCategoryColor(category)}">${category}</span>: 
-                    ${count} (${percentage}%)
-                    <div style="background: #404040; height: 10px; border-radius: 5px; margin-top: 2px;">
-                        <div style="background: ${this.getCategoryColor(category)}; width: ${percentage}%; height: 100%; border-radius: 5px;"></div>
+                <div style="margin: 4px 0;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px;">
+                        <span style="color:${this.getCategoryColor(cat)}">${cat}</span>
+                        <span>${cnt} (${pct}%)</span>
+                    </div>
+                    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%; background:${this.getCategoryColor(cat)}"></div></div>
+                </div>
+            `;
+        });
+        
+        html += `</div><h3>📊 ПО УРОВНЯМ</h3><div>`;
+        const levelColorsMap = {
+            DEBUG: colors.debug, INFO: colors.info, WARN: colors.warn, ERROR: colors.error
+        };
+        Object.entries(stats.byLevel).forEach(([lvl, cnt]) => {
+            const pct = (cnt / report.totalLogs * 100).toFixed(1);
+            html += `
+                <div style="margin: 4px 0;">
+                    <div style="display:flex; justify-content:space-between; font-size:11px;">
+                        <span style="color:${levelColorsMap[lvl] || colors.gray}">${lvl}</span>
+                        <span>${cnt} (${pct}%)</span>
+                    </div>
+                    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%; background:${levelColorsMap[lvl] || colors.gray}"></div></div>
+                </div>
+            `;
+        });
+        html += `</div></div>`;
+        
+        // Гистограмма по ходам
+        if (Object.keys(stats.byTurn).length > 0) {
+            html += `
+            <div class="section">
+                <h3>🔄 ЛОГИ ПО ХОДАМ</h3>
+                <div style="display:flex; flex-wrap:wrap; gap:2px; align-items:flex-end;">
+            `;
+            const maxTurnLogs = Math.max(...Object.values(stats.byTurn));
+            Object.entries(stats.byTurn).sort((a,b) => a[0]-b[0]).forEach(([turn, cnt]) => {
+                const height = (cnt / maxTurnLogs * 40) + 10;
+                html += `
+                    <div style="display:flex; flex-direction:column; align-items:center; width:24px;">
+                        <div style="height:${height}px; width:16px; background:${colors.accent}; border-radius:2px 2px 0 0;"></div>
+                        <span style="font-size:8px;">${turn}</span>
+                        <span style="font-size:7px; color:${colors.gray};">${cnt}</span>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            if (avgTurnDuration > 0) {
+                html += `<p class="compact mt-2">⏱️ Средняя длительность хода: <strong>${avgTurnDuration.toFixed(0)} мс</strong> (${turnDurations.length} ходов)</p>`;
+            }
+            html += `</div>`;
+        }
+        
+        // Панель фильтров и логов
+        html += `
+            <div class="section">
+                <h3>📋 ПОСЛЕДНИЕ ЛОГИ</h3>
+                <div class="filter-panel" id="log-filter-panel">
+                    <button class="filter-btn active" data-filter="all">Все</button>
+                    <button class="filter-btn" data-filter="ERROR">Ошибки</button>
+                    <button class="filter-btn" data-filter="WARN">Пр.</button>
+                    <button class="filter-btn" data-filter="INFO">Инфо</button>
+                    <button class="filter-btn" data-filter="DEBUG">Отл.</button>
+                </div>
+                <input type="text" id="log-search-input" class="search-box" placeholder="Поиск...">
+                <div id="logs-container" style="max-height: 300px; overflow-y: auto; padding-right: 4px;">
+        `;
+        
+        recentLogs.forEach((log, idx) => {
+            const catColor = this.getCategoryColor(log.category);
+            const levelClass = log.levelName.toLowerCase();
+            const dataStr = log.data ? JSON.stringify(log.data) : '';
+            const searchData = (log.message + ' ' + dataStr).replace(/"/g, '&quot;');
+            html += `
+                <div class="log-entry" data-index="${idx}" data-level="${log.levelName}" data-search="${searchData}" style="border-left-color: ${catColor};">
+                    <div class="log-header">
+                        <span class="log-time">${new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <span class="log-category" style="color:${catColor}">${log.category}</span>
+                        <span class="log-level ${levelClass}">${log.levelName}</span>
+                        <span style="flex:1;">${log.message}</span>
+                        <span>▼</span>
+                    </div>
+                    <div class="log-details">
+                        <pre style="margin:0; background:#0d0d0d; padding:4px; overflow-x:auto; color:#ccc; font-size:10px;">${this.syntaxHighlight(JSON.stringify(log.data, null, 2))}</pre>
+                        ${log.stackTrace ? `<pre style="margin:4px 0 0; background:#1a1a1a; color:${colors.error}; font-size:10px;">${log.stackTrace}</pre>` : ''}
                     </div>
                 </div>
             `;
         });
         
-        html += `</div></div>`;
-        
-        // Блок ходов
-        html += `
-            <div style="background: #2d3436; padding: 15px; border-radius: 6px;">
-                <h3 style="color: #fdcb6e; margin-top: 0;">🔄 ЛОГИ ПО ХОДАМ</h3>
-                <div style="color: #dfe6e9;">
+        html += `</div>
+                <div class="flex-row" style="justify-content:space-between; margin-top:8px;">
+                    <div>
+                        <button class="button" id="copy-json-btn">📋 JSON</button>
+                        <button class="button secondary" id="export-file-btn">💾 Файл</button>
+                        <button class="button secondary" id="refresh-btn">🔄</button>
+                        <button class="button danger" id="clear-logs-btn">🗑️</button>
+                    </div>
+                    <span style="color:${colors.gray}; font-size:10px;">Логов: ${this.logBuffer.length}</span>
+                </div>
+            </div>
         `;
         
-        Object.entries(report.turns).sort((a, b) => b[0] - a[0]).slice(0, 10).forEach(([turn, count]) => {
-            html += `<div><strong>Ход ${turn}:</strong> ${count} логов</div>`;
-        });
-        
-        if (Object.keys(report.turns).length > 10) {
-            html += `<div style="color: #636e72; font-style: italic;">... и еще ${Object.keys(report.turns).length - 10} ходов</div>`;
+        // Текущие операции
+        if (ongoingOps.length > 0) {
+            html += `
+            <div class="section">
+                <h3>⏳ ТЕКУЩИЕ ОПЕРАЦИИ (${ongoingOps.length})</h3>
+                <table class="table">
+                    <tr><th>ID</th><th>Тип</th><th>Прошло(мс)</th><th>Контекст</th></tr>
+            `;
+            ongoingOps.forEach(op => {
+                const elapsed = Date.now() - op.startTime;
+                html += `<tr><td>${op.id}</td><td>${op.type}</td><td>${elapsed}</td><td>${JSON.stringify(op.context).substring(0,40)}…</td></tr>`;
+            });
+            html += `</table></div>`;
         }
         
-        html += `</div></div></div></div>`;
+        // Производительность операций
+        if (Object.keys(perfByType).length > 0) {
+            html += `
+            <div class="section">
+                <h3>⚡ ПРОИЗВОДИТЕЛЬНОСТЬ (последние 100)</h3>
+                <table class="table">
+                    <tr><th>Тип</th><th>Кол-во</th><th>Ср. мс</th><th>✓/✗</th></tr>
+            `;
+            Object.entries(perfByType).forEach(([type, data]) => {
+                const avg = (data.totalDuration / data.count).toFixed(0);
+                html += `<tr><td>${type}</td><td>${data.count}</td><td>${avg}</td><td>${data.success}/${data.fail}</td></tr>`;
+            });
+            html += `</table>`;
+            const slowest = completedOps.sort((a,b) => b.duration - a.duration).slice(0,5);
+            if (slowest.length) {
+                html += `<h4 style="font-size:11px; margin:6px 0 2px;">🏁 САМЫЕ МЕДЛЕННЫЕ</h4><table class="table"><tr><th>ID</th><th>Тип</th><th>мс</th></tr>`;
+                slowest.forEach(op => {
+                    html += `<tr><td>${op.id}</td><td>${op.type}</td><td>${op.duration}</td></tr>`;
+                });
+                html += `</table>`;
+            }
+            html += `</div>`;
+        }
+        
+        // Ошибки
+        const errorLogs = this.logBuffer.filter(l => l.level === LOG_LEVELS.ERROR).slice(0,20);
+        if (errorLogs.length > 0) {
+            html += `
+            <div class="section">
+                <h3 style="color:${colors.error};">❌ ПОСЛЕДНИЕ ОШИБКИ</h3>
+                <div>
+            `;
+            errorLogs.forEach(err => {
+                html += `
+                    <div class="log-entry" style="border-left-color:${colors.error};">
+                        <div class="log-header">
+                            <span class="log-time">${new Date(err.timestamp).toLocaleTimeString()}</span>
+                            <span class="log-category" style="color:${colors.error};">${err.category}</span>
+                            <span style="flex:1;">${err.message}</span>
+                        </div>
+                        <div class="log-details" style="display:block;">
+                            <pre style="margin:0; background:#0d0d0d; color:${colors.error};">${err.stackTrace || '—'}</pre>
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div></div>`;
+        }
+        
+        html += `</div>`; // закрываем основной контейнер
         
         return html;
     }
     
-    /**
-     * Получение цвета категории
-     */
+    syntaxHighlight(json) {
+        if (!json) return json;
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            let cls = 'number';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) cls = 'key';
+                else cls = 'string';
+            } else if (/true|false/.test(match)) cls = 'boolean';
+            else if (/null/.test(match)) cls = 'null';
+            const color = cls === 'key' ? '#8b0000' : cls === 'string' ? '#a52a2a' : cls === 'number' ? '#4a6c8f' : cls === 'boolean' ? '#b85c00' : '#5a5a5a';
+            return `<span style="color:${color};">${match}</span>`;
+        });
+    }
+    
+    showUIModal(htmlContent) {
+        let modal = document.getElementById('oto-logger-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'oto-logger-modal';
+            modal.style.cssText = `
+                display: none;
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0,0,0,0.9);
+                z-index: 10000;
+                font-family: 'Segoe UI', monospace;
+            `;
+            modal.innerHTML = `
+                <div style="
+                    position: relative;
+                    width: 95%;
+                    height: 90%;
+                    margin: 2% auto;
+                    background: rgba(10,10,10,0.95);
+                    backdrop-filter: blur(4px);
+                    border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(139,0,0,0.3);
+                    display: flex;
+                    flex-direction: column;
+                    overflow: hidden;
+                    color: #e0d0d0;
+                    border: 1px solid #3a2a2a;
+                ">
+                    <div style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        padding: 6px 12px;
+                        background: rgba(20,20,20,0.9);
+                        border-bottom: 1px solid #8b0000;
+                    ">
+                        <span style="font-weight: 400; color: #8b0000; font-size: 14px;">📋 ДЕТАЛЬНЫЙ ОТЧЁТ ЛОГГЕРА</span>
+                        <div>
+                            <button id="oto-logger-modal-copy-text" style="
+                                background: transparent;
+                                border: 1px solid #8b0000;
+                                color: #a52a2a;
+                                padding: 4px 12px;
+                                border-radius: 16px;
+                                font-size: 11px;
+                                font-weight: 500;
+                                margin-right: 6px;
+                                cursor: pointer;
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 4px;
+                            ">📋 Копировать текст</button>
+                            <button id="oto-logger-modal-close" style="
+                                background: transparent;
+                                border: none;
+                                color: #aaa;
+                                font-size: 22px;
+                                cursor: pointer;
+                                line-height: 1;
+                            ">&times;</button>
+                        </div>
+                    </div>
+                    <div id="oto-logger-modal-content" style="
+                        flex: 1;
+                        padding: 12px;
+                        overflow-y: auto;
+                        background: transparent;
+                    "></div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+            modal.querySelector('#oto-logger-modal-close').addEventListener('click', () => {
+                modal.style.display = 'none';
+            });
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.style.display = 'none';
+            });
+            const copyBtn = modal.querySelector('#oto-logger-modal-copy-text');
+            copyBtn.addEventListener('click', () => {
+                const contentDiv = modal.querySelector('#oto-logger-modal-content');
+                const textToCopy = contentDiv.innerText;
+                this.copyToClipboard(textToCopy);
+            });
+        }
+        
+        const contentDiv = modal.querySelector('#oto-logger-modal-content');
+        contentDiv.innerHTML = htmlContent;
+        this.initDetailedReportHandlers(modal);
+        modal.style.display = 'block';
+    }
+    
+    initDetailedReportHandlers(modal) {
+        const contentDiv = modal.querySelector('#oto-logger-modal-content');
+        if (!contentDiv) return;
+        
+        // Разворачивание логов
+        contentDiv.querySelectorAll('.log-entry[data-index]').forEach(entry => {
+            entry.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                entry.classList.toggle('expanded');
+            });
+        });
+        
+        // Поиск
+        const searchInput = contentDiv.querySelector('#log-search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                contentDiv.querySelectorAll('.log-entry[data-index]').forEach(log => {
+                    const searchData = (log.dataset.search || '').toLowerCase();
+                    log.style.display = searchData.includes(term) || term === '' ? 'block' : 'none';
+                });
+            });
+        }
+        
+        // Фильтры
+        const filterPanel = contentDiv.querySelector('#log-filter-panel');
+        if (filterPanel) {
+            filterPanel.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    filterPanel.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const filter = btn.dataset.filter;
+                    contentDiv.querySelectorAll('.log-entry[data-index]').forEach(log => {
+                        if (filter === 'all') log.style.display = 'block';
+                        else log.style.display = log.dataset.level === filter ? 'block' : 'none';
+                    });
+                    if (searchInput) searchInput.value = '';
+                });
+            });
+        }
+        
+        // Кнопка копирования JSON
+        const copyJsonBtn = contentDiv.querySelector('#copy-json-btn');
+        if (copyJsonBtn) {
+            copyJsonBtn.addEventListener('click', () => {
+                const data = {
+                    session: this.createSessionReport(),
+                    logs: this.logBuffer,
+                    ongoingOperations: Array.from(this.operationTracker.values()),
+                    completedOperations: this.completedOperations,
+                    turnDurations: this.turnDurations
+                };
+                this.copyToClipboard(JSON.stringify(data, null, 2));
+                this.showToast('JSON скопирован');
+            });
+        }
+        
+        // Экспорт в файл
+        const exportBtn = contentDiv.querySelector('#export-file-btn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                const data = {
+                    session: this.createSessionReport(),
+                    logs: this.logBuffer,
+                    ongoingOperations: Array.from(this.operationTracker.values()),
+                    completedOperations: this.completedOperations,
+                    turnDurations: this.turnDurations,
+                    exportTime: new Date().toISOString()
+                };
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `logger-export-${this.sessionId}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                this.showToast('Файл сохранён');
+            });
+        }
+        
+        // Обновление
+        const refreshBtn = contentDiv.querySelector('#refresh-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                contentDiv.innerHTML = this.generateDetailedHTMLReport();
+                this.initDetailedReportHandlers(modal);
+                this.showToast('Обновлено');
+            });
+        }
+        
+        // Очистка
+        const clearBtn = contentDiv.querySelector('#clear-logs-btn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                if (confirm('Очистить все логи?')) {
+                    this.clearLogs();
+                    contentDiv.innerHTML = this.generateDetailedHTMLReport();
+                    this.initDetailedReportHandlers(modal);
+                    this.showToast('Логи очищены');
+                }
+            });
+        }
+    }
+    
+    copyToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => this.showToast('✅ Скопировано'));
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try { document.execCommand('copy'); this.showToast('✅ Скопировано'); } catch (err) { this.showToast('❌ Ошибка', 'error'); }
+            document.body.removeChild(textarea);
+        }
+    }
+    
+    showToast(message, type = 'info') {
+        let toast = document.getElementById('oto-logger-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'oto-logger-toast';
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: #151515;
+                color: #e0d0d0;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-family: sans-serif;
+                font-size: 12px;
+                z-index: 10001;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+                border: 1px solid #8b0000;
+                transition: opacity 0.2s;
+                opacity: 0;
+                pointer-events: none;
+            `;
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.style.backgroundColor = type === 'error' ? '#3a1a1a' : '#151515';
+        toast.style.opacity = '1';
+        setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+    }
+    
     getCategoryColor(category) {
         const colors = {
-            [LOG_CATEGORIES.OPERATIONS]: '#00b894',
-            [LOG_CATEGORIES.GAME_STATE]: '#0984e3',
-            [LOG_CATEGORIES.TURN_PROCESSING]: '#fdcb6e',
-            [LOG_CATEGORIES.AI_REQUESTS]: '#6c5ce7',
-            [LOG_CATEGORIES.UI_EVENTS]: '#e84393',
-            [LOG_CATEGORIES.VALIDATION]: '#fd79a8',
-            [LOG_CATEGORIES.ERROR_TRACKING]: '#ff7675',
-            [LOG_CATEGORIES.PERFORMANCE]: '#74b9ff',
-            [LOG_CATEGORIES.ORGANIZATIONS]: '#a29bfe'
+            [LOG_CATEGORIES.OPERATIONS]: '#8b0000',
+            [LOG_CATEGORIES.GAME_STATE]: '#4a6c8f',
+            [LOG_CATEGORIES.TURN_PROCESSING]: '#b85c00',
+            [LOG_CATEGORIES.AI_REQUESTS]: '#5a4a8f',
+            [LOG_CATEGORIES.UI_EVENTS]: '#a52a2a',
+            [LOG_CATEGORIES.VALIDATION]: '#6b8e23',
+            [LOG_CATEGORIES.ERROR_TRACKING]: '#cf6679',
+            [LOG_CATEGORIES.PERFORMANCE]: '#4a6c8f',
+            [LOG_CATEGORIES.ORGANIZATIONS]: '#8b5a2b'
         };
-        
-        return colors[category] || '#636e72';
+        return colors[category] || '#6c757d';
     }
 }
 
-// Создание и экспорт синглтона
 export const Logger = new GameLogger();
 
-// Вспомогательные функции для быстрого доступа
 export const log = {
-    debug: (category, message, data) => Logger.log(category, message, data, LOG_LEVELS.DEBUG),
-    info: (category, message, data) => Logger.log(category, message, data, LOG_LEVELS.INFO),
-    warn: (category, message, data) => Logger.log(category, message, data, LOG_LEVELS.WARN),
-    error: (category, message, data) => Logger.log(category, message, data, LOG_LEVELS.ERROR),
+    debug: (c, m, d) => Logger.log(c, m, d, LOG_LEVELS.DEBUG),
+    info: (c, m, d) => Logger.log(c, m, d, LOG_LEVELS.INFO),
+    warn: (c, m, d) => Logger.log(c, m, d, LOG_LEVELS.WARN),
+    error: (c, m, d) => Logger.log(c, m, d, LOG_LEVELS.ERROR),
     
-    // Специализированные методы
-    operation: (operation, context) => Logger.logOperation(operation, context),
-    operationResult: (operationId, result) => Logger.logOperationResult(operationId, result),
-    stateChange: (changes, previousState, newState) => Logger.logStateChange(changes, previousState, newState),
-    aiRequest: (requestData, turnNumber) => Logger.logAIRequest(requestData, turnNumber),
-    aiResponse: (responseData, processingTime) => Logger.logAIResponse(responseData, processingTime),
-    performance: (marker, startTime, data) => Logger.logPerformance(marker, startTime, data),
-    organization: (operation, org, oldRank, newRank) => Logger.logOrganizationOperation(operation, org, oldRank, newRank),
+    operation: (op, ctx) => Logger.logOperation(op, ctx),
+    operationResult: (id, res) => Logger.logOperationResult(id, res),
+    stateChange: (chg, prev, next) => Logger.logStateChange(chg, prev, next),
+    aiRequest: (req, turn) => Logger.logAIRequest(req, turn),
+    aiResponse: (res, time) => Logger.logAIResponse(res, time),
+    performance: (marker, start, data) => Logger.logPerformance(marker, start, data),
+    organization: (op, org, old, newR) => Logger.logOrganizationOperation(op, org, old, newR),
     
-    // Управление
-    startTurn: (turnNumber) => Logger.startTurnLogging(turnNumber),
-    endTurn: (turnNumber, summary) => Logger.endTurnLogging(turnNumber, summary),
+    startTurn: (turn) => Logger.startTurnLogging(turn),
+    endTurn: (turn, summary) => Logger.endTurnLogging(turn, summary),
     
-    // Получение данных
     getStats: () => Logger.getLogStats(),
     getLogs: (filter) => Logger.getLogs(filter),
     getReport: () => Logger.createSessionReport(),
     getHTMLReport: () => Logger.generateHTMLReport(),
     
-    // Очистка
     clear: () => Logger.clearLogs(),
     
-    // Настройки
     setLevel: (level) => Logger.setLogLevel(level),
-    toggleCategory: (category, enabled) => Logger.toggleCategory(category, enabled)
+    toggleCategory: (cat, en) => Logger.toggleCategory(cat, en),
+    
+    ui: () => Logger.showUIModal(Logger.generateDetailedHTMLReport()),
+    
+    exportToFile: () => {
+        const data = {
+            session: Logger.createSessionReport(),
+            logs: Logger.logBuffer,
+            completedOperations: Logger.completedOperations,
+            turnDurations: Logger.turnDurations,
+            exportTime: new Date().toISOString()
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `logger-full-export-${Logger.sessionId}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        Logger.showToast('Экспорт сохранён');
+    }
 };
 
-// Глобальная функция для быстрого доступа в консоли
 if (typeof window !== 'undefined') {
     window.gameLogger = Logger;
     window.log = log;

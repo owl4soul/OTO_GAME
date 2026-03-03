@@ -1,5 +1,10 @@
 // Модуль 7.2: API RESPONSE - Парсинг и Обработка ответов (ФОРМАТ 4.1)
-// УЛУЧШЕННАЯ ВЕРСИЯ с максимально устойчивым парсингом и поддержкой организаций
+// ИСПРАВЛЕННАЯ ВЕРСИЯ: регистр ключей сохраняется, сравнение без учёта регистра
+// + аварийный парсинг теперь тоже регистронезависим
+// ИЗМЕНЕНИЯ:
+// - В validateAndNormalizeResponse добавлена нормализация aiMemory:
+//   массивы → { items: [...] }, строки → { raw: "..." }, пустые значения → {}.
+
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -11,14 +16,19 @@ import { log, LOG_CATEGORIES } from './logger.js';
 // ОБРАБОТЧИКИ ОШИБОК И БЕЗОПАСНЫЙ ПАРСИНГ
 // ============================================================================
 
-// ===== НОВЫЙ БЕЛЫЙ СПИСОК ИЗВЕСТНЫХ КОРНЕВЫХ ПОЛЕЙ =====
+// Белый список известных корневых полей (в оригинальном регистре, как ожидаем)
 const KNOWN_ROOT_KEYS = new Set([
     'design_notes', 'scene', 'reflection', 'personality', 'typology', 'choices',
     'events', 'aiMemory', 'thoughts', 'summary', '_organizationsHierarchy',
-    'gameType', 'meta_context' // ← добавлены game_items и meta_context больше не парсятся из корня!
+    'gameType', 'meta_context'
 ]);
 
-// ===== НОВЫЙ МАССИВ СТАНДАРТНЫХ ТИПОВ GAME_ITEM =====
+// Множество известных ключей в нижнем регистре для быстрого поиска без учёта регистра
+const KNOWN_ROOT_KEYS_LOWER = new Set(
+    Array.from(KNOWN_ROOT_KEYS).map(key => key.toLowerCase())
+);
+
+// Стандартные типы game_item (не используются напрямую в этом модуле, оставлено для справки)
 const STANDARD_GAME_ITEM_TYPES = [
     'stat', 'skill', 'inventory', 'relations', 'bless', 'curse',
     'buff', 'debuff', 'personality', 'initiation_degree', 'progress',
@@ -210,7 +220,12 @@ function extractOrganizationHierarchies(parsed) {
     return hierarchies;
 }
 
-// ===== НОВАЯ ФУНКЦИЯ: ИЗВЛЕЧЕНИЕ НЕИЗВЕСТНЫХ МЕТА-ПОЛЕЙ =====
+// ===== ФУНКЦИЯ ИЗВЛЕЧЕНИЯ НЕИЗВЕСТНЫХ МЕТА-ПОЛЕЙ (регистронезависимая проверка) =====
+/**
+ * Извлекает неизвестные мета-поля с учётом регистра
+ * @param {Object} parsedData - исходный объект (оригинальные ключи)
+ * @returns {Object} мета-данные
+ */
 function extractUnknownMeta(parsedData) {
     const meta = {
         metaContext: '',
@@ -220,20 +235,22 @@ function extractUnknownMeta(parsedData) {
     };
     
     for (const key in parsedData) {
-        const lowerKey = key.toLowerCase();
-        if (KNOWN_ROOT_KEYS.has(key) || KNOWN_ROOT_KEYS.has(lowerKey)) { continue };
+        // Пропускаем поля, начинающиеся с префикса иерархий организаций
+        if (key.startsWith('organization_rank_hierarchy:')) continue;
         
-        if (!KNOWN_ROOT_KEYS.has(key) && parsedData.hasOwnProperty(key)) {
-            const value = parsedData[key];
-            if (key.startsWith('organization_rank_hierarchy:')) continue;
-            if (value === null || value === undefined) continue;
-            if (Array.isArray(value)) {
-                meta.unknownArrays.push({ key, value });
-            } else if (typeof value === 'object') {
-                meta.unknownObjects.push({ key, value });
-            } else {
-                meta.unknownFields.push({ key, value });
-            }
+        // Проверяем принадлежность к известным полям без учёта регистра
+        const lowerKey = key.toLowerCase();
+        if (KNOWN_ROOT_KEYS_LOWER.has(lowerKey)) continue;
+        
+        const value = parsedData[key];
+        if (value === null || value === undefined) continue;
+        
+        if (Array.isArray(value)) {
+            meta.unknownArrays.push({ key, value });
+        } else if (typeof value === 'object') {
+            meta.unknownObjects.push({ key, value });
+        } else {
+            meta.unknownFields.push({ key, value });
         }
     }
     return meta;
@@ -318,36 +335,20 @@ async function robustFetchWithRepair(url, headers, payload, attemptsLeft, apiReq
     }
 }
 
-
-/**
- * Приводит все ключи объекта к нижнему регистру, кроме ключей с двоеточием (нормализация)
- * @param {Object} obj - Исходный объект
- * @returns {Object} Новый объект с нормализованными ключами
- */
-function normalizeKeys(obj) {
-    if (!obj || typeof obj !== 'object') return obj;
-    const normalized = {};
-    Object.keys(obj).forEach(key => {
-        // Ключи с двоеточием от game_items не трогаем
-        if (key.includes(':')) {
-            normalized[key] = obj[key];
-        } else {
-            normalized[key.toLowerCase()] = obj[key];
-        }
-    });
-    return normalized;
-}
+// ============================================================================
+// ОСНОВНЫЕ ФУНКЦИИ ВАЛИДАЦИИ И НОРМАЛИЗАЦИИ (регистронезависимый поиск ключей)
+// ============================================================================
 
 /**
  * Валидация и нормализация нового формата ответа (ФОРМАТ 4.1)
+ * Теперь не изменяет регистр ключей.
  */
 function validateAndNormalizeResponse(parsedData) {
     if (!parsedData || typeof parsedData !== 'object') {
         throw new Error('Ответ ИИ пуст или не является объектом');
     }
     
-    // Нормализуем регистр ключей
-    const normalizedData = normalizeKeys(parsedData);
+    // НЕ вызываем normalizeKeys — оставляем оригинальные ключи.
     
     const result = {
         design_notes: '',
@@ -363,44 +364,59 @@ function validateAndNormalizeResponse(parsedData) {
         _organizationsHierarchy: {}
     };
     
+    // Создаём карту нижний регистр → оригинальный ключ для быстрого доступа
+    const keyMap = new Map();
+    for (const key in parsedData) {
+        keyMap.set(key.toLowerCase(), key);
+    }
+    
     // 1. Извлекаем иерархии организаций
-    result._organizationsHierarchy = extractOrganizationHierarchies(normalizedData);
+    result._organizationsHierarchy = extractOrganizationHierarchies(parsedData);
     
     // 2. DESIGN_NOTES
-    // может быть строкой или массивом строк
-    if (normalizedData.design_notes !== undefined) {
-        if (typeof normalizedData.design_notes === 'string') {
-            result.design_notes = normalizedData.design_notes;
-        } else if (Array.isArray(normalizedData.design_notes)) {
-            // объединяем массив строк через перенос строки
-            result.design_notes = normalizedData.design_notes
+    const designNotesKey = keyMap.get('design_notes');
+    if (designNotesKey && parsedData[designNotesKey] !== undefined) {
+        const value = parsedData[designNotesKey];
+        if (typeof value === 'string') {
+            result.design_notes = value;
+        } else if (Array.isArray(value)) {
+            result.design_notes = value
                 .filter(item => typeof item === 'string')
                 .join('\n');
         } else {
-            // на всякий случай преобразуем в строку
-            result.design_notes = String(normalizedData.design_notes);
+            result.design_notes = String(value);
         }
     }
     
     // 3. SCENE (обязательное поле)
-    if (!normalizedData.scene || typeof normalizedData.scene !== 'string') {
+    const sceneKey = keyMap.get('scene');
+    if (!sceneKey || typeof parsedData[sceneKey] !== 'string') {
         throw new Error('Отсутствует или неверное поле "scene"');
     }
-    result.scene = normalizedData.scene;
+    result.scene = parsedData[sceneKey];
     
     // 4. REFLECTION
-    if (typeof normalizedData.reflection === 'string') result.reflection = normalizedData.reflection;
+    const reflectionKey = keyMap.get('reflection');
+    if (reflectionKey && typeof parsedData[reflectionKey] === 'string') {
+        result.reflection = parsedData[reflectionKey];
+    }
     
     // 5. TYPOLOGY
-    if (typeof normalizedData.typology === 'string') result.typology = normalizedData.typology;
+    const typologyKey = keyMap.get('typology');
+    if (typologyKey && typeof parsedData[typologyKey] === 'string') {
+        result.typology = parsedData[typologyKey];
+    }
     
-    // 5. PERSONALITY
-    // может быть строкой или game_item
-    if (typeof normalizedData.personality === 'string') result.personality = normalizedData.personality;
+    // 6. PERSONALITY
+    const personalityKey = keyMap.get('personality');
+    if (personalityKey && typeof parsedData[personalityKey] === 'string') {
+        result.personality = parsedData[personalityKey];
+    }
     
-    // 6. CHOICES
-    if (Array.isArray(normalizedData.choices)) {
-        normalizedData.choices.forEach((c, i) => {
+    // 7. CHOICES
+    const choicesKey = keyMap.get('choices');
+    if (choicesKey && Array.isArray(parsedData[choicesKey])) {
+        parsedData[choicesKey].forEach((c, i) => {
             const norm = normalizeChoice(c, i);
             if (norm) result.choices.push(norm);
         });
@@ -410,25 +426,45 @@ function validateAndNormalizeResponse(parsedData) {
         result.choices = createDefaultChoices();
     }
     
-    // 7. EVENTS
-    if (Array.isArray(normalizedData.events)) {
-        normalizedData.events.forEach((e, i) => {
+    // 8. EVENTS
+    const eventsKey = keyMap.get('events');
+    if (eventsKey && Array.isArray(parsedData[eventsKey])) {
+        parsedData[eventsKey].forEach((e, i) => {
             const norm = normalizeEvent(e, i);
             if (norm) result.events.push(norm);
         });
     }
     result.events = result.events.slice(0, 3);
     
-    // 8. AI_MEMORY - сохраняем как есть (любой тип), но если нет, ставим пустой объект
-    if (normalizedData.aimemory !== undefined && normalizedData.aimemory !== null) {
-        result.aiMemory = normalizedData.aimemory; // может быть строкой, массивом, объектом...
-    } else {
-        result.aiMemory = {}; // пустой объект, чтобы не было undefined
+  // 9. AI_MEMORY — ищем ключи, похожие на aiMemory (без учёта регистра, несколько вариантов)
+const possibleAiMemoryKeys = ['aimemory', 'ai_memory'];
+let aiMemoryKey = null;
+for (const variant of possibleAiMemoryKeys) {
+    if (keyMap.has(variant)) {
+        aiMemoryKey = keyMap.get(variant);
+        break;
     }
+}
+
+if (aiMemoryKey && parsedData[aiMemoryKey] !== undefined && parsedData[aiMemoryKey] !== null) {
+    let mem = parsedData[aiMemoryKey];
+    // ✨ НОРМАЛИЗАЦИЯ: приводим к объекту
+    if (Array.isArray(mem)) {
+        mem = mem.length > 0 ? { items: mem } : {};
+    } else if (typeof mem === 'string') {
+        mem = mem.trim() !== '' ? { raw: mem } : {};
+    } else if (typeof mem !== 'object' || mem === null) {
+        mem = {};
+    }
+    result.aiMemory = mem;
+} else {
+    result.aiMemory = {};
+}
     
-    // 9. THOUGHTS
-    if (Array.isArray(normalizedData.thoughts)) {
-        result.thoughts = normalizedData.thoughts
+    // 10. THOUGHTS
+    const thoughtsKey = keyMap.get('thoughts');
+    if (thoughtsKey && Array.isArray(parsedData[thoughtsKey])) {
+        result.thoughts = parsedData[thoughtsKey]
             .filter(t => typeof t === 'string' && t.trim())
             .map(t => t.trim())
             .slice(0, 20);
@@ -437,22 +473,22 @@ function validateAndNormalizeResponse(parsedData) {
         result.thoughts = result.thoughts.concat(createDefaultThoughts()).slice(0, 10);
     }
     
-    // 10. SUMMARY
-    if (typeof normalizedData.summary === 'string' && normalizedData.summary.trim()) {
-        result.summary = normalizedData.summary;
+    // 11. SUMMARY
+    const summaryKey = keyMap.get('summary');
+    if (summaryKey && typeof parsedData[summaryKey] === 'string' && parsedData[summaryKey].trim()) {
+        result.summary = parsedData[summaryKey];
     } else {
         result.summary = result.scene.replace(/<[^>]*>/g, ' ').substring(0, 200).trim() + '...';
     }
     
-    // 11. Извлекаем неизвестные мета-поля
-    const metaParsed = extractUnknownMeta(normalizedData);
-    result._metaParsed = metaParsed;
+    // 12. Извлекаем неизвестные мета-поля
+    result._metaParsed = extractUnknownMeta(parsedData);
     
     return result;
 }
 
 /**
- * НОВАЯ ФУНКЦИЯ: Создание дефолтных choices в случае полного провала парсинга
+ * Создание дефолтных choices в случае полного провала парсинга
  */
 function createDefaultChoices() {
     return [
@@ -465,7 +501,7 @@ function createDefaultChoices() {
 }
 
 /**
- * НОВАЯ ФУНКЦИЯ: Создание дефолтных мыслей
+ * Создание дефолтных мыслей
  */
 function createDefaultThoughts() {
     return [
@@ -478,7 +514,7 @@ function createDefaultThoughts() {
 }
 
 /**
- * УЛУЧШЕННАЯ ФУНКЦИЯ: Основная функция обработки текстового ответа от ИИ (ФОРМАТ 4.1)
+ * Основная функция обработки текстового ответа от ИИ (ФОРМАТ 4.1)
  */
 function processAIResponse(rawText) {
     if (!rawText || typeof rawText !== 'string') {
@@ -534,7 +570,7 @@ function processAIResponse(rawText) {
             if (parsedData.scene) partial.scene = parsedData.scene;
             if (parsedData.reflection) partial.reflection = parsedData.reflection;
             if (parsedData.design_notes) partial.design_notes = parsedData.design_notes;
-            if (parsedData.aiMemory) partial.aiMemory = parsedData.aiMemory; // <-- добавить эту строку
+            if (parsedData.aiMemory) partial.aiMemory = parsedData.aiMemory;
             if (Array.isArray(parsedData.choices)) {
                 partial.choices = parsedData.choices.map((c, i) => normalizeChoice(c, i)).filter(Boolean);
             }
@@ -548,11 +584,15 @@ function processAIResponse(rawText) {
     }
 }
 
+// ============================================================================
+// АВАРИЙНЫЙ ПАРСИНГ (теперь с регистронезависимыми регулярками)
+// ============================================================================
+
 /**
- * НОВАЯ ФУНКЦИЯ: Аварийное извлечение данных из битого JSON с помощью регулярных выражений
+ * Аварийное извлечение данных из битого JSON с помощью регулярных выражений (регистронезависимо)
  */
 function extractDataFromBrokenJSON(brokenText) {
-    console.warn('🚨 [extractDataFromBrokenJSON] Запущен аварийный парсинг через регулярные выражения');
+    console.warn('🚨 [extractDataFromBrokenJSON] Запущен аварийный парсинг через регулярные выражения (регистронезависимый)');
     const result = {
         design_notes: "",
         scene: "",
@@ -566,21 +606,24 @@ function extractDataFromBrokenJSON(brokenText) {
         _organizationsHierarchy: {}
     };
     
-    const sceneMatch = brokenText.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/s) || brokenText.match(/"scene"\s*:\s*"([^"]*)/s);
+    // Все regex теперь с флагом i для регистронезависимости
+    const sceneMatch = brokenText.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/is) || brokenText.match(/"scene"\s*:\s*"([^"]*)/i);
     if (sceneMatch && sceneMatch[1]) {
         result.scene = sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
         console.log('✅ [extractDataFromBrokenJSON] Извлечена сцена через regex');
     }
     
-    const reflectionMatch = brokenText.match(/"reflection"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+    const reflectionMatch = brokenText.match(/"reflection"\s*:\s*"((?:[^"\\]|\\.)*)"/is);
     if (reflectionMatch && reflectionMatch[1]) result.reflection = reflectionMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
     
-    const typologyMatch = brokenText.match(/"typology"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+    const typologyMatch = brokenText.match(/"typology"\s*:\s*"((?:[^"\\]|\\.)*)"/is);
     if (typologyMatch && typologyMatch[1]) result.typology = typologyMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
     
-    const choicesMatch = brokenText.match(/"choices"\s*:\s*\[(.*?)\]/s);
+    // Ищем массив choices (регистронезависимо)
+    const choicesMatch = brokenText.match(/"choices"\s*:\s*\[(.*?)\]/is);
     if (choicesMatch) {
-        const textMatches = choicesMatch[1].matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/g);
+        // Ищем все объекты с полем "text" внутри этого массива (тоже регистронезависимо)
+        const textMatches = choicesMatch[1].matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/gis);
         for (const match of textMatches) {
             if (match[1]) {
                 result.choices.push({
@@ -596,7 +639,21 @@ function extractDataFromBrokenJSON(brokenText) {
     }
     if (result.choices.length === 0) result.choices = createDefaultChoices();
     
-    const thoughtsMatch = brokenText.match(/"thoughts"\s*:\s*\[(.*?)\]/s);
+    // Ищем aiMemory по нескольким вариантам (регистронезависимо)
+const memoryMatch = 
+    text.match(/"aiMemory"\s*:\s*\{([^}]*)\}/is) ||
+    text.match(/"ai_memory"\s*:\s*\{([^}]*)\}/is) ||
+    text.match(/"aimemory"\s*:\s*\{([^}]*)\}/is);
+if (memoryMatch) {
+    try {
+        result.aiMemory = JSON.parse(`{${memoryMatch[1]}}`);
+        console.log('✅ [extractDataFromBrokenJSON] Извлечена aiMemory');
+    } catch (e) {
+        console.warn('⚠️ [extractDataFromBrokenJSON] Парсинг aiMemory не удался');
+    }
+}
+    
+    const thoughtsMatch = brokenText.match(/"thoughts"\s*:\s*\[(.*?)\]/is);
     if (thoughtsMatch) {
         const thoughtMatches = thoughtsMatch[1].match(/"((?:[^"\\]|\\.)*?)"/g);
         if (thoughtMatches) {
@@ -605,16 +662,17 @@ function extractDataFromBrokenJSON(brokenText) {
     }
     if (result.thoughts.length < 5) result.thoughts = result.thoughts.concat(createDefaultThoughts()).slice(0, 10);
     
-    const hierarchyMatches = brokenText.matchAll(/"organization_rank_hierarchy:([^"]+)"\s*:\s*(\{[^}]+\})/g);
+    // Иерархии организаций (ключ может быть в любом регистре)
+    const hierarchyMatches = brokenText.matchAll(/"organization_rank_hierarchy:([^"]+)"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/gis);
     for (const match of hierarchyMatches) {
         try {
             const orgId = match[1];
             const hierarchyStr = match[2];
             let hierarchy = null;
             try {
-                hierarchy = JSON.parse(hierarchyStr + "}");
+                hierarchy = JSON.parse(hierarchyStr);
             } catch (e) {
-                const repaired = Utils.safeJsonRepair(hierarchyStr + "}");
+                const repaired = Utils.safeJsonRepair(hierarchyStr);
                 if (repaired) hierarchy = JSON.parse(repaired);
             }
             if (hierarchy && hierarchy.value && hierarchy.description) {

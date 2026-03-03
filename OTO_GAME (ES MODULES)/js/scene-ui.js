@@ -2,12 +2,9 @@
  * Модуль: SCENE UI - Рендеринг мета-блоков сцены (заметки, память ГМ, сводка, рефлексия, личность, типология)
  * Все стили берутся из темы через CSS-классы. Инлайн-стили не используются.
  *
- * ИСПРАВЛЕНИЯ:
- * 1. renderSceneText – теперь корректно вставляет HTML, полученный от ИИ, без экранирования,
- *    но с использованием санитайзера DOMPurify для защиты от XSS.
- *    Убрана замена переносов строк на <br>, так как HTML-разметка сама управляет форматированием.
- * 2. Вспомогательные функции для отображения памяти ГМ оставлены без изменений,
- *    они используют экранирование, так как показывают отладочную информацию.
+ * ИЗМЕНЕНИЯ:
+ * - renderAiMemory теперь корректно обрабатывает пустые значения любого типа
+ *   (пустой объект, пустой массив, пустая строка, null, undefined) и показывает единообразный плейсхолдер.
  */
 
 'use strict';
@@ -289,13 +286,18 @@ export function renderDesignNotes(container, designNotes) {
  * @param {Object} aiMemory - объект памяти
  */
 export function renderAiMemory(container, aiMemory) {
-    // Если данных нет вообще – показываем заглушку
-    if (aiMemory === null || aiMemory === undefined) {
+    // ✨ УЛУЧШЕННАЯ ПРОВЕРКА НА ПУСТОТУ ЛЮБОГО ТИПА
+    const isEmpty = Utils.isEmpty(aiMemory);
+
+    if (isEmpty) {
         const emptyBlock = document.createElement('div');
         emptyBlock.className = 'scene-meta-block no-memory-block';
         emptyBlock.innerHTML = `
-            <div style="color: #888; font-size: 0.85em; font-style: italic;">
-                <i class="fas fa-brain"></i> Память ГМ пуста или отсутствует
+            <div class="ai-memory-header">
+                <i class="fas fa-brain"></i> ПАМЯТЬ ГМ:
+            </div>
+            <div class="ai-memory-content" style="color: #888; font-style: italic; padding: 10px;">
+                <i class="fas fa-database"></i> Память пуста или отсутствует
             </div>
         `;
         container.appendChild(emptyBlock);

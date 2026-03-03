@@ -1,5 +1,5 @@
 // Модуль: GAMEITEM UI MANAGER - Универсальный менеджер отображения различных game_item
-// ИСПРАВЛЕННАЯ ВЕРСИЯ: использует общий TooltipUI для тултипов.
+// ИСПРАВЛЕННАЯ ВЕРСИЯ: использует общий TooltipUI для тултипов, адаптирована под State 5.1.
 'use strict';
 
 import { State } from './3-state.js';
@@ -24,7 +24,7 @@ class GameItemUIManager {
         this.currentHierarchyModal = null;
         this.initializeTypeConfigs();
     }
-    
+
     /**
      * Инициализация конфигурации типов на основе общих настроек
      */
@@ -32,7 +32,7 @@ class GameItemUIManager {
         console.log('🔧 GameItemUIManager: инициализация конфигурации типов');
         const config = this.config;
         const fontConfig = config.FONTS;
-        
+
         this.typeConfigs = {
             personality: {
                 containerId: 'personalityBlockContainer',
@@ -136,7 +136,7 @@ class GameItemUIManager {
         };
         console.log('✅ Конфигурация типов инициализирована:', Object.keys(this.typeConfigs));
     }
-    
+
     /**
      * Инициализация менеджера
      */
@@ -159,7 +159,7 @@ class GameItemUIManager {
         this.initialized = true;
         console.log('✅ GameItemUIManager инициализирован');
     }
-    
+
     /**
      * Импорт шрифтов
      */
@@ -177,7 +177,7 @@ class GameItemUIManager {
             }
         });
     }
-    
+
     /**
      * Добавление общих стилей (кроме тултипа)
      */
@@ -301,7 +301,7 @@ class GameItemUIManager {
         document.head.appendChild(style);
         console.log('🎨 Стили для GameItemUI добавлены');
     }
-    
+
     /**
      * Кэширование контейнеров
      */
@@ -315,7 +315,7 @@ class GameItemUIManager {
         console.log('📦 Найден основной контейнер:', this.mainContainer.id);
         this.mainContainer.style.fontFamily = this.config.FONTS.FAMILY;
         this.mainContainer.style.letterSpacing = this.config.FONTS.LETTER_SPACING;
-        
+
         Object.values(this.typeConfigs).forEach(config => {
             const existing = document.getElementById(config.containerId);
             if (existing) existing.remove();
@@ -325,7 +325,7 @@ class GameItemUIManager {
             this.containers[config.containerId] = container;
         });
     }
-    
+
     createFallbackContainer() {
         console.warn('⚠️ Создаем резервный контейнер');
         this.mainContainer = document.createElement('div');
@@ -342,7 +342,7 @@ class GameItemUIManager {
         `;
         document.body.appendChild(this.mainContainer);
     }
-    
+
     /**
      * Создание HTML для секции с едиными стилями
      */
@@ -381,17 +381,17 @@ class GameItemUIManager {
             </div>
         `;
     }
-    
+
     setupEventListeners() {
         State.on(State.EVENTS.HERO_CHANGED, (data) => this.handleHeroChanged(data));
-        State.on(State.EVENTS.TURN_COMPLETED, (data) => this.handleTurnCompleted(data?.turnCount || State.getState().turnCount));
+        State.on(State.EVENTS.TURN_COMPLETED, (data) => this.handleTurnCompleted(data?.turnCount || State.getGame().turnCount));
         State.on(State.EVENTS.SCENE_CHANGED, (data) => this.handleSceneChanged(data));
         State.on(State.EVENTS.ORGANIZATION_JOINED, () => this.renderType(this.typeConfigs.organization));
         State.on(State.EVENTS.ORGANIZATION_RANK_CHANGED, () => this.renderType(this.typeConfigs.organization));
         State.on(State.EVENTS.ORGANIZATION_HIERARCHY_UPDATED, () => this.renderType(this.typeConfigs.organization));
         console.log('🔗 Подписки установлены');
     }
-    
+
     handleHeroChanged(data) {
         const changedTypes = this.getChangedItemTypes(data.operations || []);
         if (changedTypes.length === 0 && !data.categories?.includes('typology')) return;
@@ -401,18 +401,18 @@ class GameItemUIManager {
         });
         this.renderType(this.typeConfigs.organization);
     }
-    
+
     handleSceneChanged() {
         this.renderType(this.typeConfigs.typology);
         this.renderType(this.typeConfigs.personality);
     }
-    
+
     handleTurnCompleted(turnCount) {
         console.log(`🔄 TURN_COMPLETED, ход ${turnCount}`);
         this.renderAll();
         this.lastRenderedTurn = turnCount;
     }
-    
+
     getChangedItemTypes(operations) {
         const types = new Set();
         operations.forEach(op => {
@@ -453,11 +453,11 @@ class GameItemUIManager {
         });
         return Array.from(types);
     }
-    
+
     getTypeFromConfig(config) {
         return Object.keys(this.typeConfigs).find(key => this.typeConfigs[key] === config);
     }
-    
+
     renderAll() {
         console.log('🎨 ПОЛНЫЙ рендеринг...');
         const sortedTypes = Object.values(this.typeConfigs).sort((a, b) => b.priority - a.priority);
@@ -465,7 +465,7 @@ class GameItemUIManager {
         this.mainContainer.innerHTML = '';
         sortedTypes.forEach(config => this.renderType(config));
     }
-    
+
     renderType(config) {
         try {
             if (!this.containers[config.containerId]) return;
@@ -481,12 +481,13 @@ class GameItemUIManager {
             this.containers[config.containerId].style.display = 'block';
         }
     }
-    
+
     // ========== МЕТОДЫ РЕНДЕРА КОНКРЕТНЫХ ТИПОВ ==========
-    
+
     renderPersonality() {
         try {
-            let val = State.getState().gameState.currentScene?.personality || '';
+            // Берём значение из currentScene, если есть, иначе из game_item
+            let val = State.getGame().currentScene?.personality || '';
             if (val === '') {
                 val = State.getGameItemValue('personality:hero');
             }
@@ -495,7 +496,7 @@ class GameItemUIManager {
             const content = this.config.CONTENT;
             const empty = this.config.EMPTY;
             const count = (val && val.trim() !== '' && val !== 'true') ? 1 : 0;
-            
+
             let html;
             if (val && val.trim() !== '' && val !== 'true') {
                 const item = { id: 'personality:hero', value: val, description: '' };
@@ -554,16 +555,16 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.personality, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderTypology() {
         try {
-            const val = State.getState().gameState.currentScene?.typology || '';
+            const val = State.getGame().currentScene?.typology || '';
             const config = this.typeConfigs.typology;
             const colors = config.colors;
             const content = this.config.CONTENT;
             const empty = this.config.EMPTY;
             const count = val.trim() ? 1 : 0;
-            
+
             let html;
             if (val.trim()) {
                 const item = { id: 'typology:currentScene', value: val, description: '' };
@@ -622,7 +623,7 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.typology, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderOrganizations() {
         try {
             const orgs = State.getHeroOrganizations();
@@ -631,7 +632,7 @@ class GameItemUIManager {
             const fonts = this.config.FONTS;
             const empty = this.config.EMPTY;
             const layout = this.config.LAYOUT;
-            
+
             if (orgs.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -674,7 +675,7 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.organization, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderRelations() {
         try {
             const items = State.getGameItemsByType('relations:');
@@ -682,7 +683,7 @@ class GameItemUIManager {
             const colors = config.colors;
             const fonts = this.config.FONTS;
             const empty = this.config.EMPTY;
-            
+
             if (items.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -729,14 +730,14 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.relations, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderSkills() {
         try {
             const items = State.getGameItemsByType('skill:');
             const config = this.typeConfigs.skill;
             const colors = config.colors;
             const empty = this.config.EMPTY;
-            
+
             if (items.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -779,7 +780,7 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.skill, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderStatBuffs() {
         try {
             const buffs = State.getGameItemsByType('buff:').filter(item => {
@@ -794,7 +795,7 @@ class GameItemUIManager {
             const config = this.typeConfigs.stat_buffs;
             const colors = config.colors;
             const empty = this.config.EMPTY;
-            
+
             if (items.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -846,14 +847,14 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.stat_buffs, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderBlessings() {
         try {
             const items = State.getGameItemsByType('bless:');
             const config = this.typeConfigs.bless;
             const colors = config.colors;
             const empty = this.config.EMPTY;
-            
+
             if (items.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -898,14 +899,14 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.bless, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderCurses() {
         try {
             const items = State.getGameItemsByType('curse:');
             const config = this.typeConfigs.curse;
             const colors = config.colors;
             const empty = this.config.EMPTY;
-            
+
             if (items.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -950,7 +951,7 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.curse, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderBuffsDebuffs() {
         try {
             const allBuffs = State.getGameItemsByType('buff:');
@@ -967,7 +968,7 @@ class GameItemUIManager {
             const config = this.typeConfigs.buff_debuff;
             const colors = config.colors;
             const empty = this.config.EMPTY;
-            
+
             if (items.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -1018,7 +1019,7 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.buff_debuff, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderDetails() {
         try {
             const knownPrefixes = [
@@ -1026,13 +1027,12 @@ class GameItemUIManager {
                 'buff:', 'debuff:', 'personality:', 'initiation_degree:', 'progress:',
                 'organization_rank:'
             ];
-            const state = State.getState();
-            const allItems = state.heroState || [];
+            const allItems = State.getHero().items;
             const items = allItems.filter(item => !knownPrefixes.some(p => item.id.startsWith(p)));
             const config = this.typeConfigs.details;
             const colors = config.colors;
             const empty = this.config.EMPTY;
-            
+
             if (items.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -1078,14 +1078,14 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.details, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     renderInventory() {
         try {
             const items = State.getGameItemsByType('inventory:');
             const config = this.typeConfigs.inventory;
             const colors = config.colors;
             const empty = this.config.EMPTY;
-            
+
             if (items.length === 0) {
                 const emptyHtml = `
                     <div class="game-item-badge" style="
@@ -1128,9 +1128,9 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.inventory, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-    
+
     // ========== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ==========
-    
+
     getStatColor(value) {
         const v = Math.max(0, Math.min(100, value));
         if (v <= 10) return '#800000';
@@ -1144,7 +1144,7 @@ class GameItemUIManager {
         if (v <= 90) return '#87CEEB';
         return '#FFFFFF';
     }
-    
+
     showOrganizationHierarchy(orgId) {
         try {
             console.log(`🏛️ Компактная иерархия: ${orgId}`);
@@ -1365,7 +1365,7 @@ class GameItemUIManager {
             Utils.showToast('Ошибка при отображении иерархии', 'error');
         }
     }
-    
+
     /**
      * НОВЫЙ МЕТОД: показывает тултип через общий TooltipUI.
      * @param {HTMLElement} element - элемент, вызвавший тултип.
@@ -1376,12 +1376,12 @@ class GameItemUIManager {
             console.warn('showGameItemTooltip: Нет данных об объекте');
             return;
         }
-        
+
         const config = this.config.TOOLTIPS;
         const fontConfig = this.config.FONTS;
         const icon = Utils.getGameItemIcon(gameItem.id);
         const [type, name] = gameItem.id.split(':');
-        
+
         let content = `
             <div style="
                 font-weight: bold; 
@@ -1400,7 +1400,7 @@ class GameItemUIManager {
                 <span>${name || type}</span>
             </div>
         `;
-        
+
         if (gameItem.value !== undefined && gameItem.value !== name) {
             content += `
                 <div style="margin-bottom:4px; color:#ccc; font-size:0.85em;">
@@ -1408,7 +1408,7 @@ class GameItemUIManager {
                 </div>
             `;
         }
-        
+
         if (gameItem.description) {
             content += `
                 <div style="margin-bottom:4px; color:#ccc; font-size:0.8em; font-style:italic; padding:4px; background:rgba(0,0,0,0.3); border-left:2px solid #fbc531;">
@@ -1416,7 +1416,7 @@ class GameItemUIManager {
                 </div>
             `;
         }
-        
+
         if (gameItem.duration !== undefined) {
             content += `
                 <div style="margin-bottom:3px; color:#fbc531; font-size:0.85em; display:flex; align-items:center; gap:4px;">
@@ -1424,7 +1424,7 @@ class GameItemUIManager {
                 </div>
             `;
         }
-        
+
         const extra = Object.keys(gameItem).filter(k => !['id', 'value', 'description', 'duration'].includes(k));
         if (extra.length) {
             content += '<div style="margin-top:4px; padding-top:4px; border-top:1px solid #333;">';
@@ -1434,16 +1434,16 @@ class GameItemUIManager {
             });
             content += '</div>';
         }
-        
+
         // Вызываем общий тултип, передавая элемент и опции
         TooltipUI.show(element, content, { autoHide: true, offsetY: 8 });
     }
-    
+
     forceUpdate() {
         console.log('🔄 Принудительное обновление');
         this.renderAll();
     }
-    
+
     destroy() {
         State.off(State.EVENTS.HERO_CHANGED, this.handleHeroChanged);
         State.off(State.EVENTS.TURN_COMPLETED, this.handleTurnCompleted);
