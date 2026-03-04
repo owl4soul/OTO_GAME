@@ -302,8 +302,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         return;
     }
     
-    //const d10 = Math.round(Math.random() * 10) + 1;
-    const d10 = 10;
+    const d10 = Math.round(Math.random() * 10) + 1;
+    //const d10 = 6;
     log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎲 Общий бросок удачи на ход: d10 = ${d10}`, {
         d10: d10,
         turn: turnNumber
