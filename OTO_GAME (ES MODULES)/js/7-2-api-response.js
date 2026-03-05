@@ -4,6 +4,15 @@
 // ИЗМЕНЕНИЯ:
 // - В validateAndNormalizeResponse добавлена нормализация aiMemory:
 //   массивы → { items: [...] }, строки → { raw: "..." }, пустые значения → {}.
+// - УСИЛЕНА УСТОЙЧИВОСТЬ К ОШИБКАМ:
+//   * normalizeOperations теперь использует цикл for с try...catch для каждой операции.
+//   * normalizeChoice и normalizeEvent обёрнуты в try...catch на верхнем уровне,
+//     а также внутри добавлены проверки типов.
+//   * В validateAndNormalizeResponse обработка массивов choices и events заменена
+//     на циклы for с try...catch для каждого элемента.
+//   * extractDataFromBrokenJSON теперь обёртывает каждый шаг в try...catch,
+//     чтобы ошибка в одном поле не прерывала извлечение других.
+//   * Добавлены подробные комментарии о безопасности.
 
 'use strict';
 
@@ -41,159 +50,209 @@ const STANDARD_GAME_ITEM_TYPES = [
 
 /**
  * Нормализует одну операцию
+ * @param {any} op - Операция из ответа ИИ
+ * @param {string} context - Контекст для логирования
+ * @returns {Object|null} Нормализованная операция или null, если операция невалидна
  */
 function normalizeOperation(op, context) {
-    if (!op || typeof op !== 'object') return null;
-    
-    const operation = String(op.operation || '').toUpperCase().trim();
-    if (!operation || !['ADD', 'REMOVE', 'MODIFY', 'SET'].includes(operation)) return null;
-    
-    const id = String(op.id || '').trim();
-    if (!id.includes(':')) return null;
-    
-    const normalized = { operation, id };
-    
-    // value (оставляем как есть)
-    if (op.value !== undefined) normalized.value = op.value;
-    
-    // delta -> число
-    if (op.delta !== undefined) normalized.delta = Number(op.delta) || 0;
-    
-    // duration -> целое положительное
-    if (op.duration !== undefined) {
-        normalized.duration = Math.max(1, Math.min(999, Number(op.duration) || 1));
+    try {
+        if (!op || typeof op !== 'object') return null;
+        
+        const operation = String(op.operation || '').toUpperCase().trim();
+        if (!operation || !['ADD', 'REMOVE', 'MODIFY', 'SET'].includes(operation)) return null;
+        
+        const id = String(op.id || '').trim();
+        if (!id.includes(':')) return null;
+        
+        const normalized = { operation, id };
+        
+        // value (оставляем как есть)
+        if (op.value !== undefined) normalized.value = op.value;
+        
+        // delta -> число
+        if (op.delta !== undefined) normalized.delta = Number(op.delta) || 0;
+        
+        // duration -> целое положительное
+        if (op.duration !== undefined) {
+            normalized.duration = Math.max(1, Math.min(999, Number(op.duration) || 1));
+        }
+        
+        // description -> строка
+        normalized.description = op.description ? String(op.description).trim() : '';
+        
+        // Для ADD и SET без value подставляем заглушку
+        if ((operation === 'ADD' || operation === 'SET') && normalized.value === undefined) {
+            normalized.value = '[значение не указано]';
+        }
+        
+        // Для MODIFY без delta ставим 0 (ничего не меняет)
+        if (operation === 'MODIFY' && normalized.delta === undefined) {
+            normalized.delta = 0;
+        }
+        
+        // Для buff/debuff без duration ставим 1
+        const type = id.split(':')[0];
+        if ((type === 'buff' || type === 'debuff') && normalized.duration === undefined) {
+            log.warn(LOG_CATEGORIES.API, `У операции ${id} нет duration, устанавливаем 1 (${context})`);
+            normalized.duration = 1;
+        }
+        
+        return normalized;
+    } catch (e) {
+        log.warn(LOG_CATEGORIES.API, `Ошибка нормализации операции в ${context}: ${e.message}`);
+        return null;
     }
-    
-    // description -> строка
-    normalized.description = op.description ? String(op.description).trim() : '';
-    
-    // Для ADD и SET без value подставляем заглушку
-    if ((operation === 'ADD' || operation === 'SET') && normalized.value === undefined) {
-        normalized.value = '[значение не указано]';
-    }
-    
-    // Для MODIFY без delta ставим 0 (ничего не меняет)
-    if (operation === 'MODIFY' && normalized.delta === undefined) {
-        normalized.delta = 0;
-    }
-    
-    // Для buff/debuff без duration ставим 1
-    const type = id.split(':')[0];
-    if ((type === 'buff' || type === 'debuff') && normalized.duration === undefined) {
-        log.warn(LOG_CATEGORIES.API, `У операции ${id} нет duration, устанавливаем 1 (${context})`);
-        normalized.duration = 1;
-    }
-    
-    return normalized;
 }
 
 /**
  * Нормализует массив операций
+ * @param {any} operations - Предполагаемый массив операций
+ * @param {string} context - Контекст для логирования
+ * @returns {Array<Object>} Массив нормализованных операций
  */
 export function normalizeOperations(operations, context) {
     if (!Array.isArray(operations)) return [];
-    return operations.map((op, idx) => normalizeOperation(op, `${context}[${idx}]`)).filter(Boolean);
+    const result = [];
+    // Используем цикл for с try...catch для каждого элемента, чтобы ошибка в одной операции
+    // не прерывала обработку остальных.
+    for (let i = 0; i < operations.length; i++) {
+        try {
+            const norm = normalizeOperation(operations[i], `${context}[${i}]`);
+            if (norm) result.push(norm);
+        } catch (e) {
+            log.warn(LOG_CATEGORIES.API, `Критическая ошибка при нормализации операции ${context}[${i}]: ${e.message}`);
+        }
+    }
+    return result;
 }
 
 /**
  * Нормализует один choice
+ * @param {any} choice - Choice из ответа ИИ
+ * @param {number} index - Индекс в массиве (для логирования)
+ * @returns {Object} Нормализованный choice (всегда возвращает объект)
  */
 function normalizeChoice(choice, index) {
-    if (!choice || typeof choice !== 'object') {
-        log.warn(LOG_CATEGORIES.API, `Choice ${index} не объект, создаём дефолтный`);
+    try {
+        if (!choice || typeof choice !== 'object') {
+            log.warn(LOG_CATEGORIES.API, `Choice ${index} не объект, создаём дефолтный`);
+            return {
+                text: "Действие",
+                difficulty_level: 5,
+                requirements: [],
+                success_rewards: [],
+                fail_penalties: []
+            };
+        }
+        
+        const normalized = {
+            text: '',
+            difficulty_level: 5,
+            requirements: [],
+            success_rewards: [],
+            fail_penalties: []
+        };
+        
+        // text
+        if (typeof choice.text === 'string' && choice.text.trim()) {
+            normalized.text = choice.text.trim();
+        } else {
+            normalized.text = `Действие ${index + 1}`;
+        }
+        
+        // difficulty_level
+        if (typeof choice.difficulty_level === 'number') {
+            normalized.difficulty_level = Math.max(1, Math.min(10, Math.round(choice.difficulty_level)));
+        } else if (typeof choice.difficulty_level === 'string') {
+            const parsed = parseInt(choice.difficulty_level, 10);
+            if (!isNaN(parsed)) normalized.difficulty_level = Math.max(1, Math.min(10, parsed));
+        }
+        
+        // requirements (оставляем как массив строк, фильтруем только непустые)
+        if (Array.isArray(choice.requirements)) {
+            normalized.requirements = choice.requirements
+                .filter(req => req && typeof req === 'string' && req.includes(':'))
+                .map(req => req.trim());
+        } else {
+            // Если requirements не массив, оставляем пустой массив (это безопасно)
+            normalized.requirements = [];
+        }
+        
+        // success_rewards
+        if (Array.isArray(choice.success_rewards)) {
+            normalized.success_rewards = normalizeOperations(choice.success_rewards, `choice ${index} rewards`);
+        }
+        
+        // fail_penalties
+        if (Array.isArray(choice.fail_penalties)) {
+            normalized.fail_penalties = normalizeOperations(choice.fail_penalties, `choice ${index} penalties`);
+        }
+        
+        return normalized;
+    } catch (e) {
+        log.warn(LOG_CATEGORIES.API, `Ошибка нормализации choice ${index}: ${e.message}`);
+        // Возвращаем дефолтный объект, чтобы не ломать дальнейшую обработку
         return {
-            text: "Действие",
+            text: `Действие ${index + 1} (ошибка парсинга)`,
             difficulty_level: 5,
             requirements: [],
             success_rewards: [],
             fail_penalties: []
         };
     }
-    
-    const normalized = {
-        text: '',
-        difficulty_level: 5,
-        requirements: [],
-        success_rewards: [],
-        fail_penalties: []
-    };
-    
-    // text
-    if (typeof choice.text === 'string' && choice.text.trim()) {
-        normalized.text = choice.text.trim();
-    } else {
-        normalized.text = `Действие ${index + 1}`;
-    }
-    
-    // difficulty_level
-    if (typeof choice.difficulty_level === 'number') {
-        normalized.difficulty_level = Math.max(1, Math.min(10, Math.round(choice.difficulty_level)));
-    } else if (typeof choice.difficulty_level === 'string') {
-        const parsed = parseInt(choice.difficulty_level, 10);
-        if (!isNaN(parsed)) normalized.difficulty_level = Math.max(1, Math.min(10, parsed));
-    }
-    
-    // requirements (оставляем как массив строк, фильтруем только непустые)
-    if (Array.isArray(choice.requirements)) {
-        normalized.requirements = choice.requirements
-            .filter(req => req && typeof req === 'string' && req.includes(':'))
-            .map(req => req.trim());
-    }
-    
-    // success_rewards
-    if (Array.isArray(choice.success_rewards)) {
-        normalized.success_rewards = normalizeOperations(choice.success_rewards, `choice ${index} rewards`);
-    }
-    
-    // fail_penalties
-    if (Array.isArray(choice.fail_penalties)) {
-        normalized.fail_penalties = normalizeOperations(choice.fail_penalties, `choice ${index} penalties`);
-    }
-    
-    return normalized;
 }
 
 /**
  * Нормализует одно событие
+ * @param {any} event - Событие из ответа ИИ
+ * @param {number} index - Индекс в массиве (для логирования)
+ * @returns {Object|null} Нормализованное событие или null, если событие невалидно
  */
 function normalizeEvent(event, index) {
-    if (!event || typeof event !== 'object') return null;
-    
-    const normalized = {
-        type: 'world_event',
-        description: '',
-        effects: [],
-        reason: ''
-    };
-    
-    // type
-    if (typeof event.type === 'string' && event.type.trim()) {
-        normalized.type = event.type.trim();
-    }
-    
-    // description (обязательное)
-    if (typeof event.description === 'string' && event.description.trim()) {
-        normalized.description = event.description.trim();
-    } else {
-        log.warn(LOG_CATEGORIES.API, `Event ${index} без description, пропускаем`);
+    try {
+        if (!event || typeof event !== 'object') return null;
+        
+        const normalized = {
+            type: 'world_event',
+            description: '',
+            effects: [],
+            reason: ''
+        };
+        
+        // type
+        if (typeof event.type === 'string' && event.type.trim()) {
+            normalized.type = event.type.trim();
+        }
+        
+        // description (обязательное)
+        if (typeof event.description === 'string' && event.description.trim()) {
+            normalized.description = event.description.trim();
+        } else {
+            log.warn(LOG_CATEGORIES.API, `Event ${index} без description, пропускаем`);
+            return null;
+        }
+        
+        // effects
+        if (Array.isArray(event.effects)) {
+            normalized.effects = normalizeOperations(event.effects, `event ${index} effects`);
+        }
+        
+        // reason
+        if (typeof event.reason === 'string') {
+            normalized.reason = event.reason.trim();
+        }
+        
+        return normalized;
+    } catch (e) {
+        log.warn(LOG_CATEGORIES.API, `Ошибка нормализации event ${index}: ${e.message}`);
         return null;
     }
-    
-    // effects
-    if (Array.isArray(event.effects)) {
-        normalized.effects = normalizeOperations(event.effects, `event ${index} effects`);
-    }
-    
-    // reason
-    if (typeof event.reason === 'string') {
-        normalized.reason = event.reason.trim();
-    }
-    
-    return normalized;
 }
 
 /**
  * Извлекает иерархии организаций из ответа (ключи с префиксом)
+ * @param {Object} parsed - Распарсенный объект
+ * @returns {Object} Объект с иерархиями
  */
 function extractOrganizationHierarchies(parsed) {
     const hierarchies = {};
@@ -413,26 +472,36 @@ function validateAndNormalizeResponse(parsedData) {
         result.personality = parsedData[personalityKey];
     }
     
-    // 7. CHOICES
+    // 7. CHOICES – обрабатываем с защитой от ошибок в каждом элементе
     const choicesKey = keyMap.get('choices');
     if (choicesKey && Array.isArray(parsedData[choicesKey])) {
-        parsedData[choicesKey].forEach((c, i) => {
-            const norm = normalizeChoice(c, i);
-            if (norm) result.choices.push(norm);
-        });
+        const choicesArray = parsedData[choicesKey];
+        for (let i = 0; i < choicesArray.length; i++) {
+            try {
+                const norm = normalizeChoice(choicesArray[i], i);
+                if (norm) result.choices.push(norm);
+            } catch (e) {
+                log.warn(LOG_CATEGORIES.API, `Необработанная ошибка при обработке choice ${i}: ${e.message}`);
+            }
+        }
     }
     if (result.choices.length === 0) {
         log.warn(LOG_CATEGORIES.API, 'Нет валидных choices, добавляем дефолтные');
         result.choices = createDefaultChoices();
     }
     
-    // 8. EVENTS
+    // 8. EVENTS – аналогично защищённый цикл
     const eventsKey = keyMap.get('events');
     if (eventsKey && Array.isArray(parsedData[eventsKey])) {
-        parsedData[eventsKey].forEach((e, i) => {
-            const norm = normalizeEvent(e, i);
-            if (norm) result.events.push(norm);
-        });
+        const eventsArray = parsedData[eventsKey];
+        for (let i = 0; i < eventsArray.length; i++) {
+            try {
+                const norm = normalizeEvent(eventsArray[i], i);
+                if (norm) result.events.push(norm);
+            } catch (e) {
+                log.warn(LOG_CATEGORIES.API, `Необработанная ошибка при обработке event ${i}: ${e.message}`);
+            }
+        }
     }
     result.events = result.events.slice(0, 3);
     
@@ -572,10 +641,25 @@ function processAIResponse(rawText) {
             if (parsedData.design_notes) partial.design_notes = parsedData.design_notes;
             if (parsedData.aiMemory) partial.aiMemory = parsedData.aiMemory;
             if (Array.isArray(parsedData.choices)) {
-                partial.choices = parsedData.choices.map((c, i) => normalizeChoice(c, i)).filter(Boolean);
+                // Используем защищённый цикл для извлечения choices
+                for (let i = 0; i < parsedData.choices.length; i++) {
+                    try {
+                        const norm = normalizeChoice(parsedData.choices[i], i);
+                        if (norm) partial.choices.push(norm);
+                    } catch (e) {
+                        log.warn(LOG_CATEGORIES.API, `Необработанная ошибка при частичном восстановлении choice ${i}: ${e.message}`);
+                    }
+                }
             }
             if (Array.isArray(parsedData.events)) {
-                partial.events = parsedData.events.map((e, i) => normalizeEvent(e, i)).filter(Boolean);
+                for (let i = 0; i < parsedData.events.length; i++) {
+                    try {
+                        const norm = normalizeEvent(parsedData.events[i], i);
+                        if (norm) partial.events.push(norm);
+                    } catch (e) {
+                        log.warn(LOG_CATEGORIES.API, `Необработанная ошибка при частичном восстановлении event ${i}: ${e.message}`);
+                    }
+                }
             }
             partial._metaParsed = { metaContext: '', unknownFields: [], unknownArrays: [], unknownObjects: [] };
             return partial;
@@ -585,7 +669,7 @@ function processAIResponse(rawText) {
 }
 
 // ============================================================================
-// АВАРИЙНЫЙ ПАРСИНГ (теперь с регистронезависимыми регулярками)
+// АВАРИЙНЫЙ ПАРСИНГ (теперь с регистронезависимыми регулярками и защитой от ошибок)
 // ============================================================================
 
 /**
@@ -607,88 +691,128 @@ function extractDataFromBrokenJSON(brokenText) {
     };
     
     // Все regex теперь с флагом i для регистронезависимости
-    const sceneMatch = brokenText.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/is) || brokenText.match(/"scene"\s*:\s*"([^"]*)/i);
-    if (sceneMatch && sceneMatch[1]) {
-        result.scene = sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
-        console.log('✅ [extractDataFromBrokenJSON] Извлечена сцена через regex');
+    // Каждый шаг извлечения обёрнут в try...catch, чтобы ошибка в одном не мешала другим
+    
+    try {
+        const sceneMatch = brokenText.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*)"/is) || brokenText.match(/"scene"\s*:\s*"([^"]*)/i);
+        if (sceneMatch && sceneMatch[1]) {
+            result.scene = sceneMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\\/g, '\\');
+            console.log('✅ [extractDataFromBrokenJSON] Извлечена сцена через regex');
+        }
+    } catch (e) {
+        console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при извлечении scene:', e.message);
     }
     
-    const reflectionMatch = brokenText.match(/"reflection"\s*:\s*"((?:[^"\\]|\\.)*)"/is);
-    if (reflectionMatch && reflectionMatch[1]) result.reflection = reflectionMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    try {
+        const reflectionMatch = brokenText.match(/"reflection"\s*:\s*"((?:[^"\\]|\\.)*)"/is);
+        if (reflectionMatch && reflectionMatch[1]) result.reflection = reflectionMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    } catch (e) {
+        console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при извлечении reflection:', e.message);
+    }
     
-    const typologyMatch = brokenText.match(/"typology"\s*:\s*"((?:[^"\\]|\\.)*)"/is);
-    if (typologyMatch && typologyMatch[1]) result.typology = typologyMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    try {
+        const typologyMatch = brokenText.match(/"typology"\s*:\s*"((?:[^"\\]|\\.)*)"/is);
+        if (typologyMatch && typologyMatch[1]) result.typology = typologyMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    } catch (e) {
+        console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при извлечении typology:', e.message);
+    }
     
     // Ищем массив choices (регистронезависимо)
-    const choicesMatch = brokenText.match(/"choices"\s*:\s*\[(.*?)\]/is);
-    if (choicesMatch) {
-        // Ищем все объекты с полем "text" внутри этого массива (тоже регистронезависимо)
-        const textMatches = choicesMatch[1].matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/gis);
-        for (const match of textMatches) {
-            if (match[1]) {
-                result.choices.push({
-                    text: match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'),
-                    difficulty_level: 5,
-                    requirements: [],
-                    success_rewards: [],
-                    fail_penalties: []
-                });
+    try {
+        const choicesMatch = brokenText.match(/"choices"\s*:\s*\[(.*?)\]/is);
+        if (choicesMatch) {
+            // Ищем все объекты с полем "text" внутри этого массива (тоже регистронезависимо)
+            const textMatches = choicesMatch[1].matchAll(/"text"\s*:\s*"((?:[^"\\]|\\.)*)"/gis);
+            for (const match of textMatches) {
+                try {
+                    if (match[1]) {
+                        result.choices.push({
+                            text: match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'),
+                            difficulty_level: 5,
+                            requirements: [],
+                            success_rewards: [],
+                            fail_penalties: []
+                        });
+                    }
+                } catch (e) {
+                    console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при обработке одного choice:', e.message);
+                }
             }
+            console.log(`✅ [extractDataFromBrokenJSON] Извлечено ${result.choices.length} choices через regex`);
         }
-        console.log(`✅ [extractDataFromBrokenJSON] Извлечено ${result.choices.length} choices через regex`);
+    } catch (e) {
+        console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при извлечении массива choices:', e.message);
     }
+    
     if (result.choices.length === 0) result.choices = createDefaultChoices();
     
     // Ищем aiMemory по нескольким вариантам (регистронезависимо)
-const memoryMatch = 
-    text.match(/"aiMemory"\s*:\s*\{([^}]*)\}/is) ||
-    text.match(/"ai_memory"\s*:\s*\{([^}]*)\}/is) ||
-    text.match(/"aimemory"\s*:\s*\{([^}]*)\}/is);
-if (memoryMatch) {
     try {
-        result.aiMemory = JSON.parse(`{${memoryMatch[1]}}`);
-        console.log('✅ [extractDataFromBrokenJSON] Извлечена aiMemory');
-    } catch (e) {
-        console.warn('⚠️ [extractDataFromBrokenJSON] Парсинг aiMemory не удался');
-    }
-}
-    
-    const thoughtsMatch = brokenText.match(/"thoughts"\s*:\s*\[(.*?)\]/is);
-    if (thoughtsMatch) {
-        const thoughtMatches = thoughtsMatch[1].match(/"((?:[^"\\]|\\.)*?)"/g);
-        if (thoughtMatches) {
-            result.thoughts = thoughtMatches.map(s => s.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n')).filter(t => t.trim());
+        const memoryMatch = 
+            brokenText.match(/"aiMemory"\s*:\s*\{([^}]*)\}/is) ||
+            brokenText.match(/"ai_memory"\s*:\s*\{([^}]*)\}/is) ||
+            brokenText.match(/"aimemory"\s*:\s*\{([^}]*)\}/is);
+        if (memoryMatch) {
+            try {
+                result.aiMemory = JSON.parse(`{${memoryMatch[1]}}`);
+                console.log('✅ [extractDataFromBrokenJSON] Извлечена aiMemory');
+            } catch (e) {
+                console.warn('⚠️ [extractDataFromBrokenJSON] Парсинг aiMemory не удался');
+            }
         }
+    } catch (e) {
+        console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при извлечении aiMemory:', e.message);
     }
+    
+    try {
+        const thoughtsMatch = brokenText.match(/"thoughts"\s*:\s*\[(.*?)\]/is);
+        if (thoughtsMatch) {
+            const thoughtMatches = thoughtsMatch[1].match(/"((?:[^"\\]|\\.)*?)"/g);
+            if (thoughtMatches) {
+                result.thoughts = thoughtMatches.map(s => s.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n')).filter(t => t.trim());
+            }
+        }
+    } catch (e) {
+        console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при извлечении thoughts:', e.message);
+    }
+    
     if (result.thoughts.length < 5) result.thoughts = result.thoughts.concat(createDefaultThoughts()).slice(0, 10);
     
     // Иерархии организаций (ключ может быть в любом регистре)
-    const hierarchyMatches = brokenText.matchAll(/"organization_rank_hierarchy:([^"]+)"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/gis);
-    for (const match of hierarchyMatches) {
-        try {
-            const orgId = match[1];
-            const hierarchyStr = match[2];
-            let hierarchy = null;
+    try {
+        const hierarchyMatches = brokenText.matchAll(/"organization_rank_hierarchy:([^"]+)"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/gis);
+        for (const match of hierarchyMatches) {
             try {
-                hierarchy = JSON.parse(hierarchyStr);
+                const orgId = match[1];
+                const hierarchyStr = match[2];
+                let hierarchy = null;
+                try {
+                    hierarchy = JSON.parse(hierarchyStr);
+                } catch (e) {
+                    const repaired = Utils.safeJsonRepair(hierarchyStr);
+                    if (repaired) hierarchy = JSON.parse(repaired);
+                }
+                if (hierarchy && hierarchy.value && hierarchy.description) {
+                    result._organizationsHierarchy[orgId] = {
+                        id: `organization_rank_hierarchy:${orgId}`,
+                        value: hierarchy.value,
+                        description: hierarchy.description
+                    };
+                }
             } catch (e) {
-                const repaired = Utils.safeJsonRepair(hierarchyStr);
-                if (repaired) hierarchy = JSON.parse(repaired);
+                console.warn(`⚠️ [extractDataFromBrokenJSON] Не удалось распарсить иерархию организации: ${e.message}`);
             }
-            if (hierarchy && hierarchy.value && hierarchy.description) {
-                result._organizationsHierarchy[orgId] = {
-                    id: `organization_rank_hierarchy:${orgId}`,
-                    value: hierarchy.value,
-                    description: hierarchy.description
-                };
-            }
-        } catch (e) {
-            console.warn(`⚠️ [extractDataFromBrokenJSON] Не удалось распарсить иерархию организации: ${e.message}`);
         }
+    } catch (e) {
+        console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при извлечении иерархий организаций:', e.message);
     }
     
     if (result.scene) {
-        result.summary = result.scene.replace(/<[^>]*>/g, ' ').substring(0, 200).trim() + '...';
+        try {
+            result.summary = result.scene.replace(/<[^>]*>/g, ' ').substring(0, 200).trim() + '...';
+        } catch (e) {
+            console.warn('⚠️ [extractDataFromBrokenJSON] Ошибка при генерации summary:', e.message);
+        }
     }
     return result;
 }
@@ -744,4 +868,4 @@ export const API_Response = {
     createDefaultChoices,
     createDefaultThoughts,
     createFallbackResponse
-};
+};  

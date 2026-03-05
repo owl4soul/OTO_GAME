@@ -1,4 +1,12 @@
 // Модуль 2: UTILS - Вспомогательные функции (2-utils.js)
+// ИСПРАВЛЕННАЯ ВЕРСИЯ: Усилена устойчивость к ошибкам в парсинге JSON.
+// - В robustJsonParse каждый шаг агрессивного извлечения обёрнут в try...catch,
+//   чтобы ошибка в одном поле не прерывала извлечение других.
+// - В extractOperations добавлена обработка ошибок при парсинге отдельных операций.
+// - В extractValueByKey добавлены проверки и защита от исключений.
+// - Добавлены комментарии, поясняющие устойчивость.
+// - Исправление: safeParseAIResponse больше не возвращает дефолтную сцену.
+
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -286,7 +294,8 @@ function repairTruncatedJSON(text) {
 
 /**
  * МАКСИМАЛЬНО АГРЕССИВНЫЙ ПАРСИНГ: Извлекает любые данные из ответа ИИ,
- * даже если JSON полностью разрушен.
+ * даже если JSON полностью разрушен. Каждый шаг обёрнут в try...catch,
+ * чтобы ошибка в одном поле не прерывала извлечение других.
  * @param {string} rawContent - Сырой текст ответа
  * @returns {Object} Объект с извлечёнными полями (scene, choices, events, ...)
  */
@@ -339,32 +348,41 @@ function robustJsonParse(rawContent) {
   };
   
   // 3.1. Извлечение scene (самое важное)
-  const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*?)"/s) ||
-    text.match(/"scene"\s*:\s*"([^"]*)/s);
-  if (sceneMatch && sceneMatch[1]) {
-    result.scene = sceneMatch[1]
-      .replace(/\\"/g, '"')
-      .replace(/\\n/g, '\n')
-      .replace(/\\t/g, '\t')
-      .replace(/\\r/g, '\r')
-      .replace(/\\\\/g, '\\');
-    console.log(`✅ [Robust Parse v2] Scene извлечена (длина: ${result.scene.length})`);
-  }
-  
-  // 3.2. Извлечение текстовых полей (design_notes, reflection, typology, summary)
-  const extractTextField = (fieldName) => {
-    const pattern = new RegExp(`"${fieldName}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*?)"`, 's');
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      return match[1]
+  try {
+    const sceneMatch = text.match(/"scene"\s*:\s*"((?:[^"\\]|\\.)*?)"/s) ||
+      text.match(/"scene"\s*:\s*"([^"]*)/s);
+    if (sceneMatch && sceneMatch[1]) {
+      result.scene = sceneMatch[1]
         .replace(/\\"/g, '"')
         .replace(/\\n/g, '\n')
         .replace(/\\t/g, '\t')
         .replace(/\\r/g, '\r')
         .replace(/\\\\/g, '\\');
+      console.log(`✅ [Robust Parse v2] Scene извлечена (длина: ${result.scene.length})`);
+    }
+  } catch (e) {
+    console.warn('⚠️ [Robust Parse v2] Ошибка при извлечении scene:', e.message);
+  }
+  
+  // 3.2. Извлечение текстовых полей (design_notes, reflection, typology, summary)
+  const extractTextField = (fieldName) => {
+    try {
+      const pattern = new RegExp(`"${fieldName}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*?)"`, 's');
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        return match[1]
+          .replace(/\\"/g, '"')
+          .replace(/\\n/g, '\n')
+          .replace(/\\t/g, '\t')
+          .replace(/\\r/g, '\r')
+          .replace(/\\\\/g, '\\');
+      }
+    } catch (e) {
+      console.warn(`⚠️ [Robust Parse v2] Ошибка при извлечении поля ${fieldName}:`, e.message);
     }
     return "";
   };
+  
   result.design_notes = extractTextField('design_notes');
   result.reflection = extractTextField('reflection');
   result.typology = extractTextField('typology');
@@ -372,151 +390,171 @@ function robustJsonParse(rawContent) {
   
   // 3.3. Извлечение choices (даже из разрушенного массива)
   console.log('🔍 [Robust Parse v2] Извлечение choices...');
-  // Ищем все объекты, похожие на choice, содержащие "text"
-  const choiceObjectPattern = /{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*?"text"\s*:\s*"[^"]*"[^}]*}/gs;
-  let choiceMatch;
-  while ((choiceMatch = choiceObjectPattern.exec(text)) !== null) {
-    try {
-      const choiceStr = choiceMatch[0];
-      // Пытаемся распарсить как полноценный JSON
-      let choiceObj;
+  try {
+    // Ищем все объекты, похожие на choice, содержащие "text"
+    const choiceObjectPattern = /{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*?"text"\s*:\s*"[^"]*"[^}]*}/gs;
+    let choiceMatch;
+    while ((choiceMatch = choiceObjectPattern.exec(text)) !== null) {
       try {
-        choiceObj = JSON.parse(choiceStr);
-      } catch (e) {
-        // Если не получается, вытягиваем поля по одному
-        choiceObj = {};
-        const textMatch = choiceStr.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*?)"/);
-        if (textMatch) choiceObj.text = textMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-        
-        const difficultyMatch = choiceStr.match(/"difficulty_level"\s*:\s*(\d+)/);
-        if (difficultyMatch) choiceObj.difficulty_level = parseInt(difficultyMatch[1], 10);
-        
-        // requirements – может быть массивом строк
-        const reqMatch = choiceStr.match(/"requirements"\s*:\s*\[(.*?)\]/s);
-        if (reqMatch) {
-          const items = reqMatch[1].match(/"([^"]+)"/g);
-          if (items) choiceObj.requirements = items.map(s => s.replace(/"/g, ''));
+        const choiceStr = choiceMatch[0];
+        // Пытаемся распарсить как полноценный JSON
+        let choiceObj;
+        try {
+          choiceObj = JSON.parse(choiceStr);
+        } catch (e) {
+          // Если не получается, вытягиваем поля по одному
+          choiceObj = {};
+          const textMatch = choiceStr.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*?)"/);
+          if (textMatch) choiceObj.text = textMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+          
+          const difficultyMatch = choiceStr.match(/"difficulty_level"\s*:\s*(\d+)/);
+          if (difficultyMatch) choiceObj.difficulty_level = parseInt(difficultyMatch[1], 10);
+          
+          // requirements – может быть массивом строк
+          const reqMatch = choiceStr.match(/"requirements"\s*:\s*\[(.*?)\]/s);
+          if (reqMatch) {
+            const items = reqMatch[1].match(/"([^"]+)"/g);
+            if (items) choiceObj.requirements = items.map(s => s.replace(/"/g, ''));
+          }
+          
+          // success_rewards – операции
+          choiceObj.success_rewards = extractOperations(choiceStr, 'success_rewards');
+          choiceObj.fail_penalties = extractOperations(choiceStr, 'fail_penalties');
         }
-        
-        // success_rewards – операции
-        choiceObj.success_rewards = extractOperations(choiceStr, 'success_rewards');
-        choiceObj.fail_penalties = extractOperations(choiceStr, 'fail_penalties');
+        if (choiceObj.text) {
+          // Нормализуем
+          result.choices.push({
+            text: choiceObj.text,
+            difficulty_level: typeof choiceObj.difficulty_level === 'number' ?
+              Math.max(1, Math.min(10, choiceObj.difficulty_level)) : 5,
+            requirements: Array.isArray(choiceObj.requirements) ?
+              choiceObj.requirements.filter(r => typeof r === 'string' && r.includes(':')) : [],
+            success_rewards: Array.isArray(choiceObj.success_rewards) ?
+              choiceObj.success_rewards.filter(op => op && op.operation && op.id) : [],
+            fail_penalties: Array.isArray(choiceObj.fail_penalties) ?
+              choiceObj.fail_penalties.filter(op => op && op.operation && op.id) : []
+          });
+        }
+      } catch (e) {
+        console.warn('⚠️ [Robust Parse v2] Ошибка обработки choice:', e.message);
       }
-      if (choiceObj.text) {
-        // Нормализуем
-        result.choices.push({
-          text: choiceObj.text,
-          difficulty_level: typeof choiceObj.difficulty_level === 'number' ?
-            Math.max(1, Math.min(10, choiceObj.difficulty_level)) : 5,
-          requirements: Array.isArray(choiceObj.requirements) ?
-            choiceObj.requirements.filter(r => typeof r === 'string' && r.includes(':')) : [],
-          success_rewards: Array.isArray(choiceObj.success_rewards) ?
-            choiceObj.success_rewards.filter(op => op && op.operation && op.id) : [],
-          fail_penalties: Array.isArray(choiceObj.fail_penalties) ?
-            choiceObj.fail_penalties.filter(op => op && op.operation && op.id) : []
-        });
-      }
-    } catch (e) {
-      console.warn('⚠️ [Robust Parse v2] Ошибка обработки choice:', e.message);
     }
+  } catch (e) {
+    console.warn('⚠️ [Robust Parse v2] Ошибка при извлечении массива choices:', e.message);
   }
   console.log(`✅ [Robust Parse v2] Извлечено ${result.choices.length} choices`);
   
   // 3.4. Извлечение events
   console.log('🔍 [Robust Parse v2] Извлечение events...');
-  const eventObjectPattern = /{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*?"type"\s*:\s*"[^"]*"[^}]*}/gs;
-  let eventMatch;
-  while ((eventMatch = eventObjectPattern.exec(text)) !== null) {
-    try {
-      const eventStr = eventMatch[0];
-      let eventObj;
+  try {
+    const eventObjectPattern = /{(?:[^{}]|{(?:[^{}]|{[^{}]*})*})*?"type"\s*:\s*"[^"]*"[^}]*}/gs;
+    let eventMatch;
+    while ((eventMatch = eventObjectPattern.exec(text)) !== null) {
       try {
-        eventObj = JSON.parse(eventStr);
+        const eventStr = eventMatch[0];
+        let eventObj;
+        try {
+          eventObj = JSON.parse(eventStr);
+        } catch (e) {
+          eventObj = {};
+          const typeMatch = eventStr.match(/"type"\s*:\s*"((?:[^"\\]|\\.)*?)"/);
+          if (typeMatch) eventObj.type = typeMatch[1].replace(/\\"/g, '"');
+          
+          const descMatch = eventStr.match(/"description"\s*:\s*"((?:[^"\\]|\\.)*?)"/);
+          if (descMatch) eventObj.description = descMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+          
+          const reasonMatch = eventStr.match(/"reason"\s*:\s*"((?:[^"\\]|\\.)*?)"/);
+          if (reasonMatch) eventObj.reason = reasonMatch[1].replace(/\\"/g, '"');
+          
+          eventObj.effects = extractOperations(eventStr, 'effects');
+        }
+        if (eventObj.description) {
+          result.events.push({
+            type: eventObj.type || "world_event",
+            description: eventObj.description,
+            effects: Array.isArray(eventObj.effects) ?
+              eventObj.effects.filter(op => op && op.operation && op.id) : [],
+            reason: eventObj.reason || ""
+          });
+        }
       } catch (e) {
-        eventObj = {};
-        const typeMatch = eventStr.match(/"type"\s*:\s*"((?:[^"\\]|\\.)*?)"/);
-        if (typeMatch) eventObj.type = typeMatch[1].replace(/\\"/g, '"');
-        
-        const descMatch = eventStr.match(/"description"\s*:\s*"((?:[^"\\]|\\.)*?)"/);
-        if (descMatch) eventObj.description = descMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
-        
-        const reasonMatch = eventStr.match(/"reason"\s*:\s*"((?:[^"\\]|\\.)*?)"/);
-        if (reasonMatch) eventObj.reason = reasonMatch[1].replace(/\\"/g, '"');
-        
-        eventObj.effects = extractOperations(eventStr, 'effects');
+        console.warn('⚠️ [Robust Parse v2] Ошибка обработки event:', e.message);
       }
-      if (eventObj.description) {
-        result.events.push({
-          type: eventObj.type || "world_event",
-          description: eventObj.description,
-          effects: Array.isArray(eventObj.effects) ?
-            eventObj.effects.filter(op => op && op.operation && op.id) : [],
-          reason: eventObj.reason || ""
-        });
-      }
-    } catch (e) {
-      console.warn('⚠️ [Robust Parse v2] Ошибка обработки event:', e.message);
     }
+  } catch (e) {
+    console.warn('⚠️ [Robust Parse v2] Ошибка при извлечении массива events:', e.message);
   }
   console.log(`✅ [Robust Parse v2] Извлечено ${result.events.length} events`);
   
   // 3.5. Извлечение thoughts
   console.log('🔍 [Robust Parse v2] Извлечение thoughts...');
-  const thoughtsMatch = text.match(/"thoughts"\s*:\s*\[(.*?)\]/s);
-  if (thoughtsMatch) {
-    const thoughtsStr = thoughtsMatch[1];
-    const thoughtMatches = thoughtsStr.match(/"((?:[^"\\]|\\.)*?)"/g);
-    if (thoughtMatches) {
-      result.thoughts = thoughtMatches
-        .map(s => s.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n'))
-        .filter(t => t.trim().length > 0)
-        .slice(0, 20);
+  try {
+    const thoughtsMatch = text.match(/"thoughts"\s*:\s*\[(.*?)\]/s);
+    if (thoughtsMatch) {
+      const thoughtsStr = thoughtsMatch[1];
+      const thoughtMatches = thoughtsStr.match(/"((?:[^"\\]|\\.)*?)"/g);
+      if (thoughtMatches) {
+        result.thoughts = thoughtMatches
+          .map(s => s.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n'))
+          .filter(t => t.trim().length > 0)
+          .slice(0, 20);
+      }
     }
-  }
-  // Если не нашли через массив, ищем отдельные строки-кандидаты
-  if (result.thoughts.length < 3) {
-    const thoughtCandidates = text.match(/"((?:[^"\\]|\\.){20,}?)"/g);
-    if (thoughtCandidates) {
-      result.thoughts = thoughtCandidates
-        .map(s => s.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n'))
-        .filter(t => t.length > 20 && t.length < 300 && /[.!?;:]$/.test(t))
-        .slice(0, 10);
+    // Если не нашли через массив, ищем отдельные строки-кандидаты
+    if (result.thoughts.length < 3) {
+      const thoughtCandidates = text.match(/"((?:[^"\\]|\\.){20,}?)"/g);
+      if (thoughtCandidates) {
+        result.thoughts = thoughtCandidates
+          .map(s => s.replace(/^"|"$/g, '').replace(/\\"/g, '"').replace(/\\n/g, '\n'))
+          .filter(t => t.length > 20 && t.length < 300 && /[.!?;:]$/.test(t))
+          .slice(0, 10);
+      }
     }
+  } catch (e) {
+    console.warn('⚠️ [Robust Parse v2] Ошибка при извлечении thoughts:', e.message);
   }
   console.log(`✅ [Robust Parse v2] Извлечено ${result.thoughts.length} thoughts`);
   
-// 3.6. Извлечение aiMemory (объект, массив или строка)
-const possibleKeys = ['aiMemory', 'ai_memory', 'aimemory'];
-let memoryValue = null;
-for (const k of possibleKeys) {
-    memoryValue = extractValueByKey(text, k);
-    if (memoryValue !== null) break;
-}
-if (memoryValue !== null) {
-    result.aiMemory = memoryValue;
-    console.log('✅ [Robust Parse v2] Извлечена aiMemory');
-} else {
-    console.warn('⚠️ [Robust Parse v2] Ключ aiMemory не найден');
-}
+  // 3.6. Извлечение aiMemory (объект, массив или строка)
+  try {
+    const possibleKeys = ['aiMemory', 'ai_memory', 'aimemory'];
+    let memoryValue = null;
+    for (const k of possibleKeys) {
+      memoryValue = extractValueByKey(text, k);
+      if (memoryValue !== null) break;
+    }
+    if (memoryValue !== null) {
+      result.aiMemory = memoryValue;
+      console.log('✅ [Robust Parse v2] Извлечена aiMemory');
+    } else {
+      console.warn('⚠️ [Robust Parse v2] Ключ aiMemory не найден');
+    }
+  } catch (e) {
+    console.warn('⚠️ [Robust Parse v2] Ошибка при извлечении aiMemory:', e.message);
+  }
   
   // 3.7. Извлечение иерархий организаций
-  const orgHierarchyPattern = /"(organization_rank_hierarchy:[^"]+)"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/gs;
-  let orgMatch;
-  while ((orgMatch = orgHierarchyPattern.exec(text)) !== null) {
-    try {
-      const key = orgMatch[1];
-      const valueStr = orgMatch[2];
-      const hierarchy = JSON.parse(valueStr);
-      if (hierarchy && hierarchy.value && hierarchy.description) {
-        result._organizationsHierarchy[key.split(':')[1]] = {
-          id: key,
-          value: hierarchy.value,
-          description: hierarchy.description
-        };
+  try {
+    const orgHierarchyPattern = /"(organization_rank_hierarchy:[^"]+)"\s*:\s*(\{(?:[^{}]|{[^{}]*})*\})/gs;
+    let orgMatch;
+    while ((orgMatch = orgHierarchyPattern.exec(text)) !== null) {
+      try {
+        const key = orgMatch[1];
+        const valueStr = orgMatch[2];
+        const hierarchy = JSON.parse(valueStr);
+        if (hierarchy && hierarchy.value && hierarchy.description) {
+          result._organizationsHierarchy[key.split(':')[1]] = {
+            id: key,
+            value: hierarchy.value,
+            description: hierarchy.description
+          };
+        }
+      } catch (e) {
+        console.warn(`⚠️ [Robust Parse v2] Ошибка извлечения иерархии: ${e.message}`);
       }
-    } catch (e) {
-      console.warn(`⚠️ [Robust Parse v2] Ошибка извлечения иерархии: ${e.message}`);
     }
+  } catch (e) {
+    console.warn('⚠️ [Robust Parse v2] Ошибка при извлечении иерархий организаций:', e.message);
   }
   
   // 3.8. Если сцена не найдена, но есть какой-то текст – используем его как сцену
@@ -564,117 +602,121 @@ if (memoryValue !== null) {
  * @returns {any|null} распарсенное значение или null, если ключ не найден
  */
 function extractValueByKey(text, key) {
+  try {
     // Ищем ключ с двоеточием, пропуская пробелы
     const keyPattern = new RegExp(`"${key}"\\s*:`);
     const match = keyPattern.exec(text);
     if (!match) return null;
-
+    
     const startIdx = match.index + match[0].length; // позиция после двоеточия
     let pos = startIdx;
-
+    
     // Пропускаем пробельные символы
     while (pos < text.length && /\s/.test(text[pos])) pos++;
-
+    
     if (pos >= text.length) return null;
-
+    
     const firstChar = text[pos];
-
+    
     // Обработка в зависимости от первого символа значения
     if (firstChar === '{') {
-        // Извлекаем сбалансированный объект
-        let braceCount = 1;
-        let inString = false;
-        let escape = false;
-        let endPos = pos + 1;
-        while (endPos < text.length) {
-            const ch = text[endPos];
-            if (escape) {
-                escape = false;
-            } else if (ch === '\\') {
-                escape = true;
-            } else if (ch === '"') {
-                inString = !inString;
-            } else if (!inString) {
-                if (ch === '{') braceCount++;
-                else if (ch === '}') {
-                    braceCount--;
-                    if (braceCount === 0) break;
-                }
-            }
-            endPos++;
+      // Извлекаем сбалансированный объект
+      let braceCount = 1;
+      let inString = false;
+      let escape = false;
+      let endPos = pos + 1;
+      while (endPos < text.length) {
+        const ch = text[endPos];
+        if (escape) {
+          escape = false;
+        } else if (ch === '\\') {
+          escape = true;
+        } else if (ch === '"') {
+          inString = !inString;
+        } else if (!inString) {
+          if (ch === '{') braceCount++;
+          else if (ch === '}') {
+            braceCount--;
+            if (braceCount === 0) break;
+          }
         }
-        if (braceCount !== 0) return null; // не сбалансировано
-        const valueStr = text.substring(pos, endPos + 1);
-        try {
-            return JSON.parse(valueStr);
-        } catch {
-            return valueStr; // возвращаем как строку, если не распарсилось
-        }
+        endPos++;
+      }
+      if (braceCount !== 0) return null; // не сбалансировано
+      const valueStr = text.substring(pos, endPos + 1);
+      try {
+        return JSON.parse(valueStr);
+      } catch {
+        return valueStr; // возвращаем как строку, если не распарсилось
+      }
     } else if (firstChar === '[') {
-        // Извлекаем сбалансированный массив
-        let bracketCount = 1;
-        let inString = false;
-        let escape = false;
-        let endPos = pos + 1;
-        while (endPos < text.length) {
-            const ch = text[endPos];
-            if (escape) {
-                escape = false;
-            } else if (ch === '\\') {
-                escape = true;
-            } else if (ch === '"') {
-                inString = !inString;
-            } else if (!inString) {
-                if (ch === '[') bracketCount++;
-                else if (ch === ']') {
-                    bracketCount--;
-                    if (bracketCount === 0) break;
-                }
-            }
-            endPos++;
+      // Извлекаем сбалансированный массив
+      let bracketCount = 1;
+      let inString = false;
+      let escape = false;
+      let endPos = pos + 1;
+      while (endPos < text.length) {
+        const ch = text[endPos];
+        if (escape) {
+          escape = false;
+        } else if (ch === '\\') {
+          escape = true;
+        } else if (ch === '"') {
+          inString = !inString;
+        } else if (!inString) {
+          if (ch === '[') bracketCount++;
+          else if (ch === ']') {
+            bracketCount--;
+            if (bracketCount === 0) break;
+          }
         }
-        if (bracketCount !== 0) return null;
-        const valueStr = text.substring(pos, endPos + 1);
-        try {
-            return JSON.parse(valueStr);
-        } catch {
-            return valueStr;
-        }
+        endPos++;
+      }
+      if (bracketCount !== 0) return null;
+      const valueStr = text.substring(pos, endPos + 1);
+      try {
+        return JSON.parse(valueStr);
+      } catch {
+        return valueStr;
+      }
     } else if (firstChar === '"') {
-        // Извлекаем строку до следующей неэкранированной кавычки
-        let inString = true;
-        let escape = false;
-        let endPos = pos + 1;
-        while (endPos < text.length) {
-            const ch = text[endPos];
-            if (escape) {
-                escape = false;
-            } else if (ch === '\\') {
-                escape = true;
-            } else if (ch === '"') {
-                break;
-            }
-            endPos++;
+      // Извлекаем строку до следующей неэкранированной кавычки
+      let inString = true;
+      let escape = false;
+      let endPos = pos + 1;
+      while (endPos < text.length) {
+        const ch = text[endPos];
+        if (escape) {
+          escape = false;
+        } else if (ch === '\\') {
+          escape = true;
+        } else if (ch === '"') {
+          break;
         }
-        const valueStr = text.substring(pos, endPos + 1);
-        try {
-            return JSON.parse(valueStr);
-        } catch {
-            return valueStr.replace(/^"|"$/g, ''); // возвращаем строку без кавычек
-        }
+        endPos++;
+      }
+      const valueStr = text.substring(pos, endPos + 1);
+      try {
+        return JSON.parse(valueStr);
+      } catch {
+        return valueStr.replace(/^"|"$/g, ''); // возвращаем строку без кавычек
+      }
     } else {
-        // Число, true, false, null – читаем до разделителя
-        const valueMatch = text.slice(pos).match(/^(true|false|null|-?\d+(\.\d+)?([eE][+-]?\d+)?)/);
-        if (valueMatch) {
-            const val = valueMatch[0];
-            try {
-                return JSON.parse(val);
-            } catch {
-                return val;
-            }
+      // Число, true, false, null – читаем до разделителя
+      const valueMatch = text.slice(pos).match(/^(true|false|null|-?\d+(\.\d+)?([eE][+-]?\d+)?)/);
+      if (valueMatch) {
+        const val = valueMatch[0];
+        try {
+          return JSON.parse(val);
+        } catch {
+          return val;
         }
+      }
     }
-    return null;
+  } catch (e) {
+    console.warn(`⚠️ [extractValueByKey] Ошибка при извлечении ключа ${key}:`, e.message);
+  }
+  return null;
 }
 
 /**
@@ -682,47 +724,55 @@ function extractValueByKey(text, key) {
  * из строки, содержащей фрагмент JSON.
  */
 function extractOperations(text, arrayName) {
-  const pattern = new RegExp(`"${arrayName}"\\s*:\\s*\\[(.*?)\\]`, 's');
-  const match = text.match(pattern);
-  if (!match) return [];
-  
-  const operationsStr = match[1];
-  // Ищем объекты операций в этом массиве
-  const opPattern = /{(?:[^{}]|{[^{}]*})*?}/g;
-  const ops = [];
-  let opMatch;
-  while ((opMatch = opPattern.exec(operationsStr)) !== null) {
-    try {
-      const op = JSON.parse(opMatch[0]);
-      if (op.operation && op.id) {
-        ops.push(op);
-      }
-    } catch (e) {
-      // Если не удалось распарсить, пробуем вытянуть поля
-      const opText = opMatch[0];
-      const operationMatch = opText.match(/"operation"\s*:\s*"([^"]+)"/);
-      const idMatch = opText.match(/"id"\s*:\s*"([^"]+)"/);
-      const valueMatch = opText.match(/"value"\s*:\s*(\d+|"[^"]*")/);
-      const deltaMatch = opText.match(/"delta"\s*:\s*(-?\d+)/);
-      if (operationMatch && idMatch) {
-        const opObj = {
-          operation: operationMatch[1],
-          id: idMatch[1]
-        };
-        if (valueMatch) {
-          // Если значение в кавычках – строка, иначе число
-          if (valueMatch[1].startsWith('"')) {
-            opObj.value = valueMatch[1].replace(/^"|"$/g, '');
-          } else {
-            opObj.value = parseInt(valueMatch[1], 10);
-          }
+  const result = [];
+  try {
+    const pattern = new RegExp(`"${arrayName}"\\s*:\\s*\\[(.*?)\\]`, 's');
+    const match = text.match(pattern);
+    if (!match) return [];
+    
+    const operationsStr = match[1];
+    // Ищем объекты операций в этом массиве
+    const opPattern = /{(?:[^{}]|{[^{}]*})*?}/g;
+    let opMatch;
+    while ((opMatch = opPattern.exec(operationsStr)) !== null) {
+      try {
+        const op = JSON.parse(opMatch[0]);
+        if (op.operation && op.id) {
+          result.push(op);
         }
-        if (deltaMatch) opObj.delta = parseInt(deltaMatch[1], 10);
-        ops.push(opObj);
+      } catch (e) {
+        // Если не удалось распарсить, пробуем вытянуть поля
+        try {
+          const opText = opMatch[0];
+          const operationMatch = opText.match(/"operation"\s*:\s*"([^"]+)"/);
+          const idMatch = opText.match(/"id"\s*:\s*"([^"]+)"/);
+          const valueMatch = opText.match(/"value"\s*:\s*(\d+|"[^"]*")/);
+          const deltaMatch = opText.match(/"delta"\s*:\s*(-?\d+)/);
+          if (operationMatch && idMatch) {
+            const opObj = {
+              operation: operationMatch[1],
+              id: idMatch[1]
+            };
+            if (valueMatch) {
+              // Если значение в кавычках – строка, иначе число
+              if (valueMatch[1].startsWith('"')) {
+                opObj.value = valueMatch[1].replace(/^"|"$/g, '');
+              } else {
+                opObj.value = parseInt(valueMatch[1], 10);
+              }
+            }
+            if (deltaMatch) opObj.delta = parseInt(deltaMatch[1], 10);
+            result.push(opObj);
+          }
+        } catch (e2) {
+          // Игнорируем окончательно
+        }
       }
     }
+  } catch (e) {
+    console.warn(`⚠️ [extractOperations] Ошибка при извлечении массива ${arrayName}:`, e.message);
   }
-  return ops;
+  return result;
 }
 
 function createDefaultChoice() {
@@ -740,6 +790,7 @@ function createDefaultChoice() {
  * Обертка над robustJsonParse с дополнительным извлечением фраз
  * @param {string} text - Текст ответа ИИ
  * @returns {Object} Распарсенные данные
+ * @throws {Error} Если парсинг полностью провалился (нет сцены)
  */
 function safeParseAIResponse(text) {
   try {
@@ -753,35 +804,17 @@ function safeParseAIResponse(text) {
       }
     }
     
+    // Проверяем наличие сцены – если её нет, данные бесполезны
+    if (!data.scene) {
+      throw new Error('Отсутствует поле scene');
+    }
+    
     return data;
   } catch (mainError) {
-    console.error('Критическая ошибка парсинга ответа ИИ:', mainError);
-    // Возвращаем аварийный объект в новом формате
-    return {
-      scene: "Ошибка генерации сцены. Ответ ИИ некорректен.",
-      short_summary: "Ошибка парсинга",
-      choices: [
-      {
-        text: "Попробовать снова",
-        requirements: {
-          stats: {},
-          inventory: null
-        },
-        success_rewards: {
-          stats: {},
-          inventory_add: [],
-          inventory_remove: []
-        },
-        fail_penalties: {
-          stats: {},
-          inventory_add: [],
-          inventory_remove: []
-        }
-      }],
-      stat_changes: {},
-      progress_change: 0,
-      thoughtsOfHero: ["Что-то пошло не так..."]
-    };
+    console.error('❌ Критическая ошибка парсинга ответа ИИ:', mainError);
+    // ВАЖНО: больше не возвращаем дефолтную сцену, а пробрасываем исключение,
+    // чтобы вышестоящий код мог показать модальное окно с ошибкой.
+    throw new Error(`Не удалось распарсить ответ ИИ: ${mainError.message}`);
   }
 }
 
@@ -1454,7 +1487,7 @@ function isEmpty(value) {
 export const Utils = {
   repairTruncatedJSON,
   robustJsonParse,
-  safeJsonRepair, // новый экспорт
+  safeJsonRepair,
   getStatusEmoji,
   getGameItemIcon,
   getRussianStatName,
