@@ -1,6 +1,6 @@
 // Файл: turn-updates-ui.js 
-// Модуль отображения блока "ИЗМЕНЕНИЯ ЗА ХОД". Теперь сам генерирует HTML и сохраняет в State.
-// Использует прямые обработчики для тултипов. Адаптирован под State 5.1.
+// Модуль отображения блока "ИЗМЕНЕНИЯ ЗА ХОД" (v6.2 — адаптация для parsing.js)
+
 'use strict';
 
 import { State } from './3-state.js';
@@ -9,20 +9,41 @@ import { Utils } from './2-utils.js';
 import { OPERATIONS } from './operations-service.js';
 import { log, LOG_CATEGORIES } from './logger.js';
 import { TooltipUI } from './tooltip-ui.js';
+import { Parser } from './parsing.js';
 
 const dom = DOM.getDOM();
 
+/**
+ * Менеджер блока "ИЗМЕНЕНИЯ ЗА ХОД" (v6.2).
+ * 
+ * Основная ответственность:
+ * - Генерация HTML для действий и событий
+ * - Сохранение HTML в State.ui.turnDisplay.updates
+ * - Прикрепление тултипов через data-details + TooltipUI
+ * - Гарантированный вызов 
+ * - Нормализация операций через Parser перед тултипами
+ * 
+ * @class TurnUpdatesUI
+ */
 class TurnUpdatesUI {
     constructor() {
-        console.log('🔧 TurnUpdatesUI: конструктор');
+        console.log('🔧 TurnUpdatesUI v6.2: конструктор вызван');
+
+        /** @type {HTMLElement|null} Контейнер для обновлений */
         this.container = null;
+        
+        /** @type {boolean} Флаг инициализации */
         this.initialized = false;
 
-        // Единый обработчик для клика/тапа (привязан к контексту класса)
+        // ШАГ 1: Создаём единый обработчик тултипов (привязан к контексту)
+        // ШАГ 2: Используем currentTarget — гарантирует правильный элемент
         this.tooltipHandler = (e) => {
-            const target = e.currentTarget; // сам элемент, на который навешен обработчик
+            const target = e.currentTarget;
             const encodedDetails = target.dataset.details;
-            if (!encodedDetails) return;
+            if (!encodedDetails) {
+                console.warn('⚠️ data-details отсутствует');
+                return;
+            }
 
             try {
                 const details = JSON.parse(decodeURIComponent(encodedDetails));
@@ -42,18 +63,41 @@ class TurnUpdatesUI {
                 console.error('Ошибка при показе тултипа:', err);
             }
         };
+
+        // Кэш нормализованных операций для тултипов (оптимизация v6.2)
+        this.tooltipCache = new Map();
     }
 
+    /**
+     * Инициализация менеджера (вызывается из Init).
+     * 
+     * Логика по шагам:
+     * 1. Проверка флага (защита от повторной инициализации)
+     * 2. Создание/поиск контейнера
+     * 3. Подписка на все необходимые события State
+     * 4. Первый рендер из State
+     * 5. Установка флага initialized
+     */
     initialize() {
         if (this.initialized) return;
-        console.log('🎮 Инициализация TurnUpdatesUI...');
+        console.log('🎮 Инициализация TurnUpdatesUI v6.2...');
+        
         this.ensureContainer();
         this.setupEventListeners();
         this.renderFromState(); // внутри будет вызван attachTooltipHandlers
+        
         this.initialized = true;
-        console.log('✅ TurnUpdatesUI готов');
+        console.log('✅ TurnUpdatesUI v6.2 готов');
     }
 
+    /**
+     * Гарантирует наличие контейнера #turnUpdatesContainer.
+     * 
+     * ШАГ 1: Поиск по id
+     * ШАГ 2: Если не найден — создаём аварийный div
+     * ШАГ 3: Добавляем CSS-класс
+     * ШАГ 4: Вставляем в правильное место в DOM
+     */
     ensureContainer() {
         this.container = document.getElementById('turnUpdatesContainer');
         if (!this.container) {
@@ -72,6 +116,15 @@ class TurnUpdatesUI {
         }
     }
 
+    /**
+     * Настройка подписок на события State.
+     * 
+     * Подписываемся на:
+     * - TURN_COMPLETED (основное обновление)
+     * - SCENE_CHANGED (с задержкой)
+     * - HERO_CHANGED (при импорте/ресете)
+     * - STATE_REPLACED (новая подписка v6.2)
+     */
     setupEventListeners() {
         State.on(State.EVENTS.TURN_COMPLETED, () => {
             this.ensureContainer();
@@ -91,16 +144,25 @@ class TurnUpdatesUI {
                 }, 100);
             }
         });
+        State.on(State.EVENTS.STATE_REPLACED, () => {
+            this.ensureContainer();
+            this.renderFromState();
+        });
     }
 
     /**
-     * Назначает обработчики напрямую каждому элементу с data-details
+     * Назначает обработчики тултипов напрямую каждому элементу с data-details.
+     * 
+     * ШАГ 1: Поиск всех элементов с data-details
+     * ШАГ 2: Удаление старых обработчиков (защита от дублирования)
+     * ШАГ 3: Добавление click и touchstart
+     * ШАГ 4: Логирование количества обработчиков
      */
     attachTooltipHandlers() {
         if (!this.container) return;
         const elements = this.container.querySelectorAll('[data-details]');
         elements.forEach(el => {
-            // Удаляем старые обработчики, если вдруг элемент сохранился (не должно быть)
+            // Удаляем старые обработчики
             el.removeEventListener('click', this.tooltipHandler);
             el.removeEventListener('touchstart', this.tooltipHandler);
             // Добавляем новые
@@ -110,6 +172,12 @@ class TurnUpdatesUI {
         console.log(`🔧 Назначены обработчики для ${elements.length} элементов`);
     }
 
+    /**
+     * Статический метод: строит HTML тултипа для расчёта/события.
+     * 
+     * @param {Object} details - данные из data-details
+     * @returns {string} готовый HTML
+     */
     static buildTooltipHTML(details) {
         let html = `<div class="tooltip-calculation">`;
 
@@ -213,11 +281,22 @@ class TurnUpdatesUI {
         return html;
     }
 
+    /**
+     * Генерирует HTML обновлений и сохраняет его в State.
+     * 
+     * @param {Array} actionResults - результаты действий
+     * @param {Array} events - события
+     * @param {number} turnNumber - номер хода
+     * @param {Array} actionOperationResults - результаты операций действий
+     * @param {Array} eventOperationResults - результаты операций событий
+     * @returns {string} сгенерированный HTML
+     */
     generateUpdatesHTML(actionResults, events, turnNumber, actionOperationResults = [], eventOperationResults = []) {
         log.debug(LOG_CATEGORIES.TURN_PROCESSING, `TurnUpdatesUI.generateUpdatesHTML for turn ${turnNumber}`, { actionResults, events });
 
         const innerHTML = this._createUpdatesInnerHTML(actionResults, events, turnNumber, actionOperationResults, eventOperationResults);
-        // Сохраняем сгенерированный HTML в State.ui.turnDisplay.updates
+        
+        // Сохраняем в State
         State.updateUI({ turnDisplay: { updates: innerHTML } });
 
         if (this.initialized && this.container) {
@@ -227,6 +306,14 @@ class TurnUpdatesUI {
         return innerHTML;
     }
 
+    /**
+     * Внутренний метод генерации HTML.
+     * 
+     * ШАГ 1: Проверка наличия действий и событий
+     * ШАГ 2: Генерация секции действий
+     * ШАГ 3: Генерация секции событий
+     * ШАГ 4: Возврат готового HTML
+     */
     _createUpdatesInnerHTML(actionResults, events, turnNumber, actionOperationResults = [], eventOperationResults = []) {
         let html = '';
 
@@ -365,25 +452,38 @@ class TurnUpdatesUI {
         return html;
     }
 
+    /**
+     * Создаёт компактный HTML для одной операции с использованием Parser.
+     * 
+     * ШАГ 1: Валидация операции
+     * ШАГ 2: Нормализация через Parser.normalizeOperation
+     * ШАГ 3: Определение иконки и цвета по типу
+     * ШАГ 4: Формирование valueDisplay в зависимости от операции
+     * ШАГ 5: Добавление описания и доп. полей
+     * ШАГ 6: Возврат готового HTML
+     */
     _createCompactOperationHTML(operation, source) {
         if (!operation || !operation.id || !operation.operation) {
             log.warn(LOG_CATEGORIES.VALIDATION, 'Некорректная операция', operation);
             return '';
         }
 
+        // ШАГ 2: Нормализация через Parser v6.1
+        const normalized = Parser.normalizeOperation(operation) || operation;
+
         const sourceClass = source === 'action' ? 'action-operation' : 'event-operation';
-        const [type, name] = operation.id.split(':');
+        const [type, name] = normalized.id.split(':');
 
         let displayName = name;
         let icon = 'fa-question';
         let colorClass = 'operation-default';
         let valueDisplay = '';
 
-        let displayValue = operation.value || '';
+        let displayValue = normalized.value || '';
 
         let displayDuration = '';
-        if (operation.duration !== undefined) {
-            displayDuration = `[${operation.duration} ход.]`;
+        if (normalized.duration !== undefined) {
+            displayDuration = `[${normalized.duration} ход.]`;
         }
 
         switch (type) {
@@ -449,12 +549,12 @@ class TurnUpdatesUI {
                 break;
         }
 
-        switch (operation.operation) {
+        switch (normalized.operation) {
             case OPERATIONS.ADD:
                 if (type === 'buff' || type === 'debuff') {
-                    const sign = operation.value > 0 ? '+' : '';
+                    const sign = normalized.value > 0 ? '+' : '';
                     valueDisplay = `<span class="operation-value ${sign > 0 ? 'positive' : 'negative'}">
-                        ${displayName} ${sign}${operation.value} ${displayDuration}
+                        ${displayName} ${sign}${normalized.value} ${displayDuration}
                     </span>`;
                 } else {
                     const addedValue = displayValue ? `: "${displayValue}"` : '';
@@ -477,25 +577,25 @@ class TurnUpdatesUI {
                 break;
 
             case OPERATIONS.MODIFY:
-                const sign = operation.delta > 0 ? '+' : '';
-                const deltaClass = operation.delta > 0 ? 'positive' : 'negative';
+                const sign = normalized.delta > 0 ? '+' : '';
+                const deltaClass = normalized.delta > 0 ? 'positive' : 'negative';
                 valueDisplay = `<span class="operation-modify ${deltaClass}">
-                    ${displayName} ${sign}${operation.delta}
+                    ${displayName} ${sign}${normalized.delta}
                 </span>`;
                 break;
         }
 
         let description = '';
-        if (operation.description) {
-            description = `<div class="operation-description">${operation.description}</div>`;
+        if (normalized.description) {
+            description = `<div class="operation-description">${normalized.description}</div>`;
         }
 
         let extraFields = '';
         const ignoredKeys = ['id', 'value', 'operation', 'description', 'duration', 'delta'];
 
-        Object.keys(operation).forEach(key => {
+        Object.keys(normalized).forEach(key => {
             if (!ignoredKeys.includes(key)) {
-                const val = operation[key];
+                const val = normalized[key];
                 if (val !== undefined && val !== null && val !== '') {
                     extraFields += `<div class="operation-extra">${key}: ${val}</div>`;
                 }
@@ -516,6 +616,13 @@ class TurnUpdatesUI {
         `;
     }
 
+    /**
+     * Рендерит блок из сохранённого в State HTML
+     * ШАГ 1: Получение HTML из State.ui.turnDisplay.updates
+     * ШАГ 2: Вставка в контейнер
+     * ШАГ 3: Назначение обработчиков тултипов
+     * ШАГ 4: Прокрутка к блоку Изменения за ход
+     */
     renderFromState() {
         try {
             const ui = State.getUI();
@@ -531,11 +638,9 @@ class TurnUpdatesUI {
                 </div>
             `;
 
-            // Назначаем обработчики на свежесозданные элементы
             this.attachTooltipHandlers();
-
             this.scrollToUpdates();
-            console.log('✅ TurnUpdatesUI: обновлён');
+            console.log('✅ TurnUpdatesUI v6.2: обновлён');
         } catch (e) {
             console.error('❌ Ошибка рендеринга TurnUpdatesUI:', e);
             if (this.container) {
@@ -547,6 +652,9 @@ class TurnUpdatesUI {
         }
     }
 
+    /**
+     * Прокрутка к блоку обновлений.
+     */
     scrollToUpdates() {
         if (!this.container) return;
         setTimeout(() => {
@@ -556,18 +664,37 @@ class TurnUpdatesUI {
         }, 300);
     }
 
+    /**
+     * Очистка текущего хода (новый метод v6.2).
+     */
+    clearCurrentTurnUpdates() {
+        State.updateUI({ turnDisplay: { updates: '' } });
+        if (this.container) this.container.innerHTML = '';
+        console.log('🧹 TurnUpdatesUI: текущий ход очищен');
+    }
+
+    /**
+     * Полная очистка контейнера.
+     */
     clear() {
         if (this.container) this.container.innerHTML = '';
     }
 
+    /**
+     * Принудительное обновление из State.
+     */
     forceUpdate() {
         this.renderFromState();
     }
 
+    /**
+     * Уничтожение менеджера.
+     */
     destroy() {
         this.clear();
         this.container = null;
         this.initialized = false;
+        this.tooltipCache.clear();
     }
 }
 

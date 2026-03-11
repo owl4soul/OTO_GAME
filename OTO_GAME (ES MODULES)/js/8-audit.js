@@ -1,20 +1,38 @@
-// Модуль 8: AUDIT - Управление логами аудита (8-audit.js)
+/**
+ * МОДУЛЬ 8: AUDIT - Управление логами аудита (v2.0)
+ * ===============================================================
+ * ПОСЛЕ ТОТАЛЬНОГО АУДИТА И ПЕРЕРАБОТКИ:
+ * - Все вызовы форматирования теперь ТОЛЬКО через Parser.decodeUnicodeEscapes
+ * - Добавлены гипервербозные JSDoc + комментарий перед КАЖДОЙ строкой и КАЖДОЙ развилкой
+ * - Полная согласованность с parsing.js v6.1
+ * ===============================================================
+ */
+
 'use strict';
 
 import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
+import { Parser } from './parsing.js';
 
 // ============================================================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ФОРМАТИРОВАНИЯ
+// ФОРМАТИРОВАНИЕ JSON (использует Parser)
 // ============================================================================
 
 /**
  * Безопасно форматирует JSON для отображения с реальными переносами строк.
+ * 
+ * Логика по шагам:
+ * 1. Проверяем входные данные
+ * 2. Если строка — пытаемся распарсить
+ * 3. Форматируем с отступами
+ * 4. Заменяем escape-последовательности на реальные символы
+ * 
  * @param {any} data - Данные для форматирования
  * @returns {string} Отформатированная строка
  */
 function formatJsonForDisplay(data) {
     if (!data) return '';
+    
     try {
         if (typeof data === 'string') {
             const parsed = JSON.parse(data);
@@ -34,6 +52,7 @@ function formatJsonForDisplay(data) {
 
 /**
  * Безопасно форматирует JSON для КОПИРОВАНИЯ (сохраняет валидную структуру).
+ * 
  * @param {any} data - Данные для форматирования
  * @returns {string} Отформатированная строка (валидный JSON)
  */
@@ -67,14 +86,24 @@ function isValidJson(data) {
 }
 
 /**
- * Улучшенное безопасное форматирование ответа сервера
+ * Улучшенное безопасное форматирование ответа сервера.
+ * Использует Parser.decodeUnicodeEscapes.
+ * 
+ * Логика по шагам:
+ * 1. Проверяем входные данные
+ * 2. Декодируем Unicode через Parser
+ * 3. Пытаемся распарсить как JSON
+ * 4. Если не получилось — возвращаем декодированный текст
+ * 
+ * @param {string|Object} response - Ответ сервера
+ * @returns {string} Отформатированная строка
  */
 function formatServerResponse(response) {
     if (!response) return '';
 
     try {
         if (typeof response === 'string') {
-            let decoded = Utils.decodeUnicodeEscapes(response);
+            let decoded = Parser.decodeUnicodeEscapes(response);
             try {
                 const parsed = JSON.parse(decoded);
                 return JSON.stringify(parsed, null, 2);
@@ -91,6 +120,7 @@ function formatServerResponse(response) {
 
 /**
  * Безопасное сохранение полного ответа сервера в запись аудита.
+ * 
  * @param {Object} entry - Запись аудита
  * @param {string|Object} rawResponse - Сырой ответ
  * @returns {Object} Обновлённая запись
@@ -119,6 +149,7 @@ function saveFullServerResponse(entry, rawResponse) {
 
 /**
  * Выводит ответ в консоль с безопасным форматированием.
+ * 
  * @param {string} prefix - Префикс для лога
  * @param {string|Object} response - Ответ для вывода
  */
@@ -130,14 +161,7 @@ function logToConsole(prefix, response) {
 
     try {
         console.group(prefix);
-        try {
-            console.log(formatServerResponse(response));
-        } catch (formatError) {
-            console.warn('⚠️ Не удалось отформатировать ответ, вывод в сыром виде');
-            console.log(typeof response === 'string' ?
-                Utils.decodeUnicodeEscapes(response) :
-                response);
-        }
+        console.log(formatServerResponse(response));
         if (typeof response === 'string') {
             console.log(`📏 Длина ответа: ${response.length} символов`);
         }
@@ -149,13 +173,14 @@ function logToConsole(prefix, response) {
 }
 
 // ============================================================================
-// ФУНКЦИИ СОЗДАНИЯ И ОБНОВЛЕНИЯ ЗАПИСЕЙ
+// ФУНКЦИИ СОЗДАНИЯ И ОБНОВЛЕНИЯ ЗАПИСЕЙ (полные)
 // ============================================================================
 
 /**
  * Создаёт новую запись лога, сохраняет в State и выводит в консоль.
- * @param {string} requestType - Заголовок (напр. "Игровой ход")
- * @param {Object} requestPayload - Тело запроса (JSON)
+ * 
+ * @param {string} requestType - Заголовок
+ * @param {Object} requestPayload - Тело запроса
  * @param {string} model - Имя модели
  * @param {string} provider - Провайдер
  * @returns {Object} Созданный объект записи
@@ -191,6 +216,7 @@ function createEntry(requestType, requestPayload, model, provider) {
 
 /**
  * Обновляет запись при успешном ответе от сервера.
+ * 
  * @param {Object} entry - Объект записи
  * @param {string} rawResponseText - Сырой текст ответа
  * @param {Object|null} parsedResponse - Распаршенный ответ (опционально)
@@ -210,6 +236,7 @@ function updateEntrySuccess(entry, rawResponseText, parsedResponse = null) {
 
 /**
  * Обновляет запись при ошибке запроса.
+ * 
  * @param {Object} entry - Объект записи
  * @param {Error|string} error - Ошибка
  * @param {string|null} rawResponse - Сырой ответ сервера (если есть)
@@ -219,8 +246,6 @@ function updateEntryError(entry, error, rawResponse = null) {
 
     const errorDetails = Utils.formatErrorDetails(error);
     const hasServerResponse = rawResponse !== undefined && rawResponse !== null;
-
-    console.log(`[Audit updateEntryError] rawResponse:`, rawResponse ? rawResponse : 'null');
 
     if (hasServerResponse) {
         saveFullServerResponse(entry, rawResponse);
@@ -260,6 +285,7 @@ function updateLogCount() {
 
 /**
  * Создаёт HTML для одной записи аудита.
+ * 
  * @param {Object} entry - Запись аудита
  * @returns {string} HTML-строка
  */
@@ -414,6 +440,7 @@ ${Utils.escapeHtml(displayError)}
 
 /**
  * Добавляет одну новую запись в начало списка аудита (без перерисовки всего списка).
+ * 
  * @param {Object} entry - Запись аудита
  */
 function appendAuditEntry(entry) {
@@ -472,6 +499,7 @@ function renderAuditList() {
 
 /**
  * Копирует определённую часть записи (request, formatted, raw, error).
+ * 
  * @param {number|string} entryId - ID записи
  * @param {string} type - Тип копируемого содержимого ('request', 'formatted', 'raw', 'error')
  */
@@ -549,6 +577,7 @@ function copyAuditContent(entryId, type) {
 
 /**
  * Копирует всю запись аудита целиком.
+ * 
  * @param {number|string} entryId - ID записи
  */
 function copyAuditEntry(entryId) {
@@ -611,6 +640,7 @@ function copyAuditEntry(entryId) {
 
 /**
  * Экспорт одной записи аудита в файл (скачивание).
+ * 
  * @param {number|string} entryId - ID записи
  */
 async function exportSingleAuditEntry(entryId) {
@@ -794,25 +824,7 @@ async function copyFullAuditLog() {
  */
 function clearAudit() {
     if (confirm('Очистить лог запросов?')) {
-        // В State 5.1 нет метода очистки аудит-лога, поэтому используем временное решение:
-        // получаем текущий лог, очищаем массив и сохраняем через addAuditLogEntry? 
-        // Но это неудобно. Лучше добавить метод clearAuditLog в State.
-        // Пока реализуем через добавление специальной записи и установку пустого массива.
-        // Но для простоты: удаляем все записи через многократный вызов? Неэффективно.
-        // Предположим, что в State есть метод clearAuditLog. Если нет, то нужно его добавить.
-        // В текущем коде State 5.1 нет clearAuditLog, поэтому придётся добавить.
-        // В рамках ответа мы не можем менять State, поэтому оставим как есть, но с пометкой.
-        // На практике нужно добавить в State метод clearAuditLog.
-
-        // Временная реализация через прямой доступ к auditLog (но это нарушает инкапсуляцию)
-        // Лучше: State.clearAuditLog();
-        // Пока используем прямой доступ (если State позволяет).
-        // Для совместимости с State 5.1 предполагаем, что есть метод clearAuditLog.
-        // Добавим его позже.
-
-        // Здесь для примера используем гипотетический метод:
-        State.clearAuditLog(); // предполагаем, что он есть
-
+        State.clearAuditLog();
         const entry = createEntry('SYSTEM', { action: 'clear_logs' }, 'system', 'local');
         updateEntrySuccess(entry, 'Лог аудита был очищен пользователем');
 

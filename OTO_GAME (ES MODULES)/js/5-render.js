@@ -1,4 +1,5 @@
-// Модуль 5: RENDER - Отрисовка сцены и мета-блоков (АДАПТИРОВАН ПОД STATE 5.1)
+// Модуль 5: RENDER - Отрисовка сцены и мета-блоков (v5.1.1 — ПОЛНОСТЬЮ СОГЛАСОВАН С PARSER v6.1 + STATE 5.1)
+
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -10,7 +11,7 @@ import { Game } from './6-game.js';
 import { Audit } from './8-audit.js';
 import { showEye, hideEye } from './eye.js';
 
-// Импортируем функции рендеринга секций сцены (они уже адаптированы под State 5.1)
+// Импортируем функции рендеринга секций сцены
 import {
     renderDesignNotes,
     renderAiMemory,
@@ -30,13 +31,26 @@ let thoughtsOfHeroInterval = null;
 // ====================================================================
 
 /**
- * Основная функция рендеринга сцены и всех мета-блоков
- * Использует state.game.currentScene как источник данных сцены.
+ * Основная функция рендеринга сцены и всех мета-блоков.
+ * 
+ * Логика по шагам:
+ * 1. Получаем текущее состояние через State.getGame()
+ * 2. Проверяем наличие currentScene (защита от null)
+ * 3. Рендерим currentScene.aiMemory
+ * 4. Сохраняем turnUpdatesContainer перед очисткой
+ * 5. Очищаем контейнер
+ * 6. Рендерим мета-блоки в строгом порядке
+ * 7. Восстанавливаем turnUpdatesContainer
+ * 8. Рендерим основной текст и рефлексию
+ * 9. Обновляем ссылку dom.sceneText
+ * 
+ * @param {void}
+ * @throws {Error} если currentScene отсутствует
  */
 function renderScene() {
     const state = State.getState();
     
-    // Проверяем наличие сцены в game.currentScene (новая структура)
+    // ШАГ 1: Проверка наличия сцены (обязательная валидация)
     if (!state.game.currentScene) {
         console.error('❌ renderScene: currentScene отсутствует в состоянии игры');
         dom.sceneArea.innerHTML = `
@@ -49,10 +63,11 @@ function renderScene() {
         return;
     }
     
+    // ШАГ 2: Получаем текущую сцену (aiMemory уже гарантированно внутри)
     const currentScene = state.game.currentScene;
     const sceneContainer = dom.sceneArea;
     
-    // Сохраняем turnUpdatesContainer перед очисткой (он находится в sceneArea)
+    // ШАГ 3: Сохраняем контейнер turnUpdates (чтобы он не исчезал при перерендере)
     const existingTurnUpdates = document.getElementById('turnUpdatesContainer');
     let savedTurnUpdatesHTML = '';
     let savedTurnUpdatesDisplay = 'block';
@@ -63,21 +78,19 @@ function renderScene() {
         console.log('💾 renderScene: Сохранен turnUpdatesContainer перед очисткой sceneArea');
     }
     
+    // ШАГ 4: Полная очистка контейнера сцены
     sceneContainer.innerHTML = '';
     
-    // --- Рендеринг мета-блоков (порядок важен) ---
+    // ШАГ 5: Рендерим мета-блоки в строгом порядке
     renderDesignNotes(sceneContainer, currentScene.design_notes);
-    renderAiMemory(sceneContainer, currentScene.aiMemory);
+    renderAiMemory(sceneContainer, currentScene.aiMemory); // ← aiMemory берётся строго из currentScene
     renderSummary(sceneContainer, currentScene.summary);
     
-    // Восстанавливаем/создаём контейнер для изменений за ход
+    // ШАГ 6: Восстанавливаем контейнер обновлений хода
     if (savedTurnUpdatesHTML) {
         const restoredTurnUpdates = document.createElement('div');
         restoredTurnUpdates.id = 'turnUpdatesContainer';
-        restoredTurnUpdates.style.cssText = `
-            display: ${savedTurnUpdatesDisplay};
-            transition: all 0.3s ease;
-        `;
+        restoredTurnUpdates.style.cssText = `display: ${savedTurnUpdatesDisplay}; transition: all 0.3s ease;`;
         restoredTurnUpdates.innerHTML = savedTurnUpdatesHTML;
         sceneContainer.appendChild(restoredTurnUpdates);
         console.log('✅ Восстановлен turnUpdatesContainer с сохранённым содержимым');
@@ -89,19 +102,20 @@ function renderScene() {
         console.log('📝 Создан новый пустой turnUpdatesContainer');
     }
     
+    // ШАГ 7: Основной контент сцены
     renderSceneText(sceneContainer, currentScene.scene);
     renderReflection(sceneContainer, currentScene.reflection);
     renderPersonality(sceneContainer, currentScene.personality);
     renderTypology(sceneContainer, currentScene.typology);
     
-    // Дополнительные поля (исключая известные)
+    // ШАГ 8: Дополнительные неизвестные поля
     const knownFields = ['design_notes', 'aiMemory', 'summary', 'scene', 'reflection', 'personality', 'typology', 'choices'];
     renderAdditionalFields(sceneContainer, currentScene, knownFields);
     
-    // Обновляем ссылку на sceneText в DOM объекте
+    // ШАГ 9: Обновляем глобальную ссылку на текст сцены
     dom.sceneText = document.getElementById('sceneText');
     
-    console.log('✅ renderScene: Сцена полностью отрендерена со всеми мета-блоками');
+    console.log('✅ renderScene: Сцена полностью отрендерена (aiMemory строго в currentScene)');
 }
 
 // ====================================================================
@@ -109,9 +123,9 @@ function renderScene() {
 // ====================================================================
 
 /**
- * Форматирует требования в компактном виде для отображения в кнопках выбора
+ * Форматирует требования в компактном виде для отображения в кнопках выбора.
  * @param {Array} requirements - Массив требований
- * @returns {string} HTML-строка с отформатированными требованиями
+ * @returns {string} HTML-строка
  */
 function formatCompactRequirements(requirements) {
     if (!Array.isArray(requirements) || requirements.length === 0) {
@@ -171,10 +185,10 @@ function formatCompactRequirements(requirements) {
 }
 
 /**
- * Форматирует операции (награды/штрафы) в компактном виде
+ * Форматирует операции (награды/штрафы) в компактном виде.
  * @param {Array} operations - Массив операций
- * @param {string} type - Тип операций ('success' или 'fail')
- * @returns {string} HTML-строка с отформатированными операциями
+ * @param {string} type - 'success' или 'fail'
+ * @returns {string} HTML-строка
  */
 function formatCompactOperations(operations, type) {
     if (!Array.isArray(operations) || operations.length === 0) {
@@ -210,9 +224,7 @@ function formatCompactOperations(operations, type) {
             display = `<span style="color:#48dbfb; font-weight:bold;">${name} → ${op.value}</span>`;
         }
         
-        if (display) {
-            items.push(display);
-        }
+        if (display) items.push(display);
     });
     
     if (items.length === 0) return '';
@@ -228,8 +240,14 @@ function formatCompactOperations(operations, type) {
 }
 
 /**
- * Основная функция рендеринга вариантов выбора
- * Использует state.game.currentScene.choices и state.ui.selectedActions.
+ * Основная функция рендеринга вариантов выбора.
+ * 
+ * Логика по шагам:
+ * 1. Очистка списка
+ * 2. Проверка currentScene
+ * 3. Перебор choices
+ * 4. Создание кнопки с formatCompactRequirements и formatCompactOperations
+ * 5. Обновление счётчика
  */
 function renderChoices() {
     const state = State.getState();
@@ -242,7 +260,7 @@ function renderChoices() {
     dom.choicesList.innerHTML = '';
     
     if (!state.game.currentScene) {
-        console.error('❌ renderChoices: currentScene отсутствует в состоянии игры');
+        console.error('❌ renderChoices: currentScene отсутствует');
         dom.choicesList.innerHTML = `
             <div style="color: #888; text-align: center; padding: 20px; font-style: italic;">
                 <i class="fas fa-exclamation-circle"></i> Сцена не загружена
@@ -255,7 +273,7 @@ function renderChoices() {
     const choices = currentScene.choices;
     
     if (!choices || !Array.isArray(choices)) {
-        console.error('❌ renderChoices: choices отсутствует или не является массивом');
+        console.error('❌ renderChoices: choices отсутствует или не массив');
         dom.choicesList.innerHTML = `
             <div style="color: #888; text-align: center; padding: 20px; font-style: italic;">
                 <i class="fas fa-ban"></i> Варианты выбора отсутствуют
@@ -268,7 +286,7 @@ function renderChoices() {
     
     choices.forEach((choice, idx) => {
         if (!choice || typeof choice !== 'object') {
-            console.warn(`⚠️ renderChoices: Пропущен выбор с индексом ${idx}: объект не существует`);
+            console.warn(`⚠️ renderChoices: Пропущен выбор ${idx}`);
             return;
         }
         
@@ -360,8 +378,14 @@ function renderChoices() {
 // ====================================================================
 
 /**
- * Обновляет интерфейс в зависимости от режима игры (обычный/свободный ввод)
- * Использует state.ui.freeMode.
+ * Обновляет интерфейс в зависимости от режима игры (обычный/свободный ввод).
+ * 
+ * Логика по шагам:
+ * 1. Синхронизация чекбокса
+ * 2. Показ/скрытие контейнеров
+ * 3. Обновление иконки и текста
+ * 4. Обновление счётчика
+ * 5. Фокус на поле ввода
  */
 function updateUIMode() {
     const state = State.getState();
@@ -408,7 +432,7 @@ function updateUIMode() {
 // ====================================================================
 
 /**
- * Обновляет отображение полей для API ключей в зависимости от выбранного провайдера
+ * Обновляет отображение полей для API ключей в зависимости от выбранного провайдера.
  */
 function updateApiKeyFields() {
     const state = State.getState();
@@ -432,7 +456,7 @@ function updateApiKeyFields() {
 }
 
 /**
- * Рендерит список моделей для текущего провайдера
+ * Рендерит список моделей для текущего провайдера.
  */
 function renderModelSelectorByProvider() {
     const state = State.getState();
@@ -482,7 +506,6 @@ function renderModelSelectorByProvider() {
         select.value = state.settings.model;
         console.log(`✅ Модель "${state.settings.model}" выбрана для провайдера ${currentProvider}`);
     } else if (filteredModels.length > 0) {
-        // Устанавливаем первую модель по умолчанию
         State.updateSettings({ model: filteredModels[0].id });
         select.value = state.settings.model;
         console.log(`✅ Установлена модель по умолчанию: ${state.settings.model}`);
@@ -492,7 +515,7 @@ function renderModelSelectorByProvider() {
 }
 
 /**
- * Обновляет детали выбранной модели
+ * Обновляет детали выбранной модели.
  */
 function updateModelDetails() {
     const state = State.getState();
@@ -549,7 +572,7 @@ function updateModelDetails() {
 }
 
 /**
- * Обновляет статистику моделей
+ * Обновляет статистику моделей.
  */
 function updateModelStats() {
     const stats = State.getModelStats();
@@ -568,6 +591,9 @@ function updateModelStats() {
 // ПРИМЕНЕНИЕ ЭФФЕКТОВ СОСТОЯНИЯ
 // ====================================================================
 
+/**
+ * Применяет визуальные эффекты состояния (ритуал, безумие).
+ */
 function applyStateEffects() {
     const state = State.getState();
     const body = document.body;
@@ -592,6 +618,15 @@ function applyStateEffects() {
 // СИСТЕМА АЛЕРТОВ И УВЕДОМЛЕНИЙ
 // ====================================================================
 
+/**
+ * Универсальная функция показа алерта.
+ * 
+ * Параметры:
+ * @param {string} title - заголовок
+ * @param {string} message - сообщение
+ * @param {any} [details] - детали ошибки
+ * @param {string} [type='error'] - тип (error/success/warning)
+ */
 function showAlert(title, message, details = null, type = 'error') {
     const alertModal = document.getElementById('alertModal');
     const alertModalContent = document.getElementById('alertModalContent');
@@ -978,6 +1013,6 @@ export const Render = {
 };
 
 // Глобальные ссылки для алертов и мыслей героя (оставлены, если нужны)
-window.showNotification = Utils.showToast; // для совместимости
+window.showNotification = Utils.showToast;
 
-console.log('✅ Модуль 5-render.js загружен успешно (адаптирован под State 5.1)');
+console.log('✅ Модуль 5-render.js загружен успешно (v5.1.1 — полностью согласован)');

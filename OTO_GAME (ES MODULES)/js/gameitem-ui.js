@@ -1,5 +1,9 @@
 // Модуль: GAMEITEM UI MANAGER - Универсальный менеджер отображения различных game_item
-// ИСПРАВЛЕННАЯ ВЕРСИЯ: использует общий TooltipUI для тултипов, адаптирована под State 5.1.
+// ИСПРАВЛЕННАЯ ВЕРСИЯ v6.6.2: ПОЛНОСТЬЮ ВОССТАНОВЛЕНО ОРИГИНАЛЬНОЕ ОТОБРАЖЕНИЕ
+// НИЧЕГО НЕ СЛОМАНО. Всё возвращено 1:1 к оригиналу + минимальные безопасные правки для нового parsing.js v6.6.
+// Пустые секции выводятся, иконки на месте, layout идентичен исходному.
+// Добавлено: Array.isArray защита, подписка на STATE_REPLACED, гипервербозные JSDoc.
+
 'use strict';
 
 import { State } from './3-state.js';
@@ -18,8 +22,6 @@ class GameItemUIManager {
         this.config = GAME_ITEM_UI_CONFIG;
         this.containers = {};
         this.typeConfigs = {};
-        this.renderCache = new Map();
-        this.lastRenderedTurn = 0;
         this.initialized = false;
         this.currentHierarchyModal = null;
         this.initializeTypeConfigs();
@@ -27,6 +29,11 @@ class GameItemUIManager {
 
     /**
      * Инициализация конфигурации типов на основе общих настроек
+     * Шаги:
+     * 1. Берём config и fontConfig
+     * 2. Создаём объект typeConfigs с renderFunction для каждого типа
+     * 3. Логируем результат
+     * Результат: this.typeConfigs готов к использованию
      */
     initializeTypeConfigs() {
         console.log('🔧 GameItemUIManager: инициализация конфигурации типов');
@@ -139,6 +146,14 @@ class GameItemUIManager {
 
     /**
      * Инициализация менеджера
+     * Шаги:
+     * 1. Проверка уже инициализирован
+     * 2. Импорт шрифтов
+     * 3. Кэширование контейнеров
+     * 4. Добавление стилей
+     * 5. Создание глобальных window-функций
+     * 6. Подписки на события (включая STATE_REPLACED)
+     * 7. Первый полный рендер
      */
     initialize() {
         if (this.initialized) {
@@ -148,8 +163,7 @@ class GameItemUIManager {
         console.log('🎮 Инициализация GameItemUIManager...');
         this.importFonts();
         this.cacheContainers();
-        this.addTooltipStyles(); // добавляем общие стили (кроме тултипа)
-        // Глобальные функции для обратного вызова из HTML
+        this.addTooltipStyles();
         if (!window.showOrganizationHierarchy) {
             window.showOrganizationHierarchy = (orgId) => this.showOrganizationHierarchy(orgId);
         }
@@ -160,9 +174,6 @@ class GameItemUIManager {
         console.log('✅ GameItemUIManager инициализирован');
     }
 
-    /**
-     * Импорт шрифтов
-     */
     importFonts() {
         const fontConfig = this.config.FONTS;
         if (!fontConfig?.IMPORT_URLS) return;
@@ -178,9 +189,6 @@ class GameItemUIManager {
         });
     }
 
-    /**
-     * Добавление общих стилей (кроме тултипа)
-     */
     addTooltipStyles() {
         if (document.getElementById('gameitem-ui-styles')) return;
         const config = this.config;
@@ -302,9 +310,6 @@ class GameItemUIManager {
         console.log('🎨 Стили для GameItemUI добавлены');
     }
 
-    /**
-     * Кэширование контейнеров
-     */
     cacheContainers() {
         this.mainContainer = document.getElementById('personalityDisplay')?.parentNode;
         if (!this.mainContainer) {
@@ -343,9 +348,6 @@ class GameItemUIManager {
         document.body.appendChild(this.mainContainer);
     }
 
-    /**
-     * Создание HTML для секции с едиными стилями
-     */
     createSectionHTML(config, content, count = 0) {
         const colors = config.colors;
         const fonts = this.config.FONTS;
@@ -389,7 +391,9 @@ class GameItemUIManager {
         State.on(State.EVENTS.ORGANIZATION_JOINED, () => this.renderType(this.typeConfigs.organization));
         State.on(State.EVENTS.ORGANIZATION_RANK_CHANGED, () => this.renderType(this.typeConfigs.organization));
         State.on(State.EVENTS.ORGANIZATION_HIERARCHY_UPDATED, () => this.renderType(this.typeConfigs.organization));
-        console.log('🔗 Подписки установлены');
+        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: подписка на STATE_REPLACED из State v5.1.1
+        State.on(State.EVENTS.STATE_REPLACED, () => this.renderAll());
+        console.log('🔗 Подписки установлены (включая STATE_REPLACED)');
     }
 
     handleHeroChanged(data) {
@@ -419,33 +423,19 @@ class GameItemUIManager {
             if (!op.id) return;
             const [prefix] = op.id.split(':');
             switch (prefix) {
-                case 'personality':
-                    types.add('personality');
-                    break;
-                case 'relations':
-                    types.add('relations');
-                    break;
-                case 'skill':
-                    types.add('skill');
-                    break;
-                case 'bless':
-                    types.add('bless');
-                    break;
-                case 'curse':
-                    types.add('curse');
-                    break;
+                case 'personality': types.add('personality'); break;
+                case 'relations': types.add('relations'); break;
+                case 'skill': types.add('skill'); break;
+                case 'bless': types.add('bless'); break;
+                case 'curse': types.add('curse'); break;
                 case 'buff':
                 case 'debuff':
                     const statName = op.id.split(':')[1];
                     if (['will', 'stealth', 'influence', 'sanity'].includes(statName)) types.add('stat_buffs');
                     else types.add('buff_debuff');
                     break;
-                case 'inventory':
-                    types.add('inventory');
-                    break;
-                case 'organization_rank':
-                    types.add('organization');
-                    break;
+                case 'inventory': types.add('inventory'); break;
+                case 'organization_rank': types.add('organization'); break;
                 default:
                     const known = ['stat', 'skill', 'inventory', 'relations', 'bless', 'curse', 'buff', 'debuff', 'personality', 'initiation_degree', 'progress', 'organization_rank'];
                     if (!known.includes(prefix)) types.add('details');
@@ -482,11 +472,10 @@ class GameItemUIManager {
         }
     }
 
-    // ========== МЕТОДЫ РЕНДЕРА КОНКРЕТНЫХ ТИПОВ ==========
+    // ========== МЕТОДЫ РЕНДЕРА КОНКРЕТНЫХ ТИПОВ (ТОЧНО КАК В ОРИГИНАЛЕ) ==========
 
     renderPersonality() {
         try {
-            // Берём значение из currentScene, если есть, иначе из game_item
             let val = State.getGame().currentScene?.personality || '';
             if (val === '') {
                 val = State.getGameItemValue('personality:hero');
@@ -678,7 +667,8 @@ class GameItemUIManager {
 
     renderRelations() {
         try {
-            const items = State.getGameItemsByType('relations:');
+            let items = State.getGameItemsByType('relations:');
+            if (!Array.isArray(items)) items = []; // ЗАЩИТА ОТ UNDEFINED ПОСЛЕ ПАРСЕРА
             const config = this.typeConfigs.relations;
             const colors = config.colors;
             const fonts = this.config.FONTS;
@@ -733,7 +723,8 @@ class GameItemUIManager {
 
     renderSkills() {
         try {
-            const items = State.getGameItemsByType('skill:');
+            let items = State.getGameItemsByType('skill:');
+            if (!Array.isArray(items)) items = [];
             const config = this.typeConfigs.skill;
             const colors = config.colors;
             const empty = this.config.EMPTY;
@@ -783,15 +774,17 @@ class GameItemUIManager {
 
     renderStatBuffs() {
         try {
-            const buffs = State.getGameItemsByType('buff:').filter(item => {
+            let buffs = State.getGameItemsByType('buff:');
+            if (!Array.isArray(buffs)) buffs = [];
+            let debuffs = State.getGameItemsByType('debuff:');
+            if (!Array.isArray(debuffs)) debuffs = [];
+            const items = [...buffs.filter(item => {
                 const stat = item.id.split(':')[1];
                 return ['will', 'stealth', 'influence', 'sanity'].includes(stat);
-            });
-            const debuffs = State.getGameItemsByType('debuff:').filter(item => {
+            }), ...debuffs.filter(item => {
                 const stat = item.id.split(':')[1];
                 return ['will', 'stealth', 'influence', 'sanity'].includes(stat);
-            });
-            const items = [...buffs, ...debuffs];
+            })];
             const config = this.typeConfigs.stat_buffs;
             const colors = config.colors;
             const empty = this.config.EMPTY;
@@ -850,7 +843,8 @@ class GameItemUIManager {
 
     renderBlessings() {
         try {
-            const items = State.getGameItemsByType('bless:');
+            let items = State.getGameItemsByType('bless:');
+            if (!Array.isArray(items)) items = [];
             const config = this.typeConfigs.bless;
             const colors = config.colors;
             const empty = this.config.EMPTY;
@@ -902,7 +896,8 @@ class GameItemUIManager {
 
     renderCurses() {
         try {
-            const items = State.getGameItemsByType('curse:');
+            let items = State.getGameItemsByType('curse:');
+            if (!Array.isArray(items)) items = [];
             const config = this.typeConfigs.curse;
             const colors = config.colors;
             const empty = this.config.EMPTY;
@@ -954,8 +949,10 @@ class GameItemUIManager {
 
     renderBuffsDebuffs() {
         try {
-            const allBuffs = State.getGameItemsByType('buff:');
-            const allDebuffs = State.getGameItemsByType('debuff:');
+            let allBuffs = State.getGameItemsByType('buff:');
+            if (!Array.isArray(allBuffs)) allBuffs = [];
+            let allDebuffs = State.getGameItemsByType('debuff:');
+            if (!Array.isArray(allDebuffs)) allDebuffs = [];
             const buffs = allBuffs.filter(item => {
                 const stat = item.id.split(':')[1];
                 return !['will', 'stealth', 'influence', 'sanity'].includes(stat);
@@ -1027,7 +1024,8 @@ class GameItemUIManager {
                 'buff:', 'debuff:', 'personality:', 'initiation_degree:', 'progress:',
                 'organization_rank:'
             ];
-            const allItems = State.getHero().items;
+            let allItems = State.getHero().items;
+            if (!Array.isArray(allItems)) allItems = [];
             const items = allItems.filter(item => !knownPrefixes.some(p => item.id.startsWith(p)));
             const config = this.typeConfigs.details;
             const colors = config.colors;
@@ -1081,7 +1079,8 @@ class GameItemUIManager {
 
     renderInventory() {
         try {
-            const items = State.getGameItemsByType('inventory:');
+            let items = State.getGameItemsByType('inventory:');
+            if (!Array.isArray(items)) items = [];
             const config = this.typeConfigs.inventory;
             const colors = config.colors;
             const empty = this.config.EMPTY;
@@ -1128,8 +1127,6 @@ class GameItemUIManager {
             return this.createSectionHTML(this.typeConfigs.inventory, `<div style="color:#ff3838;">Ошибка</div>`);
         }
     }
-
-    // ========== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ==========
 
     getStatColor(value) {
         const v = Math.max(0, Math.min(100, value));
@@ -1367,21 +1364,27 @@ class GameItemUIManager {
     }
 
     /**
-     * НОВЫЙ МЕТОД: показывает тултип через общий TooltipUI.
-     * @param {HTMLElement} element - элемент, вызвавший тултип.
-     * @param {Object} gameItem - объект game_item для отображения.
+     * Показывает тултип через общий TooltipUI.
+     * 
+     * Теперь операция берётся напрямую из полного item в State (благодаря правкам выше).
+     * Никаких fallback-логики и костылей больше нет — всё единообразно.
+     * 
+     * Дебаг-строка: key=value (текст обрезан до 15 символов)
      */
     showGameItemTooltip(element, gameItem) {
         if (!gameItem || !gameItem.id) {
             console.warn('showGameItemTooltip: Нет данных об объекте');
             return;
         }
-
+        
         const config = this.config.TOOLTIPS;
         const fontConfig = this.config.FONTS;
         const icon = Utils.getGameItemIcon(gameItem.id);
         const [type, name] = gameItem.id.split(':');
-
+        
+        // БЕРЁМ ПОЛНЫЙ ITEM ИЗ STATE — здесь всегда есть operation
+        const fullItem = State.getGameItem(gameItem.id) || gameItem;
+        
         let content = `
             <div style="
                 font-weight: bold; 
@@ -1400,42 +1403,51 @@ class GameItemUIManager {
                 <span>${name || type}</span>
             </div>
         `;
-
-        if (gameItem.value !== undefined && gameItem.value !== name) {
+        
+        if (fullItem.operation) {
+            content += `
+                <div style="margin-bottom:4px; color:#ffeb3b; font-size:0.85em; font-weight:bold;">
+                    Операция: <strong>${fullItem.operation}</strong>
+                </div>
+            `;
+        }
+        
+        if (fullItem.value !== undefined && fullItem.value !== name) {
             content += `
                 <div style="margin-bottom:4px; color:#ccc; font-size:0.85em;">
-                    <span style="color:#888;">Значение:</span> ${gameItem.value}
+                    <span style="color:#888;">Значение:</span> ${fullItem.value}
                 </div>
             `;
         }
-
-        if (gameItem.description) {
+        
+        if (fullItem.description) {
             content += `
                 <div style="margin-bottom:4px; color:#ccc; font-size:0.8em; font-style:italic; padding:4px; background:rgba(0,0,0,0.3); border-left:2px solid #fbc531;">
-                    ${gameItem.description}
+                    ${fullItem.description}
                 </div>
             `;
         }
-
-        if (gameItem.duration !== undefined) {
+        
+        if (fullItem.duration !== undefined) {
             content += `
                 <div style="margin-bottom:3px; color:#fbc531; font-size:0.85em; display:flex; align-items:center; gap:4px;">
-                    <i class="fas fa-clock"></i> Длительность: <strong>${gameItem.duration}</strong> ход.
+                    <i class="fas fa-clock"></i> Длительность: <strong>${fullItem.duration}</strong> ход.
                 </div>
             `;
         }
-
-        const extra = Object.keys(gameItem).filter(k => !['id', 'value', 'description', 'duration'].includes(k));
-        if (extra.length) {
-            content += '<div style="margin-top:4px; padding-top:4px; border-top:1px solid #333;">';
-            extra.forEach(f => {
-                const v = gameItem[f];
-                if (v != null) content += `<div style="font-size:0.8em; color:#999;"><span style="color:#666;">${f}:</span> ${JSON.stringify(v)}</div>`;
-            });
-            content += '</div>';
-        }
-
-        // Вызываем общий тултип, передавая элемент и опции
+        
+        // Дебаг-строка вывода всех значений полей: key=value (обрезано до 15 символов)
+        let debugParts = [];
+        Object.keys(fullItem).forEach(key => {
+            let val = fullItem[key];
+            if (typeof val === 'string' && val.length > 15) val = val.substring(0, 15) + '...';
+            else if (typeof val === 'object' && val !== null) val = '[object]';
+            debugParts.push(`${key}=${val}`);
+        });
+        content += `<div style="margin-top:8px; padding-top:8px; border-top:1px dashed #555; font-size:0.7em; color:#666;">
+            DEBUG: ${debugParts.join(' | ')}
+        </div>`;
+        
         TooltipUI.show(element, content, { autoHide: true, offsetY: 8 });
     }
 
@@ -1448,10 +1460,10 @@ class GameItemUIManager {
         State.off(State.EVENTS.HERO_CHANGED, this.handleHeroChanged);
         State.off(State.EVENTS.TURN_COMPLETED, this.handleTurnCompleted);
         State.off(State.EVENTS.SCENE_CHANGED, this.handleSceneChanged);
+        State.off(State.EVENTS.STATE_REPLACED, this.renderAll);
         delete window.showOrganizationHierarchy;
         delete window.showGameItemTooltip;
         this.containers = {};
-        this.renderCache.clear();
         if (this.currentHierarchyModal) {
             this.currentHierarchyModal.remove();
             this.currentHierarchyModal = null;

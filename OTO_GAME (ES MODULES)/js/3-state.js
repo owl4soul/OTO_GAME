@@ -1,21 +1,4 @@
-/**
- * @module State
- * @version 5.1.0 (с изменениями для корректной замены состояния)
- * @description
- * Модуль управления состоянием игры.
- * Состояние разделено на четыре логические секции:
- * - game: постоянные данные игровой сессии (сцена, история, память ИИ, иерархии организаций)
- * - hero: всё, что относится к персонажу (game_item, мысли, ритуальный статус, бессмертие)
- * - ui: состояние интерфейса (выбранные действия, свободный ввод, компоновка панелей, временные данные последнего хода)
- * - settings: настройки приложения (API, модель, масштаб, список моделей)
- *
- * Для глубокого слияния используется собственная функция с заменой массивов.
- * Аудит-лог хранится отдельно от основного состояния.
- *
- * ИЗМЕНЕНИЯ:
- * - Добавлено событие STATE_REPLACED.
- * - Добавлен метод replaceState для полной замены состояния без слияния (используется при старте кастомной игры).
- */
+// Модуль 3: STATE - Управление состоянием игры (v5.1.1 — ПОЛНОСТЬЮ СОГЛАСОВАН С PARSER v6.1)
 
 'use strict';
 
@@ -32,6 +15,7 @@ import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js';
 
 /**
  * Класс-наблюдатель для управления подписками на события состояния.
+ * @class StateObserver
  */
 class StateObserver {
   constructor() {
@@ -149,7 +133,8 @@ const STATE_EVENTS = {
   AUDIT_LOG_UPDATED: 'audit:log:updated',
 
   // ✨ НОВОЕ СОБЫТИЕ: полная замена состояния
-  STATE_REPLACED: 'state:replaced'
+  STATE_REPLACED: 'state:replaced',
+  TURN_COMPLETED: 'turn:completed'
 };
 
 // ========================
@@ -172,7 +157,9 @@ const DEFAULT_GAME = {
   turnCount: 1,
   summary: '',
   history: [],
-  currentScene: { ...PROMPTS.standardGameOTO.initialGameState },
+  currentScene: { 
+    ...PROMPTS.standardGameOTO.initialGameState
+  },
   organizationsHierarchy: {},
   meta: {
     context: '',
@@ -191,7 +178,7 @@ const DEFAULT_HERO = {
     progress: 0,
     target: null
   },
-  immortal: false // ✨ НОВОЕ ПОЛЕ: бессмертие после достижения 100 в любом статусе
+  immortal: false
 };
 
 /** @constant {Object} */
@@ -203,7 +190,7 @@ const DEFAULT_UI = {
     wBotLeft: 50,
     isCollapsed: false,
     isAutoCollapsed: false,
-    hBotBeforeCollapse: 20   // для временного хранения высоты до сворачивания
+    hBotBeforeCollapse: 20
   },
   freeMode: {
     enabled: false,
@@ -211,7 +198,7 @@ const DEFAULT_UI = {
   },
   selectedActions: [],
   pendingRequest: null,
-  turnDisplay: {          // данные для отображения изменений за последний ход
+  turnDisplay: {
     statChanges: null,
     updates: ''
   }
@@ -230,7 +217,7 @@ const DEFAULT_SETTINGS = {
 
 /** @constant {Object} */
 const DEFAULT_STATE = {
-  version: '5.1.0',
+  version: '5.1.1',
   lastSaveTime: new Date().toISOString(),
   game: { ...DEFAULT_GAME },
   hero: { ...DEFAULT_HERO },
@@ -264,12 +251,10 @@ function isPlainObject(value) {
  * @returns {Object} новый объект, результат слияния
  */
 function deepMerge(target, ...sources) {
-  // Базовый случай: если target не объект, возвращаем его (но для наших целей target всегда объект)
   if (!isPlainObject(target) && !Array.isArray(target)) {
     return target;
   }
 
-  // Создаём копию target (поверхностную, чтобы не мутировать оригинал)
   const result = Array.isArray(target) ? [...target] : { ...target };
 
   for (const source of sources) {
@@ -281,13 +266,10 @@ function deepMerge(target, ...sources) {
         const targetValue = result[key];
 
         if (Array.isArray(sourceValue)) {
-          // Массивы заменяются полностью
           result[key] = sourceValue;
         } else if (isPlainObject(sourceValue) && isPlainObject(targetValue)) {
-          // Оба значения — объекты, рекурсивно сливаем
           result[key] = deepMerge(targetValue, sourceValue);
         } else {
-          // Примитивы, функции, даты и т.п. — просто присваиваем
           result[key] = sourceValue;
         }
       }
@@ -329,32 +311,45 @@ function loadAuditLog() {
   }
 }
 
-// ========================
-// ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ АУДИТ-ЛОГОМ (ДОБАВЛЕНА ОЧИСТКА)
-// ========================
-function clearAuditLog() {
-  auditLog = [];
-  saveAuditLogToLocalStorage();
-  stateObserver.notify(STATE_EVENTS.AUDIT_LOG_UPDATED, { auditLog });
-  log.info(LOG_CATEGORIES.AUDIT, '🧹 Аудит-лог очищен');
-}
+    /**
+     * Нормализует массив game_item: удаляет дубликаты по id, оставляя последнее вхождение.
+     * 
+     * ДОРАБОТКА ПО ЗАПОМИНАНИЮ ОПЕРАЦИЙ:
+     * После нормализации мы гарантированно добавляем поле operation (дефолт 'SET')
+     * для всех статичных типов (personality, relations, inventory и т.д.).
+     * Это обеспечивает консистентность с OperationsService.
+     * 
+     * @param {Array<Object>} items - исходный массив
+     * @returns {Array<Object>} массив с уникальными id + operation
+     */
+    function normalizeHeroItems(items) {
+        const map = new Map();
+        items.forEach(item => {
+            if (item && item.id) {
+                // Сохраняем последний встреченный item
+                map.set(item.id, item);
+            }
+        });
 
-// ========================
+        let normalized = Array.from(map.values());
 
-/**
- * Нормализует массив game_item: удаляет дубликаты по id, оставляя последнее вхождение.
- * @param {Array<Object>} items - исходный массив
- * @returns {Array<Object>} массив с уникальными id
- */
-function normalizeHeroItems(items) {
-  const map = new Map();
-  items.forEach(item => {
-    if (item && item.id) {
-      map.set(item.id, item);
+        // === ДОРАБОТКА: гарантируем наличие operation для ВСЕХ типов ===
+        normalized = normalized.map(item => {
+            if (!item.operation) {
+                const prefix = item.id.split(':')[0];
+                // Для статичных типов ставим логический тип операции
+                if (['personality', 'typology'].includes(prefix)) item.operation = 'SET';
+                else if (['relations', 'skill', 'inventory'].includes(prefix)) item.operation = 'ADD';
+                else if (['buff', 'bless'].includes(prefix)) item.operation = 'ADD';
+                else if (['debuff', 'curse'].includes(prefix)) item.operation = 'REMOVE';
+                else item.operation = 'MODIFY'; // дефолт для статов и progress
+            }
+            return item;
+        });
+        // =================================================================
+
+        return normalized;
     }
-  });
-  return Array.from(map.values());
-}
 
 // ========================
 // ФУНКЦИИ ДЛЯ РАБОТЫ С ОРГАНИЗАЦИЯМИ
@@ -370,12 +365,10 @@ function initializeOrganizationHierarchies() {
     if (!state.game.organizationsHierarchy) {
       state.game.organizationsHierarchy = {};
     }
-    // Загружаем иерархию О.Т.О. из начальной сцены стандартной игры
     const initialScene = PROMPTS.standardGameOTO.initialGameState;
     if (initialScene && initialScene['organization_rank_hierarchy:oto']) {
       state.game.organizationsHierarchy['oto'] = initialScene['organization_rank_hierarchy:oto'];
     }
-    // Проверяем текущую сцену на наличие других иерархий
     const currentScene = state.game.currentScene;
     if (currentScene) {
       Object.keys(currentScene).forEach(key => {
@@ -416,7 +409,6 @@ function setOrganizationHierarchy(orgId, hierarchy) {
     if (!hierarchy?.description || !Array.isArray(hierarchy.description)) return false;
     if (!state.game.organizationsHierarchy) state.game.organizationsHierarchy = {};
     state.game.organizationsHierarchy[orgId] = hierarchy;
-    // Если у героя есть ранг в этой организации, обновляем его описание
     const rankItem = state.hero.items.find(item => item.id === `organization_rank:${orgId}`);
     if (rankItem && hierarchy.description) {
       const rankInfo = hierarchy.description.find(r => r.lvl === rankItem.value);
@@ -512,7 +504,6 @@ function syncOrganizationRank() {
       { operation: OPERATIONS.SET, id: 'organization_rank:oto', value: newRank, description: newRankName },
       state.hero.items
     );
-    // Временный бафф ко всем статам
     state.hero.items = state.hero.items.map(item => {
       if (item.id.startsWith('stat:')) {
         return { ...item, value: Math.min(100, item.value + 5) };
@@ -582,17 +573,15 @@ function getGameItemValue(id) {
 function checkGameFinal() {
   const stats = state.hero.items.filter(item => item.id.startsWith('stat:'));
 
-  // ✨ Проверка на достижение 100 в любом статусе
   const maxStat = stats.find(stat => stat.value >= 100);
   if (maxStat && !state.hero.immortal) {
     log.info(LOG_CATEGORIES.GAME_STATE, `🏆 Герой достиг бессмертия! Стат ${maxStat.id} = ${maxStat.value}`);
     state.hero.immortal = true;
     saveStateToLocalStorage();
     stateObserver.notify(STATE_EVENTS.VICTORY, { stat: maxStat.id, value: maxStat.value });
-    return; // победа важнее смерти, дальше не проверяем
+    return;
   }
 
-  // 💀 Проверка на смерть (только если не бессмертен)
   if (!state.hero.immortal) {
     const deadStats = stats.filter(stat => stat.value <= 0);
     if (deadStats.length > 0) {
@@ -641,9 +630,7 @@ function saveStateToLocalStorage() {
  * ВАЖНЫЕ ИЗМЕНЕНИЯ:
  * - Убраны все проверки версий и миграции (обратная совместимость не требуется).
  * - Загруженное состояние используется как есть, без глубокого слияния с DEFAULT_STATE.
- * - Гарантируется наличие обязательных корневых секций (game, hero, ui, settings);
- *   если какой-то секции нет в сохранении, она добавляется из DEFAULT_STATE.
- * - Для всех типов игр (standard/custom) поведение одинаковое: сохранённые данные не смешиваются с дефолтными.
+ * - Гарантируется наличие обязательных корневых секций.
  */
 function initializeState() {
   try {
@@ -653,10 +640,8 @@ function initializeState() {
     if (savedState) {
       try {
         const parsed = JSON.parse(savedState);
-        // Используем сохранённое состояние как есть — никакого deepMerge!
         state = parsed;
         
-        // Проверяем наличие обязательных корневых секций и добавляем из DEFAULT_STATE, если отсутствуют
         if (!state.game) state.game = DEFAULT_STATE.game;
         if (!state.hero) state.hero = DEFAULT_STATE.hero;
         if (!state.ui) state.ui = DEFAULT_STATE.ui;
@@ -664,13 +649,11 @@ function initializeState() {
         if (!state.version) state.version = DEFAULT_STATE.version;
         if (!state.lastSaveTime) state.lastSaveTime = new Date().toISOString();
         
-        // Нормализуем массив game_item'ов героя (удаляем дубликаты по id)
         state.hero.items = normalizeHeroItems(state.hero.items);
         
         log.info(LOG_CATEGORIES.GAME_STATE, '✅ Состояние загружено из localStorage');
       } catch (parseError) {
         log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ Ошибка парсинга сохранённого состояния:', parseError);
-        // При ошибке парсинга создаём новое состояние из DEFAULT_STATE
         state = deepMerge({}, DEFAULT_STATE);
       }
     } else {
@@ -678,10 +661,8 @@ function initializeState() {
       state = deepMerge({}, DEFAULT_STATE);
     }
     
-    // Инициализируем иерархии организаций (функция использует текущее state.game)
     initializeOrganizationHierarchies();
     
-    // Если история пуста и есть текущая сцена, добавляем начальную запись (первый ход)
     if (state.game.history.length === 0 && state.game.currentScene) {
       state.game.history.push({
         fullText: state.game.currentScene.text || state.game.currentScene.scene,
@@ -692,13 +673,9 @@ function initializeState() {
       state.game.turnCount = 1;
     }
     
-    // Загружаем аудит-лог из отдельного хранилища
     loadAuditLog();
-    
-    // Проверяем, не наступила ли смерть героя или бессмертие (на случай, если статы уже были изменены)
     checkGameFinal();
     
-    // Применяем масштаб из настроек к корневому элементу
     document.documentElement.style.setProperty('--scale-factor', state.settings.scale);
     document.documentElement.style.fontSize = `${state.settings.scale * 16}px`;
     
@@ -718,7 +695,6 @@ function initializeState() {
     
   } catch (error) {
     log.error(LOG_CATEGORIES.ERROR_TRACKING, '❌ Критическая ошибка инициализации:', error);
-    // Аварийное состояние – создаём из DEFAULT_STATE и пытаемся сохранить
     state = deepMerge({}, DEFAULT_STATE);
     try {
       localStorage.setItem('oto_v5_state', JSON.stringify(state));
@@ -727,7 +703,6 @@ function initializeState() {
     }
   }
   
-  // Подписка на событие завершения хода для обновления GameItemUI (оставляем, это не миграция)
   stateObserver.subscribe(STATE_EVENTS.TURN_COMPLETED, () => {
     if (GameItemUI?.handleTurnCompleted) {
       GameItemUI.handleTurnCompleted(state.game.turnCount);
@@ -815,7 +790,7 @@ function setGameType(gameType, initialScene = null) {
 }
 
 // ========================
-// ЭКСПОРТ/ИМПОРТ ПОЛНОГО СОСТОЯНИЯ
+// ЭКСПОРТ/ИМПОРТ ПОЛНОГО СОСТОЯНИЯ (очищено от legacy)
 // ========================
 
 /**
@@ -845,7 +820,7 @@ function exportFullState() {
       totalPlayTime: calculateTotalPlayTime(),
       totalChoices: state.game.history.length,
       organizations: getHeroOrganizations().length,
-      immortal: state.hero.immortal // ✨ добавляем в метаданные
+      immortal: state.hero.immortal
     },
     lastTurnUpdates: state.ui.turnDisplay.updates,
     lastTurnStatChanges: state.ui.turnDisplay.statChanges
@@ -854,15 +829,12 @@ function exportFullState() {
 
 /**
  * Импортирует полное состояние игры из данных.
- * Валидация схемы отключена (ранее использовалась библиотека zod).
+ * Валидация схемы отключена.
  * @param {Object} importData - данные, полученные от exportFullState
  */
 function importFullState(importData) {
-  // Ранее здесь была проверка через zod — удалена.
-
   const data = importData;
 
-  // Применяем импортированные данные к текущему состоянию
   state.game.id = data.gameId || state.game.id;
   state.game.type = data.gameType || state.game.type;
   if (data.heroState) {
@@ -877,7 +849,6 @@ function importFullState(importData) {
     });
   }
   if (data.settings) {
-    // Сохраняем текущие API-ключи, чтобы не затереть их
     const currentApiKeys = { openrouter: state.settings.apiKeyOpenrouter, vsegpt: state.settings.apiKeyVsegpt };
     state.settings = deepMerge({}, state.settings, data.settings);
     state.settings.apiKeyOpenrouter = currentApiKeys.openrouter;
@@ -891,20 +862,6 @@ function importFullState(importData) {
   if (data.metaGameState) state.game.meta = { ...DEFAULT_GAME.meta, ...data.metaGameState };
   if (data.lastTurnUpdates !== undefined) state.ui.turnDisplay.updates = data.lastTurnUpdates;
   if (data.lastTurnStatChanges !== undefined) state.ui.turnDisplay.statChanges = data.lastTurnStatChanges;
-
-  // Восстановление временных полей (могут быть в importData как отдельные поля)
-  if (data.freeMode !== undefined) state.ui.freeMode.enabled = data.freeMode;
-  if (data.freeModeText !== undefined) state.ui.freeMode.text = data.freeModeText;
-  if (data.isRitualActive !== undefined) state.hero.ritual.active = data.isRitualActive;
-  if (data.ritualProgress !== undefined) state.hero.ritual.progress = data.ritualProgress;
-  if (data.ritualTarget !== undefined) state.hero.ritual.target = data.ritualTarget;
-  if (data.thoughtsOfHero) state.hero.thoughts = [...data.thoughtsOfHero];
-
-  // ✨ immortal не импортируется из старых данных, останется false (из DEFAULT_HERO)
-  // но если в metadata есть immortal, можно восстановить (для совместимости экспорта/импорта внутри 5.1)
-  if (data.metadata && typeof data.metadata.immortal === 'boolean') {
-    state.hero.immortal = data.metadata.immortal;
-  }
 
   if (state.game.type === 'standard') syncOrganizationRank();
 
@@ -943,7 +900,7 @@ function exportAllAppData() {
         lastSaveTime: state.lastSaveTime,
         totalPlayTime: calculateTotalPlayTime(),
         organizations: getHeroOrganizations().length,
-        immortal: state.hero.immortal // ✨ добавляем
+        immortal: state.hero.immortal
       }
     }
   };
@@ -979,7 +936,7 @@ function importAllAppData(importData) {
     state.game.type = appData.metadata.gameType || state.game.type;
     state.lastSaveTime = appData.metadata.lastSaveTime || state.lastSaveTime;
     if (typeof appData.metadata.immortal === 'boolean') {
-      state.hero.immortal = appData.metadata.immortal; // ✨ восстанавливаем бессмертие
+      state.hero.immortal = appData.metadata.immortal;
     }
   }
   log.info(LOG_CATEGORIES.GAME_STATE, '📥 Импорт данных приложения');
@@ -1031,7 +988,7 @@ function resetGameProgress(silent = false) {
   const currentAuditLog = [...auditLog];
 
   state.game = { ...DEFAULT_GAME, id: Utils.generateUniqueId() };
-  state.hero = { ...DEFAULT_HERO }; // ✨ immortal сбрасывается в false
+  state.hero = { ...DEFAULT_HERO };
   state.ui = { ...currentUI };
   state.settings = { ...currentSettings };
   auditLog = [...currentAuditLog];
@@ -1090,38 +1047,34 @@ export const State = {
    * @param {Object} fullNewState - новое полное состояние (должно содержать все секции)
    */
   replaceState: (fullNewState) => {
-  if (!state) initializeState();
-  // Глубокая копия нового состояния, чтобы избежать случайных мутаций
-  const newState = JSON.parse(JSON.stringify(fullNewState));
-  
-  // Гарантируем наличие всех обязательных секций (если их нет – берём из DEFAULT_STATE)
-  if (!newState.game) newState.game = DEFAULT_STATE.game;
-  if (!newState.hero) newState.hero = DEFAULT_STATE.hero;
-  if (!newState.ui) newState.ui = DEFAULT_STATE.ui;
-  if (!newState.settings) newState.settings = DEFAULT_STATE.settings;
-  if (!newState.version) newState.version = DEFAULT_STATE.version;
-  if (!newState.lastSaveTime) newState.lastSaveTime = new Date().toISOString();
-  
-  state = newState; // полная замена
-  saveStateToLocalStorage();
-  stateObserver.notify(STATE_EVENTS.STATE_REPLACED, { newState: fullNewState });
-},
+    if (!state) initializeState();
+    const newState = JSON.parse(JSON.stringify(fullNewState));
+    
+    if (!newState.game) newState.game = DEFAULT_STATE.game;
+    if (!newState.hero) newState.hero = DEFAULT_STATE.hero;
+    if (!newState.ui) newState.ui = DEFAULT_STATE.ui;
+    if (!newState.settings) newState.settings = DEFAULT_STATE.settings;
+    if (!newState.version) newState.version = DEFAULT_STATE.version;
+    if (!newState.lastSaveTime) newState.lastSaveTime = new Date().toISOString();
+    
+    state = newState;
+    saveStateToLocalStorage();
+    stateObserver.notify(STATE_EVENTS.STATE_REPLACED, { newState: fullNewState });
+  },
 
   /**
    * Обновляет только секцию game (с заменой массивов).
    * @param {Object} updater - частичные данные для game
    */
   updateGame: (updater) => {
-  if (updater.aiMemory) {
-    console.warn('⚠️ updateGame: попытка записать game.aiMemory', updater.aiMemory);
-  }
-  if (updater.currentScene && updater.currentScene.aiMemory) {
-    console.log('✅ updateGame: обновление currentScene.aiMemory', updater.currentScene.aiMemory);
-  }
-  state.game = deepMerge({}, state.game, updater);
-  saveStateToLocalStorage();
-  stateObserver.notify(STATE_EVENTS.GAME_CHANGED, updater);
-},
+    if (updater.aiMemory !== undefined) {
+      log.warn(LOG_CATEGORIES.GAME_STATE, '🚫 ЗАПРЕЩЕНО: aiMemory нельзя записывать на game.aiMemory (Parser v6.1)');
+      delete updater.aiMemory;
+    }
+    state.game = deepMerge({}, state.game, updater);
+    saveStateToLocalStorage();
+    stateObserver.notify(STATE_EVENTS.GAME_CHANGED, updater);
+  },
 
   /**
    * Обновляет только секцию hero (с заменой массивов).
@@ -1179,14 +1132,13 @@ export const State = {
   needsHeroPhrases,
 
   // ========== АУДИТ-ЛОГ ==========
-  /** Очищает текущий аудит-лог */
-  clearAuditLog: clearAuditLog,
-  /** @returns {Array} текущий аудит-лог */
+  clearAuditLog: () => {
+    auditLog = [];
+    saveAuditLogToLocalStorage();
+    stateObserver.notify(STATE_EVENTS.AUDIT_LOG_UPDATED, { auditLog });
+    log.info(LOG_CATEGORIES.AUDIT, '🧹 Аудит-лог очищен');
+  },
   getAuditLog: () => auditLog,
-  /**
-   * Добавляет запись в аудит-лог (в начало).
-   * @param {Object} entry - запись с произвольными полями (будет дополнена id и timestamp)
-   */
   addAuditLogEntry: (entry) => {
     entry.id = entry.id || Date.now();
     entry.timestamp = Utils.formatMoscowTime(new Date());
@@ -1213,11 +1165,6 @@ export const State = {
   importAllAppData,
 
   // ========== МАСШТАБ ==========
-  /**
-   * Изменяет масштаб интерфейса.
-   * @param {number} newScaleIndex - индекс в массиве CONFIG.scaleSteps
-   * @returns {number} новое значение масштаба
-   */
   updateScale: (newScaleIndex) => {
     newScaleIndex = Math.max(0, Math.min(CONFIG.scaleSteps.length - 1, newScaleIndex));
     state.settings.scaleIndex = newScaleIndex;
@@ -1230,38 +1177,19 @@ export const State = {
     saveStateToLocalStorage();
     return state.settings.scale;
   },
-  /** @returns {number} текущий индекс масштаба */
   getScaleIndex: () => state.settings.scaleIndex,
 
-  // ========== МЕТОДЫ ДЛЯ UI (ДОБАВЛЕНЫ) ==========
-  /**
-   * Сохраняет текущее состояние UI в localStorage (вызывает общее сохранение).
-   * Используется в ui.js.
-   */
+  // ========== МЕТОДЫ ДЛЯ UI ==========
   saveUiState: () => {
     saveStateToLocalStorage();
   },
-
-  /**
-   * Возвращает сохранённое значение высоты нижней панели до сворачивания.
-   * @returns {number}
-   */
   getHBotBeforeCollapse: () => state.ui.layout.hBotBeforeCollapse,
-
-  /**
-   * Устанавливает значение высоты нижней панели до сворачивания.
-   * @param {number} value
-   */
   setHBotBeforeCollapse: (value) => {
     state.ui.layout.hBotBeforeCollapse = value;
     saveStateToLocalStorage();
   },
 
   // ========== МОДЕЛИ ==========
-  /**
-   * Возвращает статистику по моделям (всего, успешных, с ошибками, непроверенных).
-   * @returns {Object}
-   */
   getModelStats: () => {
     const models = state.settings.models || [];
     const total = models.length;
@@ -1272,43 +1200,16 @@ export const State = {
   },
 
   // ========== СЧЁТЧИК ХОДОВ ==========
-  /** @returns {number} новый номер хода после увеличения */
   incrementTurnCount: () => {
     state.game.turnCount++;
     localStorage.setItem('oto_turn_count', state.game.turnCount.toString());
     return state.game.turnCount;
   },
-  /** @returns {number} текущий номер хода */
   getTurnCount: () => state.game.turnCount,
 
-  // ========== ВРЕМЕННЫЕ ГЕТТЕРЫ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ (БУДУТ УДАЛЕНЫ) ==========
-  /** @deprecated используйте State.getGame().currentScene */
-  get currentScene() { return state.game.currentScene; },
-  /** @deprecated используйте State.getUI().selectedActions */
-  get selectedActions() { return state.ui.selectedActions; },
-  /** @deprecated используйте State.updateUI({ selectedActions: val }) */
-  set selectedActions(val) { state.ui.selectedActions = val; saveStateToLocalStorage(); },
-
   // ========== OBSERVER API ==========
-  /**
-   * Подписаться на событие.
-   * @param {string} event - одно из STATE_EVENTS
-   * @param {Function} callback
-   * @returns {Function} функция для отписки
-   */
   on: (event, callback) => stateObserver.subscribe(event, callback),
-  /**
-   * Отписаться от события.
-   * @param {string} event
-   * @param {Function} callback
-   */
   off: (event, callback) => stateObserver.unsubscribe(event, callback),
-  /**
-   * Подписаться на событие один раз.
-   * @param {string} event
-   * @param {Function} callback
-   * @returns {Function} функция для отписки (если вдруг понадобится)
-   */
   once: (event, callback) => {
     const unsubscribe = stateObserver.subscribe(event, (...args) => {
       unsubscribe();
@@ -1316,55 +1217,31 @@ export const State = {
     });
     return unsubscribe;
   },
-  /**
-   * Вручную инициировать событие.
-   * @param {string} event
-   * @param {*} data
-   */
   emit: (event, data) => stateObserver.notify(event, data),
 
   /** @enum {string} */
   EVENTS: STATE_EVENTS,
 
   // ========== МЕТА-ДАННЫЕ (ДЛЯ НЕИЗВЕСТНЫХ ПОЛЕЙ) ==========
-  /**
-   * Устанавливает мета-контекст.
-   * @param {string} context
-   */
   setMetaContext: (context) => {
     state.game.meta.context = context;
     saveStateToLocalStorage();
   },
-  /**
-   * Добавляет неизвестное поле (примитив).
-   * @param {Object} field
-   */
   addUnknownField: (field) => {
     state.game.meta.unknownFields.push(field);
     saveStateToLocalStorage();
   },
-  /**
-   * Добавляет неизвестный массив.
-   * @param {Object} arr
-   */
   addUnknownArray: (arr) => {
     state.game.meta.unknownArrays.push(arr);
     saveStateToLocalStorage();
   },
-  /**
-   * Добавляет неизвестный объект.
-   * @param {Object} obj
-   */
   addUnknownObject: (obj) => {
     state.game.meta.unknownObjects.push(obj);
     saveStateToLocalStorage();
   },
 
   // ========== ДЕФОЛТНЫЕ ЗНАЧЕНИЯ ==========
-  /** @returns {Array} копия дефолтного состояния героя (массив game_item) */
   getDefaultHeroState: () => JSON.parse(JSON.stringify(DEFAULT_HERO_ITEMS)),
 
-  // ✨ ДОПОЛНИТЕЛЬНЫЙ МЕТОД ДЛЯ ПРОВЕРКИ БЕССМЕРТИЯ
-  /** @returns {boolean} true, если герой бессмертен */
   isImmortal: () => state.hero.immortal
 };

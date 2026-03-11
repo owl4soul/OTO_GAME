@@ -1,9 +1,6 @@
-// Модуль 11: INIT - Инициализация приложения (АДАПТИРОВАН ПОД STATE 5.1)
-// ИЗМЕНЕНИЯ:
-// - В setupAcceptPlotHandler добавлена нормализация aiMemory.
-// - Удалено лишнее поле selectedActions из newGameState.
-// - Мета-данные (meta) теперь создаются заново (дефолтные), а не копируются из старого состояния.
-// - Вместо State.setState(newState) используется State.replaceState(newState) для полной замены.
+// Модуль 11: INIT - Инициализация приложения (ИСПРАВЛЕНА ПОД PARSER v6.1 + STATE 5.1 + API FACADE v6.0)
+// АДАПТИРОВАН: теперь использует ТОЛЬКО Parser.processAIResponse и Parser.normalizeOperation
+// Удалён устаревший API_Response.normalizeOperations и Utils.robustJsonParse
 
 'use strict';
 
@@ -25,8 +22,10 @@ import { HistoryUI } from './history-ui.js';
 import { themeEditorPro } from './theme/theme-editor-pro.js';
 import { themeManagerPro } from './theme/theme-pro.js';
 import { OperationsServiceInstance } from './operations-service.js';
-import { API_Response } from './7-2-api-response.js';
+import { Parser } from './parsing.js';
 
+// Глобальная переменная для хранения последнего сгенерированного объекта
+let lastGeneratedSceneData = null;
 const dom = DOM.getDOM();
 
 /**
@@ -384,23 +383,40 @@ function setupSettingsModalEvents() {
     if (btnGen && plotInput) {
         btnGen.onclick = async () => {
             const currentText = plotInput.value.trim();
-            const promptToSend = currentText.length > 0 ? currentText + "</br>" + CONFIG.marsyasScenarioPrompt : CONFIG.marsyasScenarioPrompt;
+            const promptToSend = currentText.length > 0 
+                ? currentText + "</br>" + CONFIG.marsyasScenarioPrompt 
+                : CONFIG.marsyasScenarioPrompt;
             
-            btnGen.disabled = true;
+            // Сохраняем оригинальный текст кнопки ДО изменения
             const oldBtnText = btnGen.innerHTML;
+            btnGen.disabled = true;
             btnGen.innerHTML = '<span class="spinner"></span> ГЕНЕРАЦИЯ...';
-            
             if (btnAccept) btnAccept.disabled = true;
             if (btnClear) btnClear.disabled = true;
             plotInput.disabled = true;
             
             try {
+                // Вызываем API и получаем объект сцены
                 const sceneData = await API.generateCustomScene(promptToSend);
+                
+                // Сохраняем объект для последующего использования
+                lastGeneratedSceneData = sceneData;
+                
+                // Отображаем в поле для информации (JSON)
                 plotInput.value = JSON.stringify(sceneData, null, 2);
+                
+                // Проверка: выведем в консоль первые choices для отладки
+                if (sceneData.choices && sceneData.choices.length > 0) {
+                    console.log('✅ Сгенерировано choices:', sceneData.choices.length);
+                } else {
+                    console.warn('⚠️ Сгенерировано 0 choices');
+                }
+                
                 Render.showSuccessAlert("Сюжет сгенерирован", "Ответ от ИИ получен.");
             } catch (error) {
                 console.error("Ошибка генерации сюжета:", error);
                 Render.showErrorAlert("Ошибка генерации", "Не удалось получить сюжет от ИИ.", error);
+                lastGeneratedSceneData = null;
             } finally {
                 btnGen.disabled = false;
                 btnGen.innerHTML = oldBtnText;
@@ -413,9 +429,7 @@ function setupSettingsModalEvents() {
 }
 
 /**
- * ОБРАБОТЧИК ДЛЯ КНОПКИ "ПРИНЯТЬ" (полная обработка game_items и событий)
- * ИСПРАВЛЕН: добавлена нормализация aiMemory, удалено лишнее поле selectedActions,
- * мета-данные создаются заново, используется replaceState.
+ * ОБРАБОТЧИК ДЛЯ КНОПКИ "ПРИНЯТЬ" (исправленный)
  */
 function setupAcceptPlotHandler() {
     const btnAccept = document.getElementById('btnAcceptPlot');
@@ -423,34 +437,45 @@ function setupAcceptPlotHandler() {
     if (!btnAccept || !plotInput) return;
     
     btnAccept.onclick = () => {
-        const rawText = plotInput.value.trim();
-        if (!rawText) return;
-        
-        State.setGameType('custom');
-        
-        let clean = rawText
-            .replace(/^```json\s*/i, '')
-            .replace(/\s*```$/i, '')
-            .replace(/^```\s*/i, '')
-            .trim();
-        
+        // Пытаемся получить объект из сохранённого
         let sceneData;
-        try {
-            sceneData = JSON.parse(clean);
-            console.log('✅ JSON parsed successfully');
-        } catch (parseError) {
-            console.warn('⚠️ Стандартный парсинг JSON не удался, пробуем восстановление...', parseError);
+        
+        if (lastGeneratedSceneData) {
+            // Используем сохранённый объект напрямую (уже нормализован)
+            sceneData = lastGeneratedSceneData;
+            console.log('✅ Использую сохранённый объект от генерации');
+        } else {
+            // Иначе парсим то, что ввёл пользователь вручную
+            const rawText = plotInput.value.trim();
+            if (!rawText) return;
+            
+            State.setGameType('custom');
+            console.log('📝 Парсинг введённого текста');
+            
+            // Пробуем распарсить как JSON и передать объект в Parser
             try {
-                sceneData = Utils.robustJsonParse(clean);
-                console.log('✅ Удалось восстановить JSON через robustJsonParse');
-            } catch (robustError) {
-                console.error('❌ Восстановление JSON также не удалось', robustError);
-                Render.showErrorAlert("Ошибка парсинга JSON", "Не удалось распарсить ответ", parseError);
-                return;
+                const parsed = JSON.parse(rawText);
+                sceneData = Parser.processAIResponse(parsed);
+            } catch (parseError) {
+                // Если JSON невалиден, пробуем через строку (агрессивный режим)
+                console.warn('Введённый текст не является валидным JSON, пробуем агрессивный парсинг');
+                try {
+                    sceneData = Parser.processAIResponse(rawText);
+                } catch (e) {
+                    console.error('❌ Parser.processAIResponse провалился', e);
+                    Render.showErrorAlert("Ошибка парсинга JSON", "Не удалось обработать ответ через Parser", e);
+                    return;
+                }
             }
         }
         
-        console.log('📦 sceneData keys:', Object.keys(sceneData));
+        // Проверяем, что sceneData содержит choices
+        if (!sceneData.choices || !Array.isArray(sceneData.choices) || sceneData.choices.length === 0) {
+            console.warn('⚠️ sceneData.choices отсутствуют или пусты', sceneData);
+            // Можно показать ошибку пользователю
+            Render.showErrorAlert("Ошибка данных", "Сцена не содержит выборов. Проверьте JSON.");
+            return;
+        }
         
         // Сохраняем настройки и пр.
         const state = State.getState();
@@ -462,38 +487,36 @@ function setupAcceptPlotHandler() {
             gameId: Utils.generateUniqueId(),
             lastSaveTime: new Date().toISOString()
         };
-       
+        
         // 1. Начальное состояние героя (дефолтное)
-        let heroState = State.getDefaultHeroState(); // [{stat:will:50}, ...]
+        let heroState = State.getDefaultHeroState();
         
         // 2. Добавляем/обновляем все game_items из сцены (если есть)
         if (sceneData.game_items && Array.isArray(sceneData.game_items)) {
             sceneData.game_items.forEach(newItem => {
                 const existingIndex = heroState.findIndex(item => item.id === newItem.id);
                 if (existingIndex >= 0) {
-                    // Обновляем существующий
                     heroState[existingIndex] = { ...heroState[existingIndex], ...newItem };
                 } else {
-                    // Добавляем новый
                     heroState.push({ ...newItem });
                 }
             });
         }
         
-        // 3. Применяем операции из корня, если есть
+        // 3. Применяем операции из корня (если есть) — через Parser.normalizeOperation
         if (sceneData.operations && Array.isArray(sceneData.operations)) {
-            const normalizedOps = API_Response.normalizeOperations(sceneData.operations, 'initial');
+            const normalizedOps = sceneData.operations
+                .map(op => Parser.normalizeOperation(op))
+                .filter(Boolean);
             OperationsServiceInstance.applyOperations(normalizedOps, heroState);
         }
         
-        // 4. Применяем эффекты событий и сохраняем результаты для каждого события
+        // 4. Применяем эффекты событий и сохраняем результаты
         const eventOperationResults = [];
         if (sceneData.events && Array.isArray(sceneData.events)) {
-            // Собираем все эффекты событий в один массив
             const allEffects = sceneData.events.flatMap(event => event.effects || []);
             if (allEffects.length > 0) {
                 const eventResult = OperationsServiceInstance.applyOperations(allEffects, heroState);
-                // Разбиваем результаты по событиям
                 let effectIndex = 0;
                 sceneData.events.forEach((event, evIdx) => {
                     const count = event.effects?.length || 0;
@@ -505,44 +528,27 @@ function setupAcceptPlotHandler() {
             }
         }
         
-        // 5. Обновляем metaGameState, если есть meta_context
- 
-// ✨ 6. НОРМАЛИЗУЕМ aiMemory
-let normalizedAiMemory = {};
-if (sceneData.aiMemory !== undefined && sceneData.aiMemory !== null) {
-    const mem = sceneData.aiMemory;
-    if (typeof mem === 'object') {
-        if (Array.isArray(mem)) {
-            normalizedAiMemory = mem.length > 0 ? { items: mem } : {};
-        } else {
-            normalizedAiMemory = mem; // оставляем как есть
-        }
-    } else if (typeof mem === 'string') {
-        normalizedAiMemory = mem.trim() !== '' ? { raw: mem } : {};
-    }
-}
-// Делаем глубокую копию, чтобы не было ссылок на исходный объект
-const aiMemoryCopy = JSON.parse(JSON.stringify(normalizedAiMemory));
-
-// Создаём новое gameState (без поля aiMemory на верхнем уровне!)
-const newGameState = {
-    summary: sceneData.summary || "",
-    history: [],
-    // ⛔️ поле aiMemory УДАЛЕНО – не дублируем!
-    currentScene: {
-        scene: sceneData.scene || sceneData.text || "",
-        choices: sceneData.choices || [],
-        reflection: sceneData.reflection || "",
-        typology: sceneData.typology || "",
-        thoughts: sceneData.thoughts || [],
-        summary: sceneData.summary || "",
-        aiMemory: aiMemoryCopy,                // ✅ только здесь
-        events: sceneData.events || [],
-        design_notes: sceneData.design_notes || "",
-        gameType: 'custom'
-    },
-    organizationsHierarchy: {}
-};
+        // ✨ aiMemory уже нормализован Parser
+        const aiMemoryCopy = JSON.parse(JSON.stringify(sceneData.aiMemory || {}));
+        
+        // Создаём новое gameState
+        const newGameState = {
+            summary: sceneData.summary || "",
+            history: [],
+            currentScene: {
+                scene: sceneData.scene || sceneData.text || "",
+                choices: sceneData.choices || [],
+                reflection: sceneData.reflection || "",
+                typology: sceneData.typology || "",
+                thoughts: sceneData.thoughts || [],
+                summary: sceneData.summary || "",
+                aiMemory: aiMemoryCopy,
+                events: sceneData.events || [],
+                design_notes: sceneData.design_notes || "",
+                gameType: 'custom'
+            },
+            organizationsHierarchy: {}
+        };
         
         // Извлекаем иерархии организаций
         if (sceneData._organizationsHierarchy) {
@@ -564,7 +570,7 @@ const newGameState = {
             turn: 1
         });
         
-        // Собираем новое состояние (meta создаём заново)
+        // Собираем новое состояние
         const newState = {
             version: '5.1.0',
             lastSaveTime: new Date().toISOString(),
@@ -576,7 +582,6 @@ const newGameState = {
                 history: newGameState.history,
                 currentScene: newGameState.currentScene,
                 organizationsHierarchy: newGameState.organizationsHierarchy,
-                // ✨ Сбрасываем meta в дефолтное состояние
                 meta: {
                     context: '',
                     unknownFields: [],
@@ -608,24 +613,22 @@ const newGameState = {
             newState.game.meta.context = JSON.stringify(sceneData.meta_context);
         }
         
-
-        // Устанавливаем основное состояние (используем replaceState для полной замены)
-State.replaceState(newState);
-console.log('🆕 После replaceState game.aiMemory:', State.getGame().aiMemory); // должно быть undefined или {}
-console.log('🆕 currentScene.aiMemory:', State.getGame().currentScene.aiMemory);
+        // Устанавливаем основное состояние
+        State.replaceState(newState);
+        console.log('🆕 После replaceState game.aiMemory:', State.getGame().aiMemory);
+        console.log('🆕 currentScene.aiMemory:', State.getGame().currentScene.aiMemory);
         
-        // 6. Генерируем HTML для начальных событий с результатами их применения
+        // Генерируем HTML для начальных событий
         if (TurnUpdatesUI && typeof TurnUpdatesUI.generateUpdatesHTML === 'function') {
             TurnUpdatesUI.generateUpdatesHTML(
-                [], // actionResults – пусто, хода не было
-                newGameState.currentScene.events || [], // события из сцены
-                0, // номер хода (можно 0)
-                [], // actionOperationResults – пусто
-                eventOperationResults // результаты применения эффектов событий
+                [],
+                newGameState.currentScene.events || [],
+                0,
+                [],
+                eventOperationResults
             );
         }
         
-        // Принудительно обновляем отображение панели
         if (TurnUpdatesUI && TurnUpdatesUI.initialized) {
             TurnUpdatesUI.renderFromState();
         }
@@ -644,6 +647,9 @@ console.log('🆕 currentScene.aiMemory:', State.getGame().currentScene.aiMemory
         
         UI.closeSettingsModal();
         Utils.showToast('Новая кастомная игра запущена', 'success');
+        
+        // Сбрасываем сохранённый объект
+        lastGeneratedSceneData = null;
     };
 }
 

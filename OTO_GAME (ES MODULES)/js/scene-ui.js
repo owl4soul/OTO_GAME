@@ -1,11 +1,5 @@
-/**
- * Модуль: SCENE UI - Рендеринг мета-блоков сцены (заметки, память ГМ, сводка, рефлексия, личность, типология)
- * Все стили берутся из темы через CSS-классы. Инлайн-стили не используются.
- *
- * ИЗМЕНЕНИЯ:
- * - renderAiMemory теперь корректно обрабатывает пустые значения любого типа
- *   (пустой объект, пустой массив, пустая строка, null, undefined) и показывает единообразный плейсхолдер.
- */
+// Модуль: SCENE UI - Рендеринг мета-блоков сцены (v6.1 — полностью согласован с Parser v6.1 + State 5.1)
+// ====================================================================================
 
 'use strict';
 
@@ -13,11 +7,10 @@ import { State } from './3-state.js';
 import { Utils } from './2-utils.js';
 import { themeManagerPro } from './theme/theme-pro.js';
 
-// Используем глобальную переменную DOMPurify, подключённую через CDN
-// Если библиотека не загрузилась – возвращаем исходный html + warn
+// Глобальная переменная DOMPurify (подключена через CDN)
 const DOMPurify = window.DOMPurify || {
     sanitize: (html) => {
-        console.warn('DOMPurify не загружен. Санитизация HTML отключена.');
+        console.warn('DOMPurify не загружен. HTML вставляется без санитизации!');
         return html;
     }
 };
@@ -27,51 +20,56 @@ const DOMPurify = window.DOMPurify || {
 // ====================================================================
 
 /**
- * Рекурсивно подсчитывает общее количество всех ключей в объекте (включая вложенные структуры)
- * @param {Object|Array} obj - Объект или массив для подсчета
- * @param {Set} visited - Множество уже посещенных объектов (для предотвращения циклов)
+ * Рекурсивно подсчитывает общее количество всех ключей/элементов в объекте или массиве.
+ * 
+ * @param {any} obj - Объект, массив или примитив
+ * @param {Set} visited - Множество уже посещенных объектов (защита от циклических ссылок)
  * @returns {number} Общее количество ключей/элементов
  */
 function countKeysRecursive(obj, visited = new Set()) {
+    // ШАГ 1: базовые случаи
     if (obj === null || obj === undefined) return 0;
     if (visited.has(obj)) return 0;
     visited.add(obj);
     
-    // Примитивы – это одно значение
+    // ШАГ 2: примитивы — одно значение
     if (typeof obj !== 'object') return 1;
     
+    // ШАГ 3: массивы
     if (Array.isArray(obj)) {
         let total = obj.length;
         for (let i = 0; i < obj.length; i++) {
             total += countKeysRecursive(obj[i], visited);
         }
         return total;
-    } else {
-        const keys = Object.keys(obj);
-        let total = keys.length;
-        for (let i = 0; i < keys.length; i++) {
-            total += countKeysRecursive(obj[keys[i]], visited);
-        }
-        return total;
     }
+    
+    // ШАГ 4: объекты
+    const keys = Object.keys(obj);
+    let total = keys.length;
+    for (let i = 0; i < keys.length; i++) {
+        total += countKeysRecursive(obj[keys[i]], visited);
+    }
+    return total;
 }
 
 /**
- * Рекурсивно отображает объект aiMemory на всю глубину
- * ВАЖНО: Полностью раскрывает массивы и вложенные объекты без сокращений
+ * Рекурсивно отображает aiMemory на всю глубину с отступами и форматированием.
+ * 
  * @param {any} obj - Значение для отображения (любого типа)
- * @param {number} depth - Текущая глубина вложенности (для отступов)
- * @returns {string} HTML-строка с отформатированным представлением объекта
+ * @param {number} depth - Текущая глубина вложенности
+ * @returns {string} HTML-строка
  */
 function renderAiMemoryRecursive(obj, depth = 0) {
+    // ШАГ 1: null / undefined
     if (obj === null) {
         return `<div style="margin-left: ${depth * 20}px; color: #888; font-style: italic;">null</div>`;
     }
-    
     if (obj === undefined) {
         return `<div style="margin-left: ${depth * 20}px; color: #888; font-style: italic;">undefined</div>`;
     }
     
+    // ШАГ 2: массивы
     if (Array.isArray(obj)) {
         if (obj.length === 0) {
             return `<div style="margin-left: ${depth * 20}px; color: #9c88ff; font-style: italic;">[] (пустой массив)</div>`;
@@ -82,22 +80,18 @@ function renderAiMemoryRecursive(obj, depth = 0) {
         </div>`;
         
         for (let i = 0; i < obj.length; i++) {
-            const element = obj[i];
-            
             html += `<div style="margin-left: ${(depth + 1) * 20}px; color: #9c88ff;">
                 <span style="color: #fbc531; font-weight: bold;">[${i}]:</span>
             </div>`;
-            
-            html += renderAiMemoryRecursive(element, depth + 2);
+            html += renderAiMemoryRecursive(obj[i], depth + 2);
         }
-        
         return html;
     }
     
+    // ШАГ 3: примитивы
     if (typeof obj !== 'object') {
         let value = obj;
         let color = '#ccc';
-        let additionalStyle = '';
         let displayValue = '';
         
         if (typeof obj === 'boolean') {
@@ -110,31 +104,18 @@ function renderAiMemoryRecursive(obj, depth = 0) {
             displayValue = `<span style="color: ${color};">${value}</span>`;
         }
         else if (typeof obj === 'string') {
-            if (obj.length > 500) {
-                additionalStyle = 'max-height: 200px; overflow-y: auto; background: rgba(0,0,0,0.1); padding: 5px; border-radius: 3px;';
-                displayValue = `<div style="${additionalStyle}"><span style="color: ${color}; white-space: pre-wrap; word-break: break-all;">${Utils.escapeHtml(obj)}</span></div>`;
-            } else {
-                displayValue = `<span style="color: ${color};">${Utils.escapeHtml(value)}</span>`;
-            }
+            displayValue = `<span style="color: ${color}; white-space: pre-wrap; word-break: break-all;">${Utils.escapeHtml(value)}</span>`;
         }
         else {
             color = '#ff9ff3';
             displayValue = `<span style="color: ${color}; font-style: italic;">${String(value)}</span>`;
         }
         
-        if (!additionalStyle) {
-            return `<div style="margin-left: ${depth * 20}px;">
-                ${displayValue}
-            </div>`;
-        } else {
-            return `<div style="margin-left: ${depth * 20}px;">
-                ${displayValue}
-            </div>`;
-        }
+        return `<div style="margin-left: ${depth * 20}px;">${displayValue}</div>`;
     }
     
+    // ШАГ 4: объекты
     const entries = Object.entries(obj);
-    
     if (entries.length === 0) {
         return `<div style="margin-left: ${depth * 20}px; color: #888; font-style: italic;">{} (пустой объект)</div>`;
     }
@@ -145,14 +126,11 @@ function renderAiMemoryRecursive(obj, depth = 0) {
     
     for (let i = 0; i < entries.length; i++) {
         const [key, value] = entries[i];
-        
         const keyHtml = `<span style="color: #fbc531; font-weight: bold;">${Utils.escapeHtml(key)}:</span>`;
         
         const isValuePrimitive = (value === null || value === undefined ||
             typeof value !== 'object' ||
-            (typeof value === 'object' &&
-                !Array.isArray(value) &&
-                Object.keys(value).length === 0));
+            (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0));
         
         if (isValuePrimitive) {
             html += `<div style="margin-left: ${(depth + 1) * 20}px;">
@@ -170,14 +148,15 @@ function renderAiMemoryRecursive(obj, depth = 0) {
 }
 
 /**
- * Форматирует aiMemory для отображения с заголовком и статистикой
- * @param {Object} aiMemory - Объект памяти ГМ
- * @returns {string} HTML-строка с отформатированной памятью
+ * Форматирует aiMemory для отображения с заголовком и статистикой.
+ * 
+ * @param {any} aiMemory - Объект памяти ГМ
+ * @returns {string} HTML-строка
  */
 function formatAiMemory(aiMemory) {
-    // Если данных нет – специальная заглушка
-    if (aiMemory === null || aiMemory === undefined) {
-        return '<div style="color: #888; font-style: italic; padding: 10px; text-align: center;">Нет данных в памяти ГМ</div>';
+    const isEmpty = Utils.isEmpty(aiMemory);
+    if (isEmpty) {
+        return '<div style="color: #888; font-style: italic; padding: 10px; text-align: center;">Память ГМ пуста</div>';
     }
     
     const totalKeys = countKeysRecursive(aiMemory);
@@ -194,39 +173,24 @@ function formatAiMemory(aiMemory) {
 }
 
 /**
- * Добавляет функциональность сворачивания/разворачивания для блока памяти ГМ
+ * Добавляет кнопку сворачивания/разворачивания для блока памяти ГМ.
  */
 function makeAiMemoryCollapsible() {
     setTimeout(() => {
         const aiMemoryBlocks = document.querySelectorAll('.ai-memory-block');
         
-        aiMemoryBlocks.forEach((block, index) => {
+        aiMemoryBlocks.forEach((block) => {
             const header = block.querySelector('.ai-memory-header');
-            if (!header) return;
-            
-            if (header.querySelector('.memory-toggle-btn')) {
-                return;
-            }
+            if (!header || header.querySelector('.memory-toggle-btn')) return;
             
             const toggleBtn = document.createElement('span');
             toggleBtn.className = 'memory-toggle-btn';
             toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
-            toggleBtn.style.cssText = `
-                cursor: pointer;
-                margin-right: 8px;
-                color: #fbc531;
-                transition: transform 0.3s ease;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 16px;
-                height: 16px;
-            `;
+            toggleBtn.style.cssText = `cursor: pointer; margin-right: 8px; color: #fbc531; transition: transform 0.3s ease;`;
             
             const contentDiv = block.querySelector('.ai-memory-content');
             if (!contentDiv) return;
             
-            // Сохраняем оригинальную высоту (если была задана)
             const originalMaxHeight = contentDiv.style.maxHeight || '400px';
             let isExpanded = true;
             
@@ -238,31 +202,29 @@ function makeAiMemoryCollapsible() {
                     contentDiv.style.maxHeight = originalMaxHeight;
                     contentDiv.style.overflowY = 'auto';
                     toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
-                    toggleBtn.style.transform = 'rotate(0deg)';
                 } else {
                     contentDiv.style.maxHeight = '0px';
                     contentDiv.style.overflowY = 'hidden';
                     toggleBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
-                    toggleBtn.style.transform = 'rotate(0deg)';
                 }
             };
             
             header.insertBefore(toggleBtn, header.firstChild);
-            toggleBtn.title = 'Свернуть/развернуть память ГМ';
         });
     }, 150);
 }
 
 // ====================================================================
-// ФУНКЦИИ РЕНДЕРИНГА ОТДЕЛЬНЫХ СЕКЦИЙ СЦЕНЫ (используют только классы)
+// ФУНКЦИИ РЕНДЕРИНГА ОТДЕЛЬНЫХ СЕКЦИЙ СЦЕНЫ
 // ====================================================================
 
 /**
- * Рендерит блок "Заметки дизайнера"
+ * Рендерит блок "Заметки дизайнера".
+ * 
  * @param {HTMLElement} container - родительский контейнер
  * @param {string} designNotes - текст заметок
  */
-export function renderDesignNotes(container, designNotes) {
+function renderDesignNotes(container, designNotes) {
     if (!designNotes || designNotes.trim() === '') return;
     
     const block = document.createElement('div');
@@ -281,14 +243,17 @@ export function renderDesignNotes(container, designNotes) {
 }
 
 /**
- * Рендерит блок "Память ГМ"
- * @param {HTMLElement} container - родительский контейнер
- * @param {Object} aiMemory - объект памяти
+ * Рендерит блок "Память ГМ".
+ * 
+ * Логика по шагам:
+ * 1. Проверка на пустоту через Utils.isEmpty
+ * 2. Если пусто — показываем плейсхолдер
+ * 3. Если есть данные — считаем ключи + рекурсивный рендер
+ * 4. Добавляем возможность сворачивания
  */
-export function renderAiMemory(container, aiMemory) {
-    // ✨ УЛУЧШЕННАЯ ПРОВЕРКА НА ПУСТОТУ ЛЮБОГО ТИПА
+function renderAiMemory(container, aiMemory) {
     const isEmpty = Utils.isEmpty(aiMemory);
-
+    
     if (isEmpty) {
         const emptyBlock = document.createElement('div');
         emptyBlock.className = 'scene-meta-block no-memory-block';
@@ -321,16 +286,14 @@ export function renderAiMemory(container, aiMemory) {
     
     container.appendChild(block);
     
-    // Добавляем возможность сворачивания
+    // ШАГ: добавляем сворачивание
     setTimeout(() => makeAiMemoryCollapsible(), 200);
 }
 
 /**
- * Рендерит блок "Сводка сцены"
- * @param {HTMLElement} container - родительский контейнер
- * @param {string} summary - текст сводки
+ * Рендерит блок "Сводка сцены".
  */
-export function renderSummary(container, summary) {
+function renderSummary(container, summary) {
     if (!summary || summary.trim() === '') return;
     
     const block = document.createElement('div');
@@ -349,57 +312,34 @@ export function renderSummary(container, summary) {
 }
 
 /**
- * Рендерит основной текст сцены
+ * Рендерит основной текст сцены.
+ * 
  * @param {HTMLElement} container - родительский контейнер
  * @param {string} sceneText - текст сцены (может содержать HTML)
  */
-export function renderSceneText(container, sceneText) {
+ function renderSceneText(container, sceneText) {
     const block = document.createElement('div');
     block.className = 'scene-text-block';
     block.id = 'sceneText';
     
     if (sceneText && sceneText.trim() !== '') {
-        // Получаем текущую тему (активную или редактируемую)
-        const currentTheme = themeManagerPro.getCurrentTheme();
-        
-        // Разрешено ли использование HTML? По умолчанию true, так как ИИ может генерировать разметку.
-        // Если в будущем понадобится выключить – можно брать из настроек.
-        const allowHtml = true;
-        
         let contentHtml;
-        if (allowHtml) {
-            // Санитизируем HTML, чтобы избежать XSS-атак, но разрешаем базовые теги форматирования
-            if (DOMPurify && typeof DOMPurify.sanitize === 'function') {
-                contentHtml = DOMPurify.sanitize(sceneText, {
-                    ALLOWED_TAGS: [
-                        'p', 'br', 'b', 'i', 'em', 'strong', 'div', 'span',
-                        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li',
-                        'a', 'img', 'blockquote', 'pre', 'code', 'hr', 'table',
-                        'thead', 'tbody', 'tr', 'th', 'td', 'caption'
-                    ],
-                    ALLOWED_ATTR: [
-                        'href', 'target', 'src', 'alt', 'title', 'class', 'id'
-                    ]
-                });
-            } else {
-                // Если DOMPurify недоступен – используем исходный текст (риск XSS)
-                console.warn('DOMPurify не найден. HTML вставляется без санитизации!');
-                contentHtml = sceneText;
-            }
+        
+        // ШАГ 1: санитизация через DOMPurify
+        if (DOMPurify && typeof DOMPurify.sanitize === 'function') {
+            contentHtml = DOMPurify.sanitize(sceneText, {
+                ALLOWED_TAGS: ['p','br','b','i','em','strong','div','span','h1','h2','h3','ul','ol','li','a','blockquote','pre','code'],
+                ALLOWED_ATTR: ['href','target','class','id']
+            });
         } else {
-            // Режим только текст – экранируем всё
             contentHtml = Utils.escapeHtml(sceneText).replace(/\n/g, '<br>');
         }
         
-        block.innerHTML = `
-            <div class="scene-text-content">
-                ${contentHtml}
-            </div>
-        `;
+        block.innerHTML = `<div class="scene-text-content">${contentHtml}</div>`;
     } else {
         block.innerHTML = `
             <div class="scene-text-empty">
-                <i class="fas fa-book"></i> Текст сцены отсутствует или пуст
+                <i class="fas fa-book"></i> Текст сцены отсутствует
             </div>
         `;
     }
@@ -408,11 +348,9 @@ export function renderSceneText(container, sceneText) {
 }
 
 /**
- * Рендерит блок "Рефлексия"
- * @param {HTMLElement} container - родительский контейнер
- * @param {string} reflection - текст рефлексии
+ * Рендерит блок "Рефлексия героя".
  */
-export function renderReflection(container, reflection) {
+function renderReflection(container, reflection) {
     if (!reflection || reflection.trim() === '') return;
     
     const block = document.createElement('div');
@@ -432,11 +370,9 @@ export function renderReflection(container, reflection) {
 }
 
 /**
- * Рендерит блок "Изменение личности"
- * @param {HTMLElement} container - родительский контейнер
- * @param {string} personality - текст личности
+ * Рендерит блок "Изменение личности".
  */
-export function renderPersonality(container, personality) {
+function renderPersonality(container, personality) {
     if (!personality || personality.trim() === '') return;
     
     const block = document.createElement('div');
@@ -455,11 +391,9 @@ export function renderPersonality(container, personality) {
 }
 
 /**
- * Рендерит блок "Типология"
- * @param {HTMLElement} container - родительский контейнер
- * @param {string} typology - текст типологии
+ * Рендерит блок "Типология".
  */
-export function renderTypology(container, typology) {
+function renderTypology(container, typology) {
     if (!typology || typology.trim() === '') return;
     
     const block = document.createElement('div');
@@ -478,12 +412,9 @@ export function renderTypology(container, typology) {
 }
 
 /**
- * Рендерит дополнительные поля сцены (не входящие в стандартный набор)
- * @param {HTMLElement} container - родительский контейнер
- * @param {Object} currentScene - объект сцены
- * @param {Array<string>} knownFields - список известных полей (не рендерятся как дополнительные)
+ * Рендерит дополнительные поля сцены (не входящие в стандартный набор).
  */
-export function renderAdditionalFields(container, currentScene, knownFields) {
+function renderAdditionalFields(container, currentScene, knownFields) {
     const additionalFields = Object.keys(currentScene).filter(key =>
         !knownFields.includes(key) &&
         currentScene[key] !== null &&
@@ -493,11 +424,7 @@ export function renderAdditionalFields(container, currentScene, knownFields) {
     
     additionalFields.forEach(field => {
         const value = currentScene[field];
-        
-        // Пропускаем массивы и сложные объекты (они уже обработаны в aiMemory)
-        if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
-            return;
-        }
+        if (Array.isArray(value) || (typeof value === 'object' && value !== null)) return;
         
         const block = document.createElement('div');
         block.className = 'scene-meta-block additional-field-block';
@@ -514,3 +441,14 @@ export function renderAdditionalFields(container, currentScene, knownFields) {
         container.appendChild(block);
     });
 }
+
+export {
+    renderDesignNotes,
+    renderAiMemory,
+    renderSummary,
+    renderSceneText,
+    renderReflection,
+    renderPersonality,
+    renderTypology,
+    renderAdditionalFields
+};

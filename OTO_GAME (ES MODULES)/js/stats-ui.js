@@ -1,4 +1,5 @@
-// Модуль: STATS UI - Рендеринг строки статов и связанных анимаций
+// Модуль: STATS UI - Рендеринг строки статов и связанных анимаций (v6.1 — полностью согласован с Parser v6.1 + State 5.1)
+
 'use strict';
 
 import { State } from './3-state.js';
@@ -8,52 +9,93 @@ import { CONFIG } from './1-config.js';
 
 const dom = DOM.getDOM();
 
+/**
+ * Менеджер отображения строки статов (will, stealth, influence, sanity) + прогресс-бар + степени посвящения.
+ * 
+ * Основная ответственность:
+ * - Отображение текущих значений статов с учётом баффов/дебаффов
+ * - Анимация изменений (летающие числа + пульсация)
+ * - Тултипы с описаниями при клике
+ * - Обновление прогресс-бара уровня и визуализации степеней
+ * - Подписка на события State.HERO_CHANGED и State.TURN_COMPLETED
+ * 
+ * @class StatsUIManager
+ */
 class StatsUIManager {
     constructor() {
+        /** @type {boolean} Флаг, что менеджер уже инициализирован */
         this.initialized = false;
+        
+        /** @type {Object} Предыдущие базовые значения статов (для расчёта дельты и анимации) */
         this.previousBaseStats = {};
+        
+        /** @type {number} Номер последнего отрендеренного хода (для оптимизации) */
         this.lastRenderedTurn = 0;
     }
 
+    /**
+     * Инициализация StatsUI (вызывается один раз из Init).
+     * 
+     * Логика по шагам:
+     * 1. Проверка флага initialized (защита от повторной инициализации)
+     * 2. Сохранение начальных базовых значений статов
+     * 3. Регистрация глобальной функции window.showStatTooltip
+     * 4. Подписка на события State
+     * 5. Первый полный рендер
+     * 6. Установка флага initialized = true
+     */
     initialize() {
         if (this.initialized) return;
 
         console.log('🎮 Инициализация StatsUI...');
 
-        // Сохраняем начальные значения статов
+        // ШАГ 2: сохраняем начальные базовые значения
         const baseStats = this.getBaseStats();
         this.previousBaseStats = { ...baseStats };
 
-        // Регистрируем глобальные функции для тултипов
+        // ШАГ 3: регистрация глобальной функции для onclick в HTML
         if (!window.showStatTooltip) {
             window.showStatTooltip = (element, statName, value) => this.showStatTooltip(element, statName, value);
             console.log('🌐 Глобальная функция showStatTooltip зарегистрирована');
         }
 
-        // Подписываемся на события
+        // ШАГ 4: подписки
         this.setupEventListeners();
 
-        // Первоначальный рендер
+        // ШАГ 5: первый рендер
         this.render();
 
         this.initialized = true;
         console.log('✅ StatsUI инициализирован');
     }
 
+    /**
+     * Настройка подписок на события State.
+     * 
+     * Подписываемся на:
+     * - HERO_CHANGED (изменение статов, баффы, дебаффы)
+     * - TURN_COMPLETED (обновление после каждого хода)
+     */
     setupEventListeners() {
         State.on(State.EVENTS.HERO_CHANGED, (data) => {
-            console.log('🎯 StatsUI: HERO_CHANGED событие');
+            console.log('🎯 StatsUI: HERO_CHANGED событие получено');
             this.render();
         });
 
         State.on(State.EVENTS.TURN_COMPLETED, (data) => {
-            console.log(`🔄 StatsUI: TURN_COMPLETED, ход ${data?.turnCount || State.getGame().turnCount}`);
+            const turn = data?.turnCount || State.getGame().turnCount;
+            console.log(`🔄 StatsUI: TURN_COMPLETED, ход ${turn}`);
             this.render();
         });
 
-        console.log('🔗 StatsUI: подписки установлены');
+        console.log('🔗 StatsUI: подписки на события успешно установлены');
     }
 
+    /**
+     * Получает текущие базовые значения четырёх основных статов.
+     * 
+     * @returns {Object} { will: number, stealth: number, influence: number, sanity: number }
+     */
     getBaseStats() {
         return {
             will: State.getGameItemValue('stat:will') || 50,
@@ -63,9 +105,14 @@ class StatsUIManager {
         };
     }
 
+    /**
+     * Возвращает цвет для значения стата (градиент от красного к белому).
+     * 
+     * @param {number} value - текущее значение стата (0-100)
+     * @returns {string} hex-цвет
+     */
     getStatColor(value) {
         const val = Math.max(0, Math.min(100, value));
-
         if (val <= 10) return '#800000';
         if (val <= 20) return '#FF0000';
         if (val <= 30) return '#FF5500';
@@ -78,6 +125,13 @@ class StatsUIManager {
         return '#FFFFFF';
     }
 
+    /**
+     * Возвращает подробное описание стата для тултипа.
+     * 
+     * @param {string} statName - имя стата ('will', 'stealth', 'influence', 'sanity')
+     * @param {number} value - текущее значение
+     * @returns {string} описание
+     */
     getStatDescription(statName, value) {
         const descriptions = {
             will: {
@@ -134,15 +188,19 @@ class StatsUIManager {
             }
         };
 
-        const statDescriptions = descriptions[statName];
-        if (!statDescriptions) return "Характеристика неизвестна";
-
+        const statDescriptions = descriptions[statName] || {};
         const val = Math.max(0, Math.min(100, value));
         const bracket = Math.floor(val / 10) * 10;
-
-        return statDescriptions[bracket] || statDescriptions[50];
+        return statDescriptions[bracket] || "Характеристика неизвестна";
     }
 
+    /**
+     * Показывает анимацию изменения значения стата (летающее число + пульсация).
+     * 
+     * @param {HTMLElement} element - элемент стата
+     * @param {number} delta - изменение (+ или -)
+     * @param {string} color - цвет анимации
+     */
     showStatChangeAnimation(element, delta, color) {
         if (delta === 0) return;
 
@@ -182,11 +240,16 @@ class StatsUIManager {
         }, 1500);
     }
 
+    /**
+     * Показывает тултип с описанием стата.
+     * 
+     * @param {HTMLElement} element - элемент, по которому кликнули
+     * @param {string} statName - имя стата
+     * @param {number} value - текущее значение
+     */
     showStatTooltip(element, statName, value) {
         const existingTooltip = document.querySelector('.stat-tooltip');
-        if (existingTooltip) {
-            existingTooltip.remove();
-        }
+        if (existingTooltip) existingTooltip.remove();
 
         const description = this.getStatDescription(statName, value);
         const color = this.getStatColor(value);
@@ -218,26 +281,12 @@ class StatsUIManager {
         document.body.appendChild(tooltip);
 
         const rect = element.getBoundingClientRect();
-        const tooltipRect = tooltip.getBoundingClientRect();
-
         let left = rect.left + window.scrollX;
         let top = rect.bottom + window.scrollY + 5;
 
-        if (left + tooltipRect.width > window.innerWidth) {
-            left = window.innerWidth - tooltipRect.width - 10;
-        }
-
-        if (left < 10) {
-            left = 10;
-        }
-
-        if (top + tooltipRect.height > window.innerHeight + window.scrollY) {
-            top = rect.top + window.scrollY - tooltipRect.height - 5;
-        }
-
-        if (top < window.scrollY) {
-            top = window.scrollY + 10;
-        }
+        if (left + tooltip.offsetWidth > window.innerWidth) left = window.innerWidth - tooltip.offsetWidth - 10;
+        if (left < 10) left = 10;
+        if (top + tooltip.offsetHeight > window.innerHeight + window.scrollY) top = rect.top + window.scrollY - tooltip.offsetHeight - 5;
 
         tooltip.style.left = `${left}px`;
         tooltip.style.top = `${top}px`;
@@ -246,35 +295,43 @@ class StatsUIManager {
             if (tooltip && tooltip.parentNode) {
                 tooltip.style.animation = 'tooltipFadeOut 0.2s ease-out';
                 setTimeout(() => {
-                    if (tooltip && tooltip.parentNode) {
-                        tooltip.parentNode.removeChild(tooltip);
-                    }
+                    if (tooltip && tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
                 }, 200);
             }
             document.removeEventListener('click', removeTooltip);
         };
 
-        setTimeout(() => {
-            document.addEventListener('click', removeTooltip);
-        }, 100);
-
+        setTimeout(() => document.addEventListener('click', removeTooltip), 100);
         setTimeout(removeTooltip, 5000);
     }
 
+    /**
+     * Основной метод рендеринга всей строки статов.
+     * 
+     * Логика по шагам:
+     * 1. Получаем текущие базовые значения статов
+     * 2. Собираем все баффы и дебаффы
+     * 3. Для каждого стата (will, stealth, influence, sanity):
+     *    - рассчитываем итоговое значение
+     *    - показываем анимацию изменения
+     *    - формируем детальный HTML с модификаторами
+     * 4. Обновляем прогресс-бар уровня
+     * 5. Обновляем визуализацию степеней посвящения
+     */
     render() {
         console.log('🔍 StatsUI.render called');
 
         const game = State.getGame();
-        const hero = State.getHero();
         const baseStats = this.getBaseStats();
 
-        // Обновляем счётчик ходов в интерфейсе
+        // ШАГ 1: обновление счётчика ходов
         const turnCounter = dom.turnCounter;
         if (turnCounter) {
             turnCounter.textContent = `Ход: ${game.turnCount}`;
             console.log(`📊 Счётчик ходов обновлён: ${game.turnCount}`);
         }
 
+        // ШАГ 2: сбор баффов и дебаффов
         const buffs = State.getGameItemsByType('buff:');
         const debuffs = State.getGameItemsByType('debuff:');
 
@@ -286,27 +343,16 @@ class StatsUIManager {
         };
 
         buffs.forEach(buff => {
-            const [type, statName] = buff.id.split(':');
-            if (statEffects[statName] && buff.value !== undefined) {
-                statEffects[statName].buffs.push({
-                    value: buff.value,
-                    duration: buff.duration || 0,
-                    name: buff.description || 'Бафф'
-                });
-            }
+            const statName = buff.id.split(':')[1];
+            if (statEffects[statName]) statEffects[statName].buffs.push(buff);
         });
 
         debuffs.forEach(debuff => {
-            const [type, statName] = debuff.id.split(':');
-            if (statEffects[statName] && debuff.value !== undefined) {
-                statEffects[statName].debuffs.push({
-                    value: debuff.value,
-                    duration: debuff.duration || 0,
-                    name: debuff.description || 'Дебафф'
-                });
-            }
+            const statName = debuff.id.split(':')[1];
+            if (statEffects[statName]) statEffects[statName].debuffs.push(debuff);
         });
 
+        // ШАГ 3: рендер каждого стата
         ['will', 'stealth', 'influence', 'sanity'].forEach(statName => {
             const valElement = dom.vals[statName];
             if (!valElement) return;
@@ -315,14 +361,13 @@ class StatsUIManager {
             const previousBase = this.previousBaseStats[statName] || baseValue;
             const { buffs: buffList, debuffs: debuffList } = statEffects[statName];
 
-            const totalBuff = buffList.reduce((sum, b) => sum + b.value, 0);
-            const totalDebuff = debuffList.reduce((sum, d) => sum + d.value, 0);
-            const totalModifier = totalBuff + totalDebuff;
-            const currentValue = baseValue + totalModifier;
+            const totalBuff = buffList.reduce((sum, b) => sum + (b.value || 0), 0);
+            const totalDebuff = debuffList.reduce((sum, d) => sum + (d.value || 0), 0);
+            const currentValue = baseValue + totalBuff + totalDebuff;
 
             const currentColor = this.getStatColor(currentValue);
-
             const delta = baseValue - previousBase;
+
             if (delta !== 0) {
                 this.showStatChangeAnimation(valElement, delta, currentColor);
             }
@@ -330,67 +375,28 @@ class StatsUIManager {
             this.previousBaseStats[statName] = baseValue;
 
             let detailHtml = '';
-
-            if (buffList.length > 0 || debuffList.length > 0) {
+            if (buffList.length || debuffList.length) {
                 detailHtml = `<span style="color: #888; font-size: 0.8em;">${baseValue}</span>`;
-
-                buffList.forEach(buff => {
-                    if (buff.value > 0) {
-                        detailHtml += ` <span style="color: #4cd137; font-size: 0.8em;">+${buff.value}[${buff.duration}]</span>`;
-                    }
-                });
-
-                debuffList.forEach(debuff => {
-                    if (debuff.value < 0) {
-                        const absValue = Math.abs(debuff.value);
-                        detailHtml += ` <span style="color: #e84118; font-size: 0.8em;">-${absValue}[${debuff.duration}]</span>`;
-                    }
-                });
-
-                valElement.innerHTML = `
-                    <div class="stat-container" style="display: flex; flex-direction: column; align-items: center; line-height: 1.1; gap: 1px; position: relative;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                            <span style="color: #999; font-size: 0.85em; white-space: nowrap;">${Utils.getRussianStatName(statName)}:</span>
-                            <span class="stat-value-clickable" 
-                                  data-stat="${statName}" 
-                                  data-value="${currentValue}"
-                                  onclick="window.showStatTooltip(this, '${statName}', ${currentValue})"
-                                  style="color: ${currentColor}; 
-                                         font-weight: bold; 
-                                         font-size: 1.1em; 
-                                         text-shadow: 0 0 3px ${currentColor}40;
-                                         cursor: help;
-                                         user-select: none;">
-                                ${currentValue}
-                            </span>
-                        </div>
-                        <div style="font-size: 0.7em; color: #666; width: 100%; text-align: right; line-height: 1;">
-                            ${detailHtml}
-                        </div>
-                    </div>
-                `;
-            } else {
-                valElement.innerHTML = `
-                    <div class="stat-container" style="display: flex; justify-content: space-between; align-items: center; position: relative;">
-                        <span style="color: #999; font-size: 0.85em;">${Utils.getRussianStatName(statName)}:</span>
-                        <span class="stat-value-clickable" 
-                              data-stat="${statName}" 
-                              data-value="${currentValue}"
-                              onclick="window.showStatTooltip(this, '${statName}', ${currentValue})"
-                              style="color: ${currentColor}; 
-                                     font-weight: bold; 
-                                     font-size: 1.1em; 
-                                     text-shadow: 0 0 3px ${currentColor}40;
-                                     cursor: help;
-                                     user-select: none;">
-                            ${currentValue}
-                        </span>
-                    </div>
-                `;
+                buffList.forEach(b => detailHtml += ` <span style="color: #4cd137; font-size: 0.8em;">+${b.value}</span>`);
+                debuffList.forEach(d => detailHtml += ` <span style="color: #e84118; font-size: 0.8em;">${d.value}</span>`);
             }
+
+            valElement.innerHTML = `
+                <div class="stat-container" style="display: flex; justify-content: space-between; align-items: center; position: relative;">
+                    <span style="color: #999; font-size: 0.85em;">${Utils.getRussianStatName(statName)}:</span>
+                    <span class="stat-value-clickable" 
+                          data-stat="${statName}" 
+                          data-value="${currentValue}"
+                          onclick="window.showStatTooltip(this, '${statName}', ${currentValue})"
+                          style="color: ${currentColor}; font-weight: bold; font-size: 1.1em; text-shadow: 0 0 3px ${currentColor}40; cursor: help; user-select: none;">
+                        ${currentValue}
+                    </span>
+                </div>
+                ${detailHtml ? `<div style="font-size: 0.7em; color: #666; text-align: right;">${detailHtml}</div>` : ''}
+            `;
         });
 
-        // Прогресс и степени
+        // ШАГ 4: прогресс-бар уровня
         const progressValue = State.getGameItemValue('progress:level') || 0;
         const maxScore = 110;
         const pct = Math.min(100, Math.max(0, (progressValue / maxScore) * 100));
@@ -398,6 +404,7 @@ class StatsUIManager {
             dom.tube.style.height = `${pct}%`;
         }
 
+        // ШАГ 5: визуализация степеней посвящения
         const degreeItems = State.getGameItemsByType('initiation_degree:');
         const currentDegreeItem = degreeItems.find(item => item.value && item.value.trim() !== '');
         let currentDegreeIndex = 0;
@@ -421,6 +428,9 @@ class StatsUIManager {
         console.log('✅ StatsUI.render completed');
     }
 
+    /**
+     * Принудительное обновление всей строки статов.
+     */
     forceUpdate() {
         console.log('🔄 StatsUI: принудительное обновление');
         this.render();
