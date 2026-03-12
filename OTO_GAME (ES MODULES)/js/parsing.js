@@ -1,45 +1,62 @@
 // ====================================================================
 // ФАЙЛ: parsing.js
-// ВЕРСИЯ: v8.0 — BRACKET-COUNTING EXTRACTION + ПОЛНОЕ ВОССТАНОВЛЕНИЕ ВЛОЖЕННЫХ ОПЕРАЦИЙ
+// ВЕРСИЯ: v8.1 — ПОЛНОЕ КОММЕНТИРОВАНИЕ, ПОНЯТНЫЕ ИМЕНА, УЛУЧШЕННАЯ ДОКУМЕНТАЦИЯ
 // ====================================================================
 //
 // @module Parser
 // @description
 //   Единственный модуль парсинга ответов от ИИ. Гарантирует извлечение данных
 //   даже из сильно повреждённых или обрезанных JSON-ответов.
+//   Входные данные: сырая строка от AI (может содержать markdown, обрезанные скобки, лишние символы)
+//   или готовый объект (тогда применяется только нормализация).
+//   Выходные данные: объект типа ParsedAIResponse, содержащий все игровые поля
+//   и мета-информацию о процессе парсинга (ParsingInfo).
 //
-// ИСПРАВЛЕНЫ КРИТИЧЕСКИЕ БАГИ v7.x:
-//   1. REGEX-баг: все ленивые regex `[\s\S]*?` заменены на bracket-counting функцию
-//      `findArrayContent()`. Ленивый regex останавливался на ПЕРВОМ `]`, убивая
-//      все вложенные массивы (success_rewards, fail_penalties, effects).
-//   2. decodeUnicodeEscapes теперь декодирует ТОЛЬКО `\uXXXX`. Ранее он заменял
-//      `\"` → `"` ДО JSON.parse, разрушая границы строк.
-//   3. extractOperationsFromBrokenObject переписан с bracket-counting +
-//      посимвольным fallback для каждого объекта отдельно.
-//   4. Добавлен `getLastDebugLog()` — экспорт буфера для дебаггера.
-//   5. Нормализация ADD-операций: поле `value` корректно обрабатывается.
-//
-// АЛГОРИТМ РАБОТЫ:
-//   0. Если вход — объект → нормализация без парсинга.
-//   1. Строка → проверяем на вложенный API-ответ (choices[0].message.content).
-//   2. Уровень 0: предобработка (markdown, экранирование newline, висячие запятые).
-//   3. Уровень 1: стандартный JSON.parse.
-//   4. Уровень 2: balanceBrackets + повторный JSON.parse.
-//   5. Уровень 3: агрессивное извлечение через bracket-counting для всех полей.
-//   6. Нормализация: aiMemory, choices, events, operations, requirements.
-//   7. Сбор ParsingInfo + debugBuffer для дебаггера.
+// АЛГОРИТМ РАБОТЫ (ПОДРОБНО):
+//   0. Если вход — объект → применяется нормализация напрямую, без парсинга.
+//   1. Если вход — строка, проверяем, не является ли она полным API-ответом
+//      вида { choices: [ { message: { content: "...JSON..." } } ] }.
+//      Если да — извлекаем вложенный JSON.
+//   2. Уровень 0: предобработка строки:
+//      - удаление обёрток ```json ... ```
+//      - экранирование буквальных переносов строк внутри строк (замена \n на \\n)
+//      - удаление висячих запятых перед } и ]
+//   3. Уровень 1: стандартный JSON.parse. Если успешно — данные считаются чистыми.
+//   4. Уровень 2: если парсинг не удался, применяем balanceBrackets()
+//      (закрываем незакрытые строки, добавляем недостающие скобки, убираем лишние запятые)
+//      и повторяем JSON.parse.
+//   5. Уровень 3: если всё ещё не удалось — агрессивное извлечение методом подсчёта скобок
+//      (bracket‑counting). Для каждого известного поля (scene, choices, events и т.д.)
+//      находим его содержимое, извлекаем, при необходимости восстанавливаем вложенные объекты.
+//      Используются функции findArrayContent, findObjectContent, extractArrayWithStats,
+//      extractOperationsFromBrokenObject и др.
+//   6. После получения объекта (любым способом) применяется нормализация:
+//      - приведение типов, диапазонов, формата идентификаторов,
+//      - очистка массивов от невалидных элементов,
+//      - преобразование aiMemory в единый объектный формат.
+//   7. Формируется ParsingInfo с деталями процесса (статус, количество восстановленных,
+//      время, ошибки и т.д.) и добавляется в результирующий объект как поле parsing_info.
+//   8. В режиме отладки (DEBUG_MODE) в консоль выводится детальный лог.
 //
 // ГЛУБИНА ИЗВЛЕЧЕНИЯ:
-//   - Корневые поля: scene, reflection, typology, personality, summary, design_notes.
-//   - Массивы: choices (+ success_rewards, fail_penalties, requirements),
-//              events (+ effects), thoughts.
-//   - Объект: aiMemory (любая сложность).
+//   - Корневые поля: scene, reflection, typology, personality, summary, design_notes (строки).
+//   - Массивы: choices (с вложенными success_rewards, fail_penalties, requirements),
+//              events (с вложенными effects), thoughts (строки).
+//   - Объект: aiMemory (произвольная структура, нормализуется к объекту).
 //   - Рекурсивное восстановление вложенных операций из повреждённых объектов.
 //
+// ТИПЫ ДАННЫХ:
+//   - GameOperation — игровая операция (ADD, REMOVE, MODIFY, SET) с id, value/delta и пр.
+//   - ParsedChoice — вариант выбора с текстом, сложностью, требованиями, наградами/штрафами.
+//   - ParsedEvent — событие с типом, описанием, эффектами и причиной.
+//   - ParsingInfo — мета-информация о парсинге (статус, подход, счётчики, ошибки).
+//   - ParsedAIResponse — итоговый объект, содержащий все данные + parsing_info.
+//
 // ИСТОРИЯ ИЗМЕНЕНИЙ:
-//   v6.9–v7.8 – см. предыдущие версии.
+//   v6.9–v7.8 – предшествующие версии.
 //   v8.0      – bracket-counting вместо lazy regex; исправлен decodeUnicodeEscapes;
 //               переписан extractOperationsFromBrokenObject; добавлен getLastDebugLog().
+//   v8.1      – полное комментирование, понятные имена переменных, улучшенная документация.
 // ====================================================================
 
 'use strict';
@@ -47,53 +64,79 @@
 import { CONFIG } from './1-config.js';
 import { log, LOG_CATEGORIES } from './logger.js';
 
+// ----------------------------------------------------------------------------
+// ТИПЫ ДАННЫХ (JSDoc)
+// ----------------------------------------------------------------------------
+
 /**
  * @typedef {Object} GameOperation
- * @property {string}  operation   - 'ADD' | 'REMOVE' | 'MODIFY' | 'SET'
- * @property {string}  id          - идентификатор game_item, например 'stat:sanity'
- * @property {number}  [delta]     - изменение для MODIFY
- * @property {*}       [value]     - значение для ADD/SET
- * @property {number}  [duration]  - длительность в ходах
- * @property {string}  [description]
+ * @property {string}  operation   - Тип операции: 'ADD' | 'REMOVE' | 'MODIFY' | 'SET'
+ * @property {string}  id          - Идентификатор целевого элемента в формате "категория:имя", например 'stat:sanity' или 'inventory:gold'
+ * @property {number}  [delta]     - Изменение для операции MODIFY (число)
+ * @property {*}       [value]     - Значение для ADD или SET (может быть числом, строкой, объектом)
+ * @property {number}  [duration]  - Длительность эффекта в ходах (для временных модификаторов)
+ * @property {string}  [description] - Пояснение к операции (для отладки)
  */
 
 /**
  * @typedef {Object} ParsedChoice
- * @property {string}         text
- * @property {number}         difficulty_level  - 1–10
- * @property {string[]}       requirements
- * @property {GameOperation[]} success_rewards
- * @property {GameOperation[]} fail_penalties
+ * @property {string}         text              - Текст выбора, отображаемый игроку
+ * @property {number}         difficulty_level - Уровень сложности от 1 до 10 (нормализуется)
+ * @property {string[]}       requirements      - Массив идентификаторов требований (например, "stat:will")
+ * @property {GameOperation[]} success_rewards  - Операции, выполняемые при успехе
+ * @property {GameOperation[]} fail_penalties   - Операции, выполняемые при провале
  */
 
 /**
  * @typedef {Object} ParsedEvent
- * @property {string}         type
- * @property {string}         description
- * @property {GameOperation[]} effects
- * @property {string}         reason
+ * @property {string}         type        - Тип события (например, 'world_event', 'combat')
+ * @property {string}         description - Текстовое описание события
+ * @property {GameOperation[]} effects     - Операции, вызываемые событием
+ * @property {string}         reason      - Причина или триггер события
  */
 
 /**
  * @typedef {Object} ParsingInfo
- * @property {'OK'|'WARN'|'ERROR'} status
- * @property {string}   approach           - какой уровень сработал
- * @property {Object}   knownFieldErrors   - ошибки по полям
- * @property {number}   extractedOperationsCount
- * @property {string}   rawResponseText
- * @property {string[]} parsingSteps
- * @property {string}   choicesCount       - "успешно/найдено"
- * @property {string}   eventsCount
- * @property {number}   thoughtsCount
- * @property {number}   recoveredCount
- * @property {string[]} normalizationNotes
- * @property {number}   durationMs
- * @property {string[]} debugLog           - полный лог шагов (для дебаггера)
+ * @property {'OK'|'WARN'|'ERROR'} status          - Итоговый статус парсинга
+ * @property {string}   approach                    - Название уровня, который сработал (standard_json_parse, truncated_repair, aggressive_bracket_counting, direct_object)
+ * @property {Object}   knownFieldErrors            - Объект с ошибками по конкретным полям (ключ – имя поля, значение – текст ошибки)
+ * @property {number}   extractedOperationsCount    - Общее количество извлечённых операций (сумма success_rewards, fail_penalties, effects)
+ * @property {string}   rawResponseText             - Исходный текст ответа (может быть очень длинным)
+ * @property {string[]} parsingSteps                 - Массив строк с описанием последовательности шагов парсинга
+ * @property {string}   choicesCount                 - Строка вида "успешно/найдено" для choices
+ * @property {string}   eventsCount                   - Строка вида "успешно/найдено" для events
+ * @property {number}   thoughtsCount                 - Количество элементов в массиве thoughts после нормализации
+ * @property {number}   recoveredCount                - Количество объектов (choices или events), восстановленных вручную
+ * @property {string[]} normalizationNotes            - Заметки о нестандартных преобразованиях во время нормализации
+ * @property {number}   durationMs                     - Время выполнения функции в миллисекундах
+ * @property {string[]} debugLog                       - Полный отладочный лог (доступен при DEBUG_MODE)
  */
 
-// ============================================================================
+/**
+ * @typedef {Object} ParsedAIResponse
+ * @property {string} scene              - Текст текущей сцены (локация, атмосфера)
+ * @property {string} reflection         - Внутренний монолог или рефлексия персонажа
+ * @property {string} typology           - Типологические характеристики (архетип, класс, раса)
+ * @property {string} personality        - Описание личности, настроения, поведенческих черт
+ * @property {string} summary            - Краткое резюме произошедшего
+ * @property {string} design_notes       - Заметки дизайнера, мета-информация
+ * @property {Array<ParsedChoice>} choices - Варианты выбора
+ * @property {Array<ParsedEvent>} events - События мира
+ * @property {Array<string>} thoughts    - Массив мыслей / внутренних реплик
+ * @property {Object} aiMemory           - Память ИИ (произвольная структура, нормализована к объекту)
+ * @property {ParsingInfo} parsing_info  - Мета-информация о парсинге
+ */
+
+/**
+ * @typedef {Object} ArrayExtractionResult
+ * @property {Array} items      - Извлечённые объекты (после попыток восстановления)
+ * @property {number} totalFound - Общее количество найденных в сыром тексте элементов
+ * @property {number} recovered  - Количество объектов, восстановленных вручную
+ */
+
+// ----------------------------------------------------------------------------
 // ГЛОБАЛЬНЫЕ НАСТРОЙКИ И DEBUG-РЕЖИМ
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /** @type {boolean} */
 let DEBUG_MODE = typeof localStorage !== 'undefined' && localStorage.getItem('parser_debug') === 'true';
@@ -107,13 +150,13 @@ if (typeof window !== 'undefined') {
     window.toggleParserDebug = (enable) => {
         DEBUG_MODE = !!enable;
         localStorage.setItem('parser_debug', enable.toString());
-        console.log(`🛠️ [Parser v8.0] DEBUG_MODE = ${DEBUG_MODE}`);
+        console.log(`🛠️ [Parser v8.1] DEBUG_MODE = ${DEBUG_MODE}`);
     };
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // DEBUG-БУФЕР
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /** @type {string[]} Буфер текущего вызова processAIResponse */
 const debugBuffer = [];
@@ -144,7 +187,7 @@ function flushDebugBuffer(info) {
 
     if (DEBUG_MODE && debugBuffer.length > 0) {
         console.groupCollapsed(
-            `🧪 [PARSER v8.0] ${info.approach} | ops:${info.extractedOperationsCount} | ` +
+            `🧪 [PARSER v8.1] ${info.approach} | ops:${info.extractedOperationsCount} | ` +
             `${info.durationMs}ms | recovered:${info.recoveredCount || 0}`
         );
         debugBuffer.forEach(line => console.log(line));
@@ -161,9 +204,9 @@ function getLastDebugLog() {
     return [...lastDebugBuffer];
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ПРЕДОБРАБОТКА JSON
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Предварительная обработка JSON-строки перед парсингом:
@@ -174,8 +217,8 @@ function getLastDebugLog() {
  * ВАЖНО: не трогает escape-последовательности (`\"`, `\\`),
  * чтобы не сломать JSON до вызова JSON.parse.
  *
- * @param {string} jsonText
- * @returns {string}
+ * @param {string} jsonText - Сырая строка, возможно с обёртками и неэкранированными переводами строк
+ * @returns {string} - Очищенная строка, готовая к JSON.parse
  */
 function preprocessJson(jsonText) {
     debugLog('🔧 preprocessJson: start', { len: jsonText?.length });
@@ -186,18 +229,36 @@ function preprocessJson(jsonText) {
         .replace(/\s*```$/i, '');
 
     // Экранируем буквальные переносы строк внутри JSON-строк
-    let inString = false, escapeNext = false, fixed = '';
+    let inString = false;
+    let escapeNext = false;
+    let fixed = '';
     for (let i = 0; i < result.length; i++) {
-        const ch = result[i];
-        if (escapeNext) { fixed += ch; escapeNext = false; continue; }
-        if (ch === '\\') { escapeNext = true; fixed += ch; continue; }
-        if (ch === '"') { inString = !inString; fixed += ch; continue; }
+        const character = result[i];
+        if (escapeNext) {
+            fixed += character;
+            escapeNext = false;
+            continue;
+        }
+        if (character === '\\') {
+            escapeNext = true;
+            fixed += character;
+            continue;
+        }
+        if (character === '"') {
+            inString = !inString;
+            fixed += character;
+            continue;
+        }
         if (inString) {
-            if (ch === '\n') { fixed += '\\n'; }
-            else if (ch === '\r') { fixed += '\\r'; }
-            else { fixed += ch; }
+            if (character === '\n') {
+                fixed += '\\n';
+            } else if (character === '\r') {
+                fixed += '\\r';
+            } else {
+                fixed += character;
+            }
         } else {
-            fixed += ch;
+            fixed += character;
         }
     }
 
@@ -209,8 +270,15 @@ function preprocessJson(jsonText) {
 
 /**
  * Балансирует скобки и удаляет висячие запятые — резервный ремонт обрезанного JSON.
- * @param {string} str
- * @returns {string}
+ * Алгоритм:
+ * 1. Удаляет markdown-обёртки.
+ * 2. Если строка осталась незакрытой (кавычка без пары), добавляет закрывающую кавычку.
+ * 3. Удаляет висячие запятые перед } и ].
+ * 4. Считает количество открытых и закрытых фигурных и квадратных скобок вне строк.
+ * 5. Добавляет недостающие закрывающие скобки в правильном порядке.
+ *
+ * @param {string} str - Частично повреждённая JSON-строка
+ * @returns {string} - Строка с попыткой восстановить баланс скобок
  */
 function balanceBrackets(str) {
     let result = (str || '').trim()
@@ -218,77 +286,116 @@ function balanceBrackets(str) {
         .replace(/\s*```$/i, '');
 
     // Закрываем незакрытую строку
-    let inStr = false, esc = false;
+    let inString = false;
+    let escapeNext = false;
     for (let i = 0; i < result.length; i++) {
-        const ch = result[i];
-        if (esc) { esc = false; continue; }
-        if (ch === '\\') { esc = true; continue; }
-        if (ch === '"') inStr = !inStr;
+        const character = result[i];
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        if (character === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        if (character === '"') {
+            inString = !inString;
+        }
     }
-    if (inStr) result += '"';
+    if (inString) result += '"';
 
     // Висячие запятые
     result = result.replace(/,\s*([}\]])/g, '$1');
 
     // Добавляем недостающие скобки
-    let oc = 0, cc = 0, os = 0, cs = 0;
-    inStr = false; esc = false;
+    let openBraces = 0;      // {
+    let closeBraces = 0;     // }
+    let openBrackets = 0;    // [
+    let closeBrackets = 0;   // ]
+    inString = false;
+    escapeNext = false;
+
     for (let i = 0; i < result.length; i++) {
-        const ch = result[i];
-        if (esc) { esc = false; continue; }
-        if (ch === '\\') { esc = true; continue; }
-        if (ch === '"') { inStr = !inStr; continue; }
-        if (!inStr) {
-            if (ch === '{') oc++;
-            if (ch === '}') cc++;
-            if (ch === '[') os++;
-            if (ch === ']') cs++;
+        const character = result[i];
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        if (character === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        if (character === '"') {
+            inString = !inString;
+            continue;
+        }
+        if (!inString) {
+            if (character === '{') openBraces++;
+            if (character === '}') closeBraces++;
+            if (character === '[') openBrackets++;
+            if (character === ']') closeBrackets++;
         }
     }
-    if (os > cs) result += ']'.repeat(os - cs);
-    if (oc > cc) result += '}'.repeat(oc - cc);
+
+    if (openBrackets > closeBrackets) {
+        result += ']'.repeat(openBrackets - closeBrackets);
+    }
+    if (openBraces > closeBraces) {
+        result += '}'.repeat(openBraces - closeBraces);
+    }
 
     return result;
 }
 
-// ============================================================================
-// ★ BRACKET-COUNTING: КЛЮЧЕВАЯ НОВАЯ ФУНКЦИЯ v8.0 ★
-// ============================================================================
+// ----------------------------------------------------------------------------
+// ★ BRACKET-COUNTING: КЛЮЧЕВЫЕ ФУНКЦИИ v8.0 ★
+// ----------------------------------------------------------------------------
 
 /**
  * Находит полное содержимое JSON-массива для заданного ключа методом подсчёта скобок.
  * Заменяет ВСЕ ленивые regex `[\s\S]*?` — они останавливались на ПЕРВОМ `]`,
  * уничтожая вложенные массивы success_rewards / fail_penalties / effects.
  *
- * @param {string} text   - полный текст ответа
- * @param {string} key    - имя поля (например 'choices', 'success_rewards')
- * @returns {string|null} - строка вида `[...]` или null если поле не найдено
+ * @param {string} text   - Полный текст ответа
+ * @param {string} key    - Имя поля (например 'choices', 'success_rewards')
+ * @returns {string|null} - Строка вида `[...]` или null если поле не найдено
  */
 function findArrayContent(text, key) {
     debugLog(`🔍 findArrayContent: "${key}"`);
     // Ищем  "key"   :   [
-    const startRe = new RegExp(`"${key}"\\s*:\\s*\\[`, 'i');
-    const startMatch = startRe.exec(text);
+    const startRegex = new RegExp(`"${key}"\\s*:\\s*\\[`, 'i');
+    const startMatch = startRegex.exec(text);
     if (!startMatch) {
         debugLog(`   → "${key}" не найден`);
         return null;
     }
 
     // Позиция открывающей `[`
-    const openPos = startMatch.index + startMatch[0].length - 1;
-    let depth = 0, inStr = false, esc = false;
+    const openPosition = startMatch.index + startMatch[0].length - 1;
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
 
-    for (let i = openPos; i < text.length; i++) {
-        const ch = text[i];
-        if (esc) { esc = false; continue; }
-        if (ch === '\\') { esc = true; continue; }
-        if (ch === '"') { inStr = !inStr; continue; }
-        if (!inStr) {
-            if (ch === '[') depth++;
-            else if (ch === ']') {
+    for (let i = openPosition; i < text.length; i++) {
+        const character = text[i];
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        if (character === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        if (character === '"') {
+            inString = !inString;
+            continue;
+        }
+        if (!inString) {
+            if (character === '[') depth++;
+            else if (character === ']') {
                 depth--;
                 if (depth === 0) {
-                    const result = text.substring(openPos, i + 1);
+                    const result = text.substring(openPosition, i + 1);
                     debugLog(`   → найден "${key}" длиной ${result.length}`);
                     return result;
                 }
@@ -296,50 +403,61 @@ function findArrayContent(text, key) {
         }
     }
     // Обрезанный JSON — возвращаем с конца, balanceBrackets исправит
-    const truncated = text.substring(openPos);
+    const truncated = text.substring(openPosition);
     debugLog(`   → "${key}" обрезан, длина ${truncated.length}`);
     return truncated;
 }
 
 /**
- * Находит полное содержимое JSON-объекта для заданного ключа (bracket counting).
- * @param {string} text
- * @param {string} key
- * @returns {string|null} - строка вида `{...}` или null
+ * Находит полное содержимое JSON-объекта для заданного ключа методом подсчёта скобок.
+ * @param {string} text - Полный текст ответа
+ * @param {string} key  - Имя поля (например 'aiMemory')
+ * @returns {string|null} - Строка вида `{...}` или null
  */
 function findObjectContent(text, key) {
-    const startRe = new RegExp(`"${key}"\\s*:\\s*\\{`, 'i');
-    const startMatch = startRe.exec(text);
+    const startRegex = new RegExp(`"${key}"\\s*:\\s*\\{`, 'i');
+    const startMatch = startRegex.exec(text);
     if (!startMatch) return null;
 
-    const openPos = startMatch.index + startMatch[0].length - 1;
-    let depth = 0, inStr = false, esc = false;
+    const openPosition = startMatch.index + startMatch[0].length - 1;
+    let depth = 0;
+    let inString = false;
+    let escapeNext = false;
 
-    for (let i = openPos; i < text.length; i++) {
-        const ch = text[i];
-        if (esc) { esc = false; continue; }
-        if (ch === '\\') { esc = true; continue; }
-        if (ch === '"') { inStr = !inStr; continue; }
-        if (!inStr) {
-            if (ch === '{') depth++;
-            else if (ch === '}') {
+    for (let i = openPosition; i < text.length; i++) {
+        const character = text[i];
+        if (escapeNext) {
+            escapeNext = false;
+            continue;
+        }
+        if (character === '\\') {
+            escapeNext = true;
+            continue;
+        }
+        if (character === '"') {
+            inString = !inString;
+            continue;
+        }
+        if (!inString) {
+            if (character === '{') depth++;
+            else if (character === '}') {
                 depth--;
-                if (depth === 0) return text.substring(openPos, i + 1);
+                if (depth === 0) return text.substring(openPosition, i + 1);
             }
         }
     }
-    return text.substring(openPos);
+    return text.substring(openPosition);
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ИЗВЛЕЧЕНИЕ ВЛОЖЕННОГО JSON ИЗ API-ОТВЕТА
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Проверяет, является ли текст полным ответом API (choices[0].message.content).
  * Если да — извлекает и возвращает content.
- * @param {string} text
- * @returns {string|null}
+ * @param {string} text - Строка, предположительно полный JSON от API
+ * @returns {string|null} - Извлечённый content или null
  */
 function extractNestedJsonFromApiResponse(text) {
     debugLog('🔍 extractNestedJsonFromApiResponse');
@@ -358,13 +476,15 @@ function extractNestedJsonFromApiResponse(text) {
                 return JSON.stringify(content);
             }
         }
-    } catch {}
+    } catch {
+        // ignore
+    }
     return null;
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ДЕКОДИРОВАНИЕ UNICODE
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Декодирует ТОЛЬКО `\uXXXX` escape-последовательности в читаемые символы.
@@ -372,27 +492,30 @@ function extractNestedJsonFromApiResponse(text) {
  * ВАЖНО v8.0: НЕ трогает `\"`, `\\`, `\n`, `\t` — эти замены РАЗРУШАЛИ JSON
  * до вызова JSON.parse, что приводило к "He said "hello"" вместо "He said \"hello\"".
  *
- * @param {string} text
- * @returns {string}
+ * @param {string} text - Строка, возможно содержащая юникод-экранирование
+ * @returns {string} - Строка с декодированными символами
  */
 function decodeUnicodeEscapes(text) {
     if (!text || typeof text !== 'string') return text;
     return text.replace(/\\u[\dA-Fa-f]{4}/g, match => {
         try {
             return String.fromCharCode(parseInt(match.slice(2), 16));
-        } catch { return match; }
+        } catch {
+            return match;
+        }
     });
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ИЗВЛЕЧЕНИЕ ОБЪЕКТОВ ИЗ МАССИВА (посимвольный разбор)
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Извлекает все top-level объекты из строки, представляющей JSON-массив.
  * Корректно обрабатывает вложенность и escape-последовательности.
- * @param {string} text - строка вида `[{...}, {...}]`
- * @returns {string[]} - массив строк-объектов
+ *
+ * @param {string} text - Строка вида `[{...}, {...}]`
+ * @returns {string[]} - Массив строк-объектов (каждый объект как строка JSON)
  */
 function extractTopLevelObjects(text) {
     debugLog(`🔍 extractTopLevelObjects`, { len: text?.length });
@@ -400,25 +523,41 @@ function extractTopLevelObjects(text) {
     let i = 0;
     while (i < text.length && text[i] !== '[') i++;
     if (i >= text.length) return objects;
-    i++; // за '['
+    i++; // пропускаем '['
 
-    let inStr = false, esc = false, depth = 0, start = -1;
+    let inString = false;
+    let escapeNext = false;
+    let depth = 0;
+    let start = -1;
+
     while (i < text.length) {
-        const ch = text[i];
-        if (esc) { esc = false; i++; continue; }
-        if (ch === '\\') { esc = true; i++; continue; }
-        if (ch === '"') { inStr = !inStr; i++; continue; }
-        if (!inStr) {
-            if (ch === '{') {
+        const character = text[i];
+        if (escapeNext) {
+            escapeNext = false;
+            i++;
+            continue;
+        }
+        if (character === '\\') {
+            escapeNext = true;
+            i++;
+            continue;
+        }
+        if (character === '"') {
+            inString = !inString;
+            i++;
+            continue;
+        }
+        if (!inString) {
+            if (character === '{') {
                 if (depth === 0) start = i;
                 depth++;
-            } else if (ch === '}') {
+            } else if (character === '}') {
                 depth--;
                 if (depth === 0 && start !== -1) {
                     objects.push(text.substring(start, i + 1));
                     start = -1;
                 }
-            } else if (ch === ']' && depth === 0) {
+            } else if (character === ']' && depth === 0) {
                 break;
             }
         }
@@ -428,44 +567,48 @@ function extractTopLevelObjects(text) {
     return objects;
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ИЗВЛЕЧЕНИЕ ПОЛЕЙ ИЗ ПОВРЕЖДЁННЫХ ОБЪЕКТОВ
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Извлекает строковое поле из повреждённого объекта.
- * @param {string} text
- * @param {string} fieldName
- * @returns {string|null}
+ * @param {string} text - Фрагмент JSON, содержащий повреждённый объект
+ * @param {string} fieldName - Имя поля
+ * @returns {string|null} - Извлечённое значение или null
  */
 function extractFieldFromBrokenObject(text, fieldName) {
     try {
-        const re = new RegExp(`"${fieldName}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 's');
-        const m = re.exec(text);
-        if (m) return m[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-    } catch {}
+        const regex = new RegExp(`"${fieldName}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`, 's');
+        const match = regex.exec(text);
+        if (match) return match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+    } catch {
+        // ignore
+    }
     return null;
 }
 
 /**
  * Извлекает числовое поле из повреждённого объекта.
- * @param {string} text
- * @param {string} fieldName
- * @param {number} [defaultValue=0]
+ * @param {string} text - Фрагмент JSON, содержащий повреждённый объект
+ * @param {string} fieldName - Имя поля
+ * @param {number} [defaultValue=0] - Значение по умолчанию
  * @returns {number}
  */
 function extractNumberFromBrokenObject(text, fieldName, defaultValue = 0) {
     try {
-        const re = new RegExp(`"${fieldName}"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`, 'i');
-        const m = re.exec(text);
-        if (m) return parseFloat(m[1]);
-    } catch {}
+        const regex = new RegExp(`"${fieldName}"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`, 'i');
+        const match = regex.exec(text);
+        if (match) return parseFloat(match[1]);
+    } catch {
+        // ignore
+    }
     return defaultValue;
 }
 
 /**
  * Извлекает difficulty_level из повреждённого объекта.
- * @param {string} text
+ * @param {string} text - Фрагмент JSON, содержащий повреждённый choice
  * @returns {number}
  */
 function extractDifficultyFromBrokenObject(text) {
@@ -475,26 +618,26 @@ function extractDifficultyFromBrokenObject(text) {
 /**
  * Извлекает массив requirements из повреждённого объекта.
  * Использует bracket-counting через findArrayContent.
- * @param {string} text
- * @returns {Array}
+ * @param {string} text - Фрагмент JSON, содержащий повреждённый choice
+ * @returns {Array} - Массив требований (может быть пустым)
  */
 function extractRequirementsFromBrokenObject(text) {
     debugLog('🔍 extractRequirementsFromBrokenObject');
     try {
-        const arrContent = findArrayContent(text, 'requirements');
-        if (!arrContent) return [];
-        const balanced = balanceBrackets(arrContent);
+        const arrayContent = findArrayContent(text, 'requirements');
+        if (!arrayContent) return [];
+        const balanced = balanceBrackets(arrayContent);
         const parsed = JSON.parse(balanced);
         if (Array.isArray(parsed)) return parsed;
-    } catch (e) {
-        debugLog(`   ⚠️ requirements parse failed: ${e.message}`);
+    } catch (error) {
+        debugLog(`   ⚠️ requirements parse failed: ${error.message}`);
     }
     return [];
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ★ ИСПРАВЛЕНО v8.0: ИЗВЛЕЧЕНИЕ ОПЕРАЦИЙ ЧЕРЕЗ BRACKET-COUNTING ★
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Извлекает массив операций (success_rewards / fail_penalties / effects)
@@ -503,7 +646,7 @@ function extractRequirementsFromBrokenObject(text) {
  * Ранее здесь использовался ленивый regex `[\s\S]*?`, останавливающийся на
  * первом `]` внутри вложенных структур — полный массив операций терялся.
  *
- * @param {string} text - фрагмент объекта choice или event
+ * @param {string} text - Фрагмент объекта choice или event
  * @param {string} key  - 'success_rewards' | 'fail_penalties' | 'effects'
  * @returns {GameOperation[]}
  */
@@ -511,13 +654,13 @@ function extractOperationsFromBrokenObject(text, key) {
     debugLog(`🔍 extractOperationsFromBrokenObject: "${key}"`);
 
     // Шаг 1: bracket-counting extraction
-    const arrContent = findArrayContent(text, key);
-    if (!arrContent) {
+    const arrayContent = findArrayContent(text, key);
+    if (!arrayContent) {
         debugLog(`   → массив "${key}" не найден`);
         return [];
     }
 
-    const balanced = balanceBrackets(arrContent);
+    const balanced = balanceBrackets(arrayContent);
 
     // Шаг 2: попытка прямого JSON.parse всего массива
     try {
@@ -526,55 +669,57 @@ function extractOperationsFromBrokenObject(text, key) {
             debugLog(`   → "${key}" распарсен напрямую (${parsed.length} операций)`);
             return parsed;
         }
-    } catch (e) {
-        debugLog(`   ⚠️ прямой parse "${key}" провалился: ${e.message}`);
+    } catch (error) {
+        debugLog(`   ⚠️ прямой parse "${key}" провалился: ${error.message}`);
     }
 
     // Шаг 3: извлечение объектов по одному
     const objectStrings = extractTopLevelObjects(balanced);
     const result = [];
 
-    for (const objStr of objectStrings) {
+    for (const objectString of objectStrings) {
         // Пробуем прямой parse объекта
         try {
-            const repaired = balanceBrackets(objStr);
-            const op = JSON.parse(repaired);
-            if (op && typeof op === 'object') {
-                result.push(op);
+            const repaired = balanceBrackets(objectString);
+            const operation = JSON.parse(repaired);
+            if (operation && typeof operation === 'object') {
+                result.push(operation);
                 continue;
             }
-        } catch {}
-
-        // Fallback: ручное извлечение полей операции
-        const op = {};
-        const operationVal = extractFieldFromBrokenObject(objStr, 'operation');
-        const idVal        = extractFieldFromBrokenObject(objStr, 'id');
-        const descVal      = extractFieldFromBrokenObject(objStr, 'description');
-
-        if (operationVal) op.operation   = operationVal;
-        if (idVal)        op.id          = idVal;
-        if (descVal)      op.description = descVal;
-
-        // delta (для MODIFY)
-        const delta = /"delta"\s*:\s*(-?\d+(?:\.\d+)?)/.exec(objStr);
-        if (delta) op.delta = parseFloat(delta[1]);
-
-        // duration
-        const dur = /"duration"\s*:\s*(\d+)/.exec(objStr);
-        if (dur) op.duration = parseInt(dur[1], 10);
-
-        // value (для ADD/SET): может быть числом или строкой
-        const valNum = /"value"\s*:\s*(-?\d+(?:\.\d+)?)/.exec(objStr);
-        const valStr = /"value"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(objStr);
-        if (valNum && !valStr) {
-            op.value = parseFloat(valNum[1]);
-        } else if (valStr) {
-            op.value = valStr[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        } catch {
+            // fallback к ручному извлечению
         }
 
-        if (op.id) {
-            result.push(op);
-            debugLog(`   → ручное извлечение операции: ${op.operation || '?'} ${op.id}`);
+        // Fallback: ручное извлечение полей операции
+        const operation = {};
+        const operationValue = extractFieldFromBrokenObject(objectString, 'operation');
+        const idValue = extractFieldFromBrokenObject(objectString, 'id');
+        const descriptionValue = extractFieldFromBrokenObject(objectString, 'description');
+
+        if (operationValue) operation.operation = operationValue;
+        if (idValue) operation.id = idValue;
+        if (descriptionValue) operation.description = descriptionValue;
+
+        // delta (для MODIFY)
+        const deltaMatch = /"delta"\s*:\s*(-?\d+(?:\.\d+)?)/.exec(objectString);
+        if (deltaMatch) operation.delta = parseFloat(deltaMatch[1]);
+
+        // duration
+        const durationMatch = /"duration"\s*:\s*(\d+)/.exec(objectString);
+        if (durationMatch) operation.duration = parseInt(durationMatch[1], 10);
+
+        // value (для ADD/SET): может быть числом или строкой
+        const valueNumberMatch = /"value"\s*:\s*(-?\d+(?:\.\d+)?)/.exec(objectString);
+        const valueStringMatch = /"value"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(objectString);
+        if (valueNumberMatch && !valueStringMatch) {
+            operation.value = parseFloat(valueNumberMatch[1]);
+        } else if (valueStringMatch) {
+            operation.value = valueStringMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        }
+
+        if (operation.id) {
+            result.push(operation);
+            debugLog(`   → ручное извлечение операции: ${operation.operation || '?'} ${operation.id}`);
         }
     }
 
@@ -582,81 +727,82 @@ function extractOperationsFromBrokenObject(text, key) {
     return result;
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ИЗВЛЕЧЕНИЕ МАССИВА С ВОССТАНОВЛЕНИЕМ (v8.0 — bracket-counting)
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Извлекает массив choices или events с посимвольным восстановлением повреждённых объектов.
  * Использует findArrayContent() вместо lazy regex.
  *
- * @param {string} text - полный текст ответа
- * @param {'choices'|'events'} key
- * @returns {{ items: Array, totalFound: number, recovered: number }}
+ * @param {string} text - Полный текст ответа
+ * @param {'choices'|'events'} key - Имя массива
+ * @returns {ArrayExtractionResult}
  */
 function extractArrayWithStats(text, key) {
     debugLog(`📍 extractArrayWithStats v8.0: "${key}"`);
 
     // ★ v8.0: bracket-counting вместо REGEX_CACHE с lazy match
-    const arrContent = findArrayContent(text, key);
-    if (!arrContent) {
+    const arrayContent = findArrayContent(text, key);
+    if (!arrayContent) {
         debugLog(`   → "${key}" не найден`);
         return { items: [], totalFound: 0, recovered: 0 };
     }
 
-    const balanced  = balanceBrackets(arrContent);
-    const objStrs   = extractTopLevelObjects(balanced);
-    const totalFound = objStrs.length;
+    const balanced = balanceBrackets(arrayContent);
+    const objectStrings = extractTopLevelObjects(balanced);
+    const totalFound = objectStrings.length;
     const items = [];
     let recoveredCount = 0;
 
-    for (let idx = 0; idx < objStrs.length; idx++) {
-        const objStr = objStrs[idx];
+    for (let index = 0; index < objectStrings.length; index++) {
+        const objectString = objectStrings[index];
 
         // Попытка прямого JSON.parse
         try {
-            const obj = JSON.parse(objStr);
-            items.push(obj);
-            debugLog(`   → ${key}[${idx}] распарсен`);
+            const object = JSON.parse(objectString);
+            items.push(object);
+            debugLog(`   → ${key}[${index}] распарсен`);
             continue;
-        } catch {}
+        } catch {
+            // пробуем следующий метод
+        }
 
         // Попытка с balanceBrackets
         try {
-            const obj = JSON.parse(balanceBrackets(objStr));
-            items.push(obj);
-            debugLog(`   → ${key}[${idx}] восстановлен через balanceBrackets`);
+            const object = JSON.parse(balanceBrackets(objectString));
+            items.push(object);
+            debugLog(`   → ${key}[${index}] восстановлен через balanceBrackets`);
             recoveredCount++;
             continue;
-        } catch (e) {
-            debugLog(`   → ${key}[${idx}] повреждён: ${e.message}, ручное восстановление`);
+        } catch (error) {
+            debugLog(`   → ${key}[${index}] повреждён: ${error.message}, ручное восстановление`);
         }
 
         // Ручное восстановление
         if (key === 'choices') {
-            const textField = extractFieldFromBrokenObject(objStr, 'text');
+            const textField = extractFieldFromBrokenObject(objectString, 'text');
             const recovered = {
-                text:             textField || `Выбор #${idx + 1}`,
-                difficulty_level: extractDifficultyFromBrokenObject(objStr),
-                requirements:     extractRequirementsFromBrokenObject(objStr),
-                success_rewards:  extractOperationsFromBrokenObject(objStr, 'success_rewards'),
-                fail_penalties:   extractOperationsFromBrokenObject(objStr, 'fail_penalties'),
+                text:             textField || `Выбор #${index + 1}`,
+                difficulty_level: extractDifficultyFromBrokenObject(objectString),
+                requirements:     extractRequirementsFromBrokenObject(objectString),
+                success_rewards:  extractOperationsFromBrokenObject(objectString, 'success_rewards'),
+                fail_penalties:   extractOperationsFromBrokenObject(objectString, 'fail_penalties'),
             };
             items.push(recovered);
             recoveredCount++;
-            debugLog(`   → choice[${idx}] восстановлен вручную: "${(recovered.text || '').substring(0, 50)}"`);
-
+            debugLog(`   → choice[${index}] восстановлен вручную: "${(recovered.text || '').substring(0, 50)}"`);
         } else if (key === 'events') {
-            const descField = extractFieldFromBrokenObject(objStr, 'description');
+            const descriptionField = extractFieldFromBrokenObject(objectString, 'description');
             const recovered = {
-                type:        extractFieldFromBrokenObject(objStr, 'type') || 'world_event',
-                description: descField || `Событие #${idx + 1}`,
-                effects:     extractOperationsFromBrokenObject(objStr, 'effects'),
-                reason:      extractFieldFromBrokenObject(objStr, 'reason') || '',
+                type:        extractFieldFromBrokenObject(objectString, 'type') || 'world_event',
+                description: descriptionField || `Событие #${index + 1}`,
+                effects:     extractOperationsFromBrokenObject(objectString, 'effects'),
+                reason:      extractFieldFromBrokenObject(objectString, 'reason') || '',
             };
             items.push(recovered);
             recoveredCount++;
-            debugLog(`   → event[${idx}] восстановлен вручную: "${(recovered.description || '').substring(0, 50)}"`);
+            debugLog(`   → event[${index}] восстановлен вручную: "${(recovered.description || '').substring(0, 50)}"`);
         }
     }
 
@@ -664,78 +810,90 @@ function extractArrayWithStats(text, key) {
     return { items, totalFound, recovered: recoveredCount };
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ИЗВЛЕЧЕНИЕ КОРНЕВЫХ ПОЛЕЙ (агрессивный режим)
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Извлекает любое корневое поле методом bracket-counting для объектов/массивов
  * или regex для примитивов.
- * @param {string} text
- * @param {string} key
- * @returns {any}
+ *
+ * @param {string} text - Полный текст ответа
+ * @param {string} key  - Имя поля (например 'scene', 'aiMemory')
+ * @returns {any} - Извлечённое значение (может быть строкой, числом, объектом, массивом) или null
  */
 function extractRootField(text, key) {
     debugLog(`📍 extractRootField: "${key}"`);
-    const re = new RegExp(`"${key}"\\s*:\\s*`, 'i');
-    const m  = re.exec(text);
-    if (!m) { debugLog(`   → не найдено`); return null; }
-
-    let pos = m.index + m[0].length;
-    while (pos < text.length && /\s/.test(text[pos])) pos++;
-
-    const first = text[pos];
-
-    if (first === '[') {
-        const arrContent = findArrayContent(text, key);
-        if (!arrContent) return [];
-        try {
-            const r = JSON.parse(balanceBrackets(arrContent));
-            debugLog(`   → "${key}" массив [${Array.isArray(r) ? r.length : '?'}]`);
-            return r;
-        } catch { return []; }
+    const regex = new RegExp(`"${key}"\\s*:\\s*`, 'i');
+    const match = regex.exec(text);
+    if (!match) {
+        debugLog(`   → не найдено`);
+        return null;
     }
 
-    if (first === '{') {
-        const objContent = findObjectContent(text, key);
-        if (!objContent) return {};
+    let position = match.index + match[0].length;
+    while (position < text.length && /\s/.test(text[position])) position++;
+
+    const firstChar = text[position];
+
+    if (firstChar === '[') {
+        const arrayContent = findArrayContent(text, key);
+        if (!arrayContent) return [];
         try {
-            const r = JSON.parse(balanceBrackets(objContent));
+            const result = JSON.parse(balanceBrackets(arrayContent));
+            debugLog(`   → "${key}" массив [${Array.isArray(result) ? result.length : '?'}]`);
+            return result;
+        } catch {
+            return [];
+        }
+    }
+
+    if (firstChar === '{') {
+        const objectContent = findObjectContent(text, key);
+        if (!objectContent) return {};
+        try {
+            const result = JSON.parse(balanceBrackets(objectContent));
             debugLog(`   → "${key}" объект`);
-            return r;
-        } catch { return objContent; }
+            return result;
+        } catch {
+            return objectContent; // возвращаем как строку, если не удалось распарсить
+        }
     }
 
-    // Примитив
-    const prim = text.slice(pos).match(/^(true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|"(?:[^"\\]|\\.)*")/);
-    if (prim) {
+    // Примитив (строка, число, true, false, null)
+    const primitiveMatch = text.slice(position).match(/^(true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|"(?:[^"\\]|\\.)*")/);
+    if (primitiveMatch) {
         try {
-            const r = JSON.parse(prim[0]);
-            debugLog(`   → "${key}" примитив: ${String(r).substring(0, 30)}`);
-            return r;
-        } catch { return prim[0]; }
+            const result = JSON.parse(primitiveMatch[0]);
+            debugLog(`   → "${key}" примитив: ${String(result).substring(0, 30)}`);
+            return result;
+        } catch {
+            return primitiveMatch[0];
+        }
     }
 
     debugLog(`   → "${key}" не удалось извлечь`);
     return null;
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // НОРМАЛИЗАЦИЯ
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Нормализует элемент requirements к строке.
- * @param {*} req
- * @param {ParsingInfo} [info]
- * @returns {string|null}
+ * Если передан объект, пытается извлечь поле id.
+ *
+ * @param {*} requirement - Входное значение (строка, объект или null)
+ * @param {ParsingInfo} [info] - Объект информации для записи заметок
+ * @returns {string|null} - Нормализованная строка или null
  */
-function normalizeRequirement(req, info = null) {
-    if (!req) return null;
-    if (typeof req === 'string') return req.trim() || null;
-    if (typeof req === 'object' && req !== null) {
-        if (req.id && typeof req.id === 'string') return req.id.trim() || null;
-        info?.normalizationNotes.push(`requirement-объект без id: ${JSON.stringify(req)}`);
+function normalizeRequirement(requirement, info = null) {
+    if (!requirement) return null;
+    if (typeof requirement === 'string') return requirement.trim() || null;
+    if (typeof requirement === 'object' && requirement !== null) {
+        if (requirement.id && typeof requirement.id === 'string') return requirement.id.trim() || null;
+        info?.normalizationNotes.push(`requirement-объект без id: ${JSON.stringify(requirement)}`);
         return null;
     }
     return null;
@@ -743,72 +901,76 @@ function normalizeRequirement(req, info = null) {
 
 /**
  * Нормализует одну операцию (success_reward / fail_penalty / effect).
- * Поддерживает: MODIFY (delta), ADD/SET (value), REMOVE.
- * @param {Object} op
- * @returns {Object|null}
+ * Приводит id к нижнему регистру, заменяет пробелы на подчёркивания,
+ * проверяет обязательные поля, корректирует числовые значения.
+ *
+ * @param {Object} operation - Сырая операция
+ * @returns {GameOperation|null} - Нормализованная операция или null, если невалидна
  */
-function normalizeOperation(op) {
+function normalizeOperation(operation) {
     try {
-        if (!op || typeof op !== 'object' || !op.id) return null;
+        if (!operation || typeof operation !== 'object' || !operation.id) return null;
 
-        const norm = { ...op };
-        norm.id = String(norm.id).toLowerCase().replace(/\s+/g, '_');
+        const normalized = { ...operation };
+        normalized.id = String(normalized.id).toLowerCase().replace(/\s+/g, '_');
 
-        if (typeof norm.operation === 'string') {
-            norm.operation = norm.operation.toUpperCase().trim();
+        if (typeof normalized.operation === 'string') {
+            normalized.operation = normalized.operation.toUpperCase().trim();
         }
 
         // delta — числовой
-        if (norm.delta !== undefined) norm.delta = Number(norm.delta) || 0;
+        if (normalized.delta !== undefined) normalized.delta = Number(normalized.delta) || 0;
 
-        // value — сохраняем тип (строка для ADD:skill, число для ADD:debuff)
-        // Только числовой тип нормируем если явно число
-        if (norm.value !== undefined && typeof norm.value === 'number') {
-            norm.value = Number(norm.value);
+        // value — сохраняем тип, но если число — приводим к Number
+        if (normalized.value !== undefined && typeof normalized.value === 'number') {
+            normalized.value = Number(normalized.value);
         }
 
         // duration — не менее 1
-        if (norm.duration !== undefined) {
-            norm.duration = Math.max(1, Number(norm.duration) || 1);
+        if (normalized.duration !== undefined) {
+            normalized.duration = Math.max(1, Number(normalized.duration) || 1);
         }
 
-        norm.description = norm.description ? String(norm.description).trim() : '';
+        normalized.description = normalized.description ? String(normalized.description).trim() : '';
 
-        if (!norm.id.includes(':')) {
-            debugLog(`⚠️ normalizeOperation: id="${norm.id}" без ":" — возможно некорректно`);
+        if (!normalized.id.includes(':')) {
+            debugLog(`⚠️ normalizeOperation: id="${normalized.id}" без ":" — возможно некорректно`);
         }
-        return norm;
-    } catch (e) {
-        debugLog(`❌ normalizeOperation: ${e.message}`);
+        return normalized;
+    } catch (error) {
+        debugLog(`❌ normalizeOperation: ${error.message}`);
         return null;
     }
 }
 
 /**
  * Нормализует объект choice.
- * @param {Object} choice
- * @param {number} index
- * @param {ParsingInfo} [info]
- * @returns {ParsedChoice|null}
+ * Проверяет наличие текста, корректирует difficulty_level,
+ * обрабатывает requirements, success_rewards, fail_penalties.
+ *
+ * @param {Object} choice - Сырой объект choice
+ * @param {number} index - Индекс в массиве (для логирования)
+ * @param {ParsingInfo} [info] - Объект информации для записи заметок
+ * @returns {ParsedChoice|null} - Нормализованный choice или null
  */
 function normalizeChoice(choice, index, info = null) {
     try {
         if (!choice || typeof choice.text !== 'string' || !choice.text.trim()) return null;
 
-        let diff = Number(choice.difficulty_level);
-        if (isNaN(diff) || diff < 1 || diff > 10) {
-            const orig = diff;
-            diff = Math.min(10, Math.max(1, diff || 5));
+        let difficulty = Number(choice.difficulty_level);
+        if (isNaN(difficulty) || difficulty < 1 || difficulty > 10) {
+            const original = difficulty;
+            difficulty = Math.min(10, Math.max(1, difficulty || 5));
             info?.normalizationNotes.push(
-                `choice[${index}].difficulty_level ${orig} → ${diff}`
+                `choice[${index}].difficulty_level ${original} → ${difficulty}`
             );
         }
 
         return {
             text:             choice.text.trim(),
-            difficulty_level: diff,
+            difficulty_level: difficulty,
             requirements:     Array.isArray(choice.requirements)
-                                ? choice.requirements.map(r => normalizeRequirement(r, info)).filter(Boolean)
+                                ? choice.requirements.map(req => normalizeRequirement(req, info)).filter(Boolean)
                                 : [],
             success_rewards:  Array.isArray(choice.success_rewards)
                                 ? choice.success_rewards.map(normalizeOperation).filter(Boolean)
@@ -817,18 +979,21 @@ function normalizeChoice(choice, index, info = null) {
                                 ? choice.fail_penalties.map(normalizeOperation).filter(Boolean)
                                 : [],
         };
-    } catch (e) {
-        debugLog(`❌ normalizeChoice[${index}]: ${e.message}`);
+    } catch (error) {
+        debugLog(`❌ normalizeChoice[${index}]: ${error.message}`);
         return null;
     }
 }
 
 /**
  * Нормализует объект event.
- * @param {Object} event
- * @param {number} index
- * @param {ParsingInfo} [info]
- * @returns {ParsedEvent|null}
+ * Проверяет наличие описания, приводит type к нижнему регистру,
+ * обрабатывает effects.
+ *
+ * @param {Object} event - Сырой объект event
+ * @param {number} index - Индекс в массиве (для логирования)
+ * @param {ParsingInfo} [info] - Объект информации для записи заметок
+ * @returns {ParsedEvent|null} - Нормализованный event или null
  */
 function normalizeEvent(event, index, info = null) {
     try {
@@ -841,17 +1006,19 @@ function normalizeEvent(event, index, info = null) {
                            : [],
             reason:      String(event.reason || '').trim(),
         };
-    } catch (e) {
-        debugLog(`❌ normalizeEvent[${index}]: ${e.message}`);
+    } catch (error) {
+        debugLog(`❌ normalizeEvent[${index}]: ${error.message}`);
         return null;
     }
 }
 
 /**
  * Применяет полную нормализацию к распарсенному объекту.
- * @param {Object} parsedData
- * @param {ParsingInfo} [info]
- * @returns {Object}
+ * Приводит к единой структуре ParsedAIResponse.
+ *
+ * @param {Object} parsedData - Объект, полученный после парсинга
+ * @param {ParsingInfo} [info] - Объект информации для записи заметок
+ * @returns {ParsedAIResponse}
  */
 function normalizeParsedObject(parsedData, info = null) {
     debugLog('🔧 normalizeParsedObject: start');
@@ -861,21 +1028,21 @@ function normalizeParsedObject(parsedData, info = null) {
     result.events   = Array.isArray(result.events)   ? result.events   : [];
     result.thoughts = Array.isArray(result.thoughts) ? result.thoughts : [];
 
-    // --- aiMemory ---
+    // --- aiMemory: нормализация к объекту ---
     if (result.aiMemory !== undefined && result.aiMemory !== null) {
         if (typeof result.aiMemory === 'string') {
-            const t = result.aiMemory.trim();
-            if (t.startsWith('{') || t.startsWith('[')) {
+            const trimmed = result.aiMemory.trim();
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
                 try {
-                    const parsed = JSON.parse(t);
+                    const parsed = JSON.parse(trimmed);
                     result.aiMemory = Array.isArray(parsed) ? { array: parsed } : parsed;
                     info?.normalizationNotes.push('aiMemory: string→object (JSON.parse)');
                 } catch {
-                    result.aiMemory = { rawValue: t };
+                    result.aiMemory = { rawValue: trimmed };
                     info?.normalizationNotes.push('aiMemory: string не удалось распарсить → { rawValue }');
                 }
             } else {
-                result.aiMemory = { value: t };
+                result.aiMemory = { value: trimmed };
                 info?.normalizationNotes.push('aiMemory: простая строка → { value }');
             }
         } else if (Array.isArray(result.aiMemory)) {
@@ -889,16 +1056,16 @@ function normalizeParsedObject(parsedData, info = null) {
         result.aiMemory = {};
     }
 
-    // --- choices & events ---
-    result.choices = result.choices.map((c, i) => normalizeChoice(c, i, info)).filter(Boolean);
-    result.events  = result.events.map((e, i) => normalizeEvent(e, i, info)).filter(Boolean);
+    // --- choices & events: фильтрация и нормализация каждого элемента ---
+    result.choices = result.choices.map((choice, idx) => normalizeChoice(choice, idx, info)).filter(Boolean);
+    result.events  = result.events.map((event, idx) => normalizeEvent(event, idx, info)).filter(Boolean);
 
     return result;
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ГЛАВНАЯ ТОЧКА ВХОДА
-// ============================================================================
+// ----------------------------------------------------------------------------
 
 /**
  * Основная функция парсинга ответа от ИИ.
@@ -906,14 +1073,14 @@ function normalizeParsedObject(parsedData, info = null) {
  * Гарантирует возврат объекта с полем `parsing_info` даже при критических ошибках.
  *
  * @param {string|Object} input - Сырая строка ответа или объект
- * @returns {Object} Нормализованные данные + `parsing_info: ParsingInfo`
+ * @returns {ParsedAIResponse} - Нормализованные данные + мета-информация
  */
 function processAIResponse(input) {
     const startTime = Date.now();
     debugBuffer.length = 0;
-    debugLog('🚀 processAIResponse v8.0 start', { type: typeof input });
+    debugLog('🚀 processAIResponse v8.1 start', { type: typeof input });
 
-    // --- Случай: готовый объект ---
+    // --- Случай: готовый объект (не массив) ---
     if (input && typeof input === 'object' && !Array.isArray(input)) {
         debugLog('📦 Объект → нормализация напрямую');
         const info = createEmptyInfo();
@@ -949,7 +1116,8 @@ function processAIResponse(input) {
     text = preprocessJson(text);
 
     let parsedData = emptyResult();
-    let origChoicesTotal = 0, origEventsTotal = 0;
+    let originalChoicesTotal = 0;
+    let originalEventsTotal = 0;
 
     // Уровень 1: стандартный JSON.parse
     info.parsingSteps.push('1: JSON.parse');
@@ -958,13 +1126,13 @@ function processAIResponse(input) {
         parsedData = { ...parsedData, ...parsed };
         info.approach = 'standard_json_parse';
         info.status   = 'OK';
-        origChoicesTotal = Array.isArray(parsedData.choices) ? parsedData.choices.length : 0;
-        origEventsTotal  = Array.isArray(parsedData.events)  ? parsedData.events.length  : 0;
+        originalChoicesTotal = Array.isArray(parsedData.choices) ? parsedData.choices.length : 0;
+        originalEventsTotal  = Array.isArray(parsedData.events)  ? parsedData.events.length  : 0;
         debugLog('✅ Уровень 1: SUCCESS');
-    } catch (e) {
-        const pos = e.message.match(/position (\d+)/)?.[1] || '?';
-        info.knownFieldErrors.root = `JSON.parse: ${e.message} (~pos ${pos})`;
-        debugLog(`❌ Уровень 1: FAIL pos=${pos}`);
+    } catch (error) {
+        const position = error.message.match(/position (\d+)/)?.[1] || '?';
+        info.knownFieldErrors.root = `JSON.parse: ${error.message} (~pos ${position})`;
+        debugLog(`❌ Уровень 1: FAIL pos=${position}`);
     }
 
     // Уровень 2: balanceBrackets + parse
@@ -976,11 +1144,11 @@ function processAIResponse(input) {
             parsedData = { ...parsedData, ...parsed };
             info.approach = 'truncated_repair';
             info.status   = 'WARN';
-            origChoicesTotal = Array.isArray(parsedData.choices) ? parsedData.choices.length : 0;
-            origEventsTotal  = Array.isArray(parsedData.events)  ? parsedData.events.length  : 0;
+            originalChoicesTotal = Array.isArray(parsedData.choices) ? parsedData.choices.length : 0;
+            originalEventsTotal  = Array.isArray(parsedData.events)  ? parsedData.events.length  : 0;
             debugLog('✅ Уровень 2: SUCCESS');
-        } catch (e) {
-            debugLog(`❌ Уровень 2: FAIL: ${e.message}`);
+        } catch (error) {
+            debugLog(`❌ Уровень 2: FAIL: ${error.message}`);
         }
     }
 
@@ -997,15 +1165,15 @@ function processAIResponse(input) {
         parsedData.design_notes = extractRootField(text, 'design_notes') || '';
         parsedData.aiMemory     = extractRootField(text, 'aiMemory')     || {};
 
-        const choicesRes = extractArrayWithStats(text, 'choices');
-        parsedData.choices = choicesRes.items;
-        origChoicesTotal   = choicesRes.totalFound;
-        info.recoveredCount += choicesRes.recovered;
+        const choicesResult = extractArrayWithStats(text, 'choices');
+        parsedData.choices = choicesResult.items;
+        originalChoicesTotal = choicesResult.totalFound;
+        info.recoveredCount += choicesResult.recovered;
 
-        const eventsRes  = extractArrayWithStats(text, 'events');
-        parsedData.events  = eventsRes.items;
-        origEventsTotal    = eventsRes.totalFound;
-        info.recoveredCount += eventsRes.recovered;
+        const eventsResult = extractArrayWithStats(text, 'events');
+        parsedData.events = eventsResult.items;
+        originalEventsTotal = eventsResult.totalFound;
+        info.recoveredCount += eventsResult.recovered;
 
         parsedData.thoughts = (extractRootField(text, 'thoughts') || []);
     }
@@ -1014,7 +1182,7 @@ function processAIResponse(input) {
     parsedData = normalizeParsedObject(parsedData, info);
 
     // Финализация info
-    finalizeInfo(info, parsedData, origChoicesTotal, origEventsTotal, startTime);
+    finalizeInfo(info, parsedData, originalChoicesTotal, originalEventsTotal, startTime);
     parsedData.parsing_info = info;
     flushDebugBuffer(info);
 
@@ -1022,10 +1190,14 @@ function processAIResponse(input) {
     return parsedData;
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ INFO
-// ============================================================================
+// ----------------------------------------------------------------------------
 
+/**
+ * Создаёт пустой объект ParsingInfo с значениями по умолчанию.
+ * @returns {ParsingInfo}
+ */
 function createEmptyInfo() {
     return {
         status: 'WARN',
@@ -1044,6 +1216,10 @@ function createEmptyInfo() {
     };
 }
 
+/**
+ * Создаёт пустой объект ParsedAIResponse со всеми полями.
+ * @returns {ParsedAIResponse}
+ */
 function emptyResult() {
     return {
         scene: '', reflection: '', personality: '',
@@ -1052,38 +1228,50 @@ function emptyResult() {
     };
 }
 
-function finalizeInfo(info, data, origChoicesTotal, origEventsTotal, startTime) {
-    let ops = 0;
-    (data.choices || []).forEach(c => {
-        ops += (c.success_rewards?.length || 0) + (c.fail_penalties?.length || 0);
+/**
+ * Заполняет итоговую информацию о парсинге:
+ * - подсчитывает общее количество операций,
+ * - устанавливает счётчики,
+ * - вычисляет статус.
+ *
+ * @param {ParsingInfo} info - Объект информации для заполнения
+ * @param {ParsedAIResponse} data - Нормализованные данные
+ * @param {number} originalChoicesTotal - Количество найденных choices до фильтрации
+ * @param {number} originalEventsTotal - Количество найденных events до фильтрации
+ * @param {number} startTime - Время начала выполнения (ms)
+ */
+function finalizeInfo(info, data, originalChoicesTotal, originalEventsTotal, startTime) {
+    let totalOperations = 0;
+    (data.choices || []).forEach(choice => {
+        totalOperations += (choice.success_rewards?.length || 0) + (choice.fail_penalties?.length || 0);
     });
-    (data.events || []).forEach(e => {
-        ops += (e.effects?.length || 0);
+    (data.events || []).forEach(event => {
+        totalOperations += (event.effects?.length || 0);
     });
 
-    info.extractedOperationsCount = ops;
+    info.extractedOperationsCount = totalOperations;
     info.thoughtsCount = (data.thoughts || []).length;
-    info.choicesCount  = `${(data.choices || []).length}/${origChoicesTotal}`;
-    info.eventsCount   = `${(data.events  || []).length}/${origEventsTotal}`;
+    info.choicesCount  = `${(data.choices || []).length}/${originalChoicesTotal}`;
+    info.eventsCount   = `${(data.events  || []).length}/${originalEventsTotal}`;
     info.durationMs    = Date.now() - startTime;
 
-    const valid = typeof data.scene === 'string' &&
-                  data.scene.trim().length > 0 &&
-                  Array.isArray(data.choices);
+    // Определяем итоговый статус
+    const isValid = typeof data.scene === 'string' &&
+                    data.scene.trim().length > 0 &&
+                    Array.isArray(data.choices);
 
-    if (!valid && info.status !== 'ERROR') {
+    if (!isValid && info.status !== 'ERROR') {
         info.status = 'ERROR';
-    } else if (info.status === 'WARN' && valid) {
-        // остаётся WARN
     }
+    // если статус уже WARN и данные валидны — остаётся WARN (предупреждение о восстановлении)
 }
 
 /**
  * Копирует краткий отчёт о парсинге в буфер обмена.
- * @param {Object} data - результат processAIResponse
+ * @param {ParsedAIResponse} data - результат processAIResponse
  */
 function copyToClipboard(data) {
-    const info   = data?.parsing_info || {};
+    const info = data?.parsing_info || {};
     const report = {
         status: info.status,
         approach: info.approach,
@@ -1103,9 +1291,9 @@ function copyToClipboard(data) {
         .catch(err => console.error('❌ Clipboard error:', err));
 }
 
-// ============================================================================
+// ----------------------------------------------------------------------------
 // ЭКСПОРТ
-// ============================================================================
+// ----------------------------------------------------------------------------
 export const Parser = {
     processAIResponse,
     normalizeOperation,
@@ -1122,4 +1310,4 @@ export const Parser = {
     balanceBrackets,
 };
 
-console.log('✅ Parser v8.0 (bracket-counting) загружен');
+console.log('✅ Parser v8.1 (полное комментирование, понятные имена) загружен');

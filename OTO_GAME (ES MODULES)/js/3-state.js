@@ -162,7 +162,7 @@ const DEFAULT_GAME = {
   },
   organizationsHierarchy: {},
   meta: {
-    context: '',
+    metaContext: '',
     unknownFields: [],
     unknownArrays: [],
     unknownObjects: []
@@ -1223,8 +1223,8 @@ export const State = {
   EVENTS: STATE_EVENTS,
 
   // ========== МЕТА-ДАННЫЕ (ДЛЯ НЕИЗВЕСТНЫХ ПОЛЕЙ) ==========
-  setMetaContext: (context) => {
-    state.game.meta.context = context;
+  setMetaContext: (metaContext) => {
+    state.game.meta.metaContext = metaContext;
     saveStateToLocalStorage();
   },
   addUnknownField: (field) => {

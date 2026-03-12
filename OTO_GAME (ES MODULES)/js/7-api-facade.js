@@ -102,7 +102,7 @@ function getProviderInfo(settings) {
  * 3. Подготовка заголовков и payload.
  * 4. Создание записи аудита.
  * 5. Вызов robustFetchWithRepair (который внутри уже корректно извлекает content и парсит).
- * 6. Обработка мета-данных _metaParsed.
+ * 6. Обработка мета-данных _metaData.
  * 7. Обновление аудита и статистики модели.
  * 
  * @param {Object} updatedState - Состояние ПОСЛЕ применения изменений.
@@ -145,12 +145,12 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
         const responseTime = Date.now() - startTime;
 
         // ШАГ 6: обработка мета-данных (если есть)
-        if (processedData._metaParsed) {
-            const meta = processedData._metaParsed;
-            if (meta.metaContext) State.setMetaContext(meta.metaContext);
-            meta.unknownFields.forEach(f => State.addUnknownField(f));
-            meta.unknownArrays.forEach(arr => State.addUnknownArray(arr));
-            meta.unknownObjects.forEach(obj => State.addUnknownObject(obj));
+        if (processedData._metaData) {
+            const metaData = processedData._metaData;
+            if (metaData.metaContext) State.setMetaContext(metaData.metaContext);
+            metaData.unknownFields.forEach(field => State.addUnknownField(field));
+            metaData.unknownArrays.forEach(arr => State.addUnknownArray(arr));
+            metaData.unknownObjects.forEach(obj => State.addUnknownObject(obj));
         }
 
         // ШАГ 7: обновление аудита и статистики
