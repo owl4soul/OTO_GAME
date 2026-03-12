@@ -96,7 +96,7 @@ function generateFullDebugText() {
     // Мета-поля
     lines.push(`  meta:`);
     const meta = state.game.meta || {};
-    lines.push(`    context: ${meta.context || '""'}`);
+    lines.push(`    context: ${meta.metaContext || '""'}`);
     lines.push(`    unknownFields (${meta.unknownFields?.length || 0}):`);
     if (meta.unknownFields) {
         meta.unknownFields.forEach((f, i) => lines.push(`      [${i}] key: ${f.key}, value: ${JSON.stringify(f.value)}`));
@@ -231,7 +231,7 @@ function generateGameSectionText() {
     }
     lines.push(`meta:`);
     const meta = state.game.meta || {};
-    lines.push(`  context: ${meta.context || '""'}`);
+    lines.push(`  context: ${meta.metaContext || '""'}`);
     lines.push(`  unknownFields (${meta.unknownFields?.length || 0}):`);
     if (meta.unknownFields) {
         meta.unknownFields.forEach((f, i) => lines.push(`    [${i}] key: ${f.key}, value: ${JSON.stringify(f.value)}`));

@@ -94,7 +94,7 @@ function generateFullDebugText() {
     // Мета-поля
     lines.push(`  meta:`);
     const meta = state.game.meta || {};
-    lines.push(`    context: ${meta.context || '""'}`);
+    lines.push(`    metaContext: ${meta.metaContext || '""'}`);
     lines.push(`    unknownFields (${meta.unknownFields?.length || 0}):`);
     if (meta.unknownFields) {
         meta.unknownFields.forEach((f, i) => lines.push(`      [${i}] key: ${f.key}, value: ${JSON.stringify(f.value)}`));
@@ -167,7 +167,7 @@ function generateFullDebugText() {
     lines.push(`  scaleIndex: ${state.settings.scaleIndex}`);
     lines.push(`  models (${state.settings.models.length}):`);
     state.settings.models.forEach((m, i) => {
-        lines.push(`    [${i}] id: ${m.id}, name: ${m.name}, status: ${m.status}, context: ${m.context}, maxTokens: ${m.maxTokens}, price: ${m.price}`);
+        lines.push(`    [${i}] id: ${m.id}, name: ${m.name}, status: ${m.status}, metaContext: ${m.metaContext}, maxTokens: ${m.maxTokens}, price: ${m.price}`);
     });
     lines.push('');
 
@@ -228,7 +228,7 @@ function generateGameSectionText() {
     }
     lines.push(`meta:`);
     const meta = state.game.meta || {};
-    lines.push(`  context: ${meta.context || '""'}`);
+    lines.push(`  metaContext: ${meta.metaContext || '""'}`);
     lines.push(`  unknownFields (${meta.unknownFields?.length || 0}):`);
     if (meta.unknownFields) {
         meta.unknownFields.forEach((f, i) => lines.push(`    [${i}] key: ${f.key}, value: ${JSON.stringify(f.value)}`));
@@ -315,7 +315,7 @@ function generateSettingsSectionText() {
     lines.push(`scaleIndex: ${state.settings.scaleIndex}`);
     lines.push(`models (${state.settings.models.length}):`);
     state.settings.models.forEach((m, i) => {
-        lines.push(`  [${i}] id: ${m.id}, name: ${m.name}, status: ${m.status}, context: ${m.context}, maxTokens: ${m.maxTokens}, price: ${m.price}`);
+        lines.push(`  [${i}] id: ${m.id}, name: ${m.name}, status: ${m.status}, metaContext: ${m.metaContext}, maxTokens: ${m.maxTokens}, price: ${m.price}`);
     });
     return lines.join('\n');
 }

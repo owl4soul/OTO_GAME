@@ -102,7 +102,7 @@ function getProviderInfo(settings) {
  * 3. Подготовка заголовков и payload.
  * 4. Создание записи аудита.
  * 5. Вызов robustFetchWithRepair (который внутри уже корректно извлекает content и парсит).
- * 6. Обработка мета-данных _metaData.
+ * 6. Обработка мета-данных (meta_context и _unknownData).
  * 7. Обновление аудита и статистики модели.
  * 
  * @param {Object} updatedState - Состояние ПОСЛЕ применения изменений.
@@ -115,23 +115,23 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
     // ШАГ 1: получаем текущие настройки
     const settings = State.getSettings();
     const { url, apiKey, isVsegpt } = getProviderInfo(settings);
-
+    
     // ШАГ 2: валидация API-ключа
     if (!apiKey) {
         throw new Error("API Key missing. Please go to Settings and enter your API key.");
     }
-
+    
     // ШАГ 3: подготовка заголовков и payload
     const headers = prepareHeaders(apiKey, isVsegpt);
     const requestPayload = prepareGameRequestPayload(updatedState, selectedActions, d10);
     applyProviderSpecificSettings(requestPayload, isVsegpt, settings);
-
+    
     // ШАГ 4: создаём запись аудита
     const auditEntry = createAuditEntryForGameTurn(selectedActions, requestPayload, settings, d10);
-
+    
     try {
         const startTime = Date.now();
-
+        
         // ШАГ 5: основной вызов через API_Response (он уже использует Parser внутри)
         const { rawResponseText, processedData } = await API_Response.robustFetchWithRepair(
             url,
@@ -141,38 +141,51 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
             API_Request,
             abortController
         );
-
+        
         const responseTime = Date.now() - startTime;
-
-        // ШАГ 6: обработка мета-данных (если есть)
-        if (processedData._metaData) {
-            const metaData = processedData._metaData;
-            if (metaData.metaContext) State.setMetaContext(metaData.metaContext);
-            metaData.unknownFields.forEach(field => State.addUnknownField(field));
-            metaData.unknownArrays.forEach(arr => State.addUnknownArray(arr));
-            metaData.unknownObjects.forEach(obj => State.addUnknownObject(obj));
+        
+        // ========== ОБРАБОТКА МЕТА-ДАННЫХ (v6.3) ==========
+        // 1. Основной мета-контекст из корня (meta_context)
+        if (processedData.meta_context !== undefined && processedData.meta_context !== null) {
+            State.setMetaContext(processedData.meta_context);
         }
-
+        
+        // 2. Неизвестные данные (переименовано из _metaData в _unknownData, логика сохранена)
+        if (processedData._unknownData) {
+            const unknownData = processedData._unknownData;
+            // Обрабатываем только неизвестные поля, но не трогаем metaContext внутри _unknownData
+            if (Array.isArray(unknownData.unknownFields)) {
+                unknownData.unknownFields.forEach(field => State.addUnknownField(field));
+            }
+            if (Array.isArray(unknownData.unknownArrays)) {
+                unknownData.unknownArrays.forEach(arr => State.addUnknownArray(arr));
+            }
+            if (Array.isArray(unknownData.unknownObjects)) {
+                unknownData.unknownObjects.forEach(obj => State.addUnknownObject(obj));
+            }
+        }
+        // ===================================================
+        
         // ШАГ 7: обновление аудита и статистики
         Audit.updateEntrySuccess(auditEntry, rawResponseText);
         updateModelStats(settings, responseTime);
-
+        
         console.log(`💬 Ответ получен за ${responseTime}мс`);
         return processedData;
-
+        
     } catch (error) {
         // ШАГ 8: обработка ошибки
         const modelInState = settings.models.find(model => model.id === settings.model);
         if (modelInState) modelInState.status = 'error';
-
+        
         Audit.updateEntryError(auditEntry, error, error.rawResponse);
-
+        
         console.error(`🔥 Ошибка запроса к ИИ:`, error.message);
         if (error.rawResponse) {
             console.log('📄 Полный ответ сервера при ошибке:');
             Audit.logToConsole(`🔥 [FULL ERROR RESPONSE]`, error.rawResponse);
         }
-
+        
         throw error;
     }
 }

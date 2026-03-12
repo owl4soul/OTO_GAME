@@ -1023,11 +1023,11 @@ function normalizeEvent(event, index, info = null) {
 function normalizeParsedObject(parsedData, info = null) {
     debugLog('🔧 normalizeParsedObject: start');
     const result = { ...parsedData };
-
-    result.choices  = Array.isArray(result.choices)  ? result.choices  : [];
-    result.events   = Array.isArray(result.events)   ? result.events   : [];
+    
+    result.choices = Array.isArray(result.choices) ? result.choices : [];
+    result.events = Array.isArray(result.events) ? result.events : [];
     result.thoughts = Array.isArray(result.thoughts) ? result.thoughts : [];
-
+    
     // --- aiMemory: нормализация к объекту ---
     if (result.aiMemory !== undefined && result.aiMemory !== null) {
         if (typeof result.aiMemory === 'string') {
@@ -1055,11 +1055,16 @@ function normalizeParsedObject(parsedData, info = null) {
     } else {
         result.aiMemory = {};
     }
-
+    
+    // --- meta_context – оставляем как есть (может быть объектом, строкой и т.д.) ---
+    if (parsedData.meta_context !== undefined) {
+        result.meta_context = parsedData.meta_context;
+    }
+    
     // --- choices & events: фильтрация и нормализация каждого элемента ---
     result.choices = result.choices.map((choice, idx) => normalizeChoice(choice, idx, info)).filter(Boolean);
-    result.events  = result.events.map((event, idx) => normalizeEvent(event, idx, info)).filter(Boolean);
-
+    result.events = result.events.map((event, idx) => normalizeEvent(event, idx, info)).filter(Boolean);
+    
     return result;
 }
 
@@ -1078,30 +1083,30 @@ function normalizeParsedObject(parsedData, info = null) {
 function processAIResponse(input) {
     const startTime = Date.now();
     debugBuffer.length = 0;
-    debugLog('🚀 processAIResponse v8.1 start', { type: typeof input });
-
+    debugLog('🚀 processAIResponse v8.2 start', { type: typeof input });
+    
     // --- Случай: готовый объект (не массив) ---
     if (input && typeof input === 'object' && !Array.isArray(input)) {
         debugLog('📦 Объект → нормализация напрямую');
         const info = createEmptyInfo();
         info.approach = 'direct_object';
         info.parsingSteps.push('Объект получен напрямую');
-
+        
         const normalized = normalizeParsedObject(input, info);
         finalizeInfo(info, normalized, 0, 0, startTime);
         normalized.parsing_info = info;
         flushDebugBuffer(info);
         return normalized;
     }
-
+    
     // --- Случай: строка ---
     const rawText = (input || '').trim();
     const info = createEmptyInfo();
     info.rawResponseText = rawText;
     info.status = 'WARN';
-
+    
     let text = rawText;
-
+    
     // Уровень 0.5: вложенный API-ответ
     const nested = extractNestedJsonFromApiResponse(text);
     if (nested) {
@@ -1109,83 +1114,84 @@ function processAIResponse(input) {
         info.parsingSteps.push('0.5: извлечение из choices[0].message.content');
         debugLog('📦 Обнаружен вложенный JSON API');
     }
-
+    
     // Уровень 0: предобработка
     info.parsingSteps.push('0: предобработка (decodeUnicode + preprocessJson)');
     text = decodeUnicodeEscapes(text);
     text = preprocessJson(text);
-
+    
     let parsedData = emptyResult();
     let originalChoicesTotal = 0;
     let originalEventsTotal = 0;
-
+    
     // Уровень 1: стандартный JSON.parse
     info.parsingSteps.push('1: JSON.parse');
     try {
         const parsed = JSON.parse(text);
         parsedData = { ...parsedData, ...parsed };
         info.approach = 'standard_json_parse';
-        info.status   = 'OK';
+        info.status = 'OK';
         originalChoicesTotal = Array.isArray(parsedData.choices) ? parsedData.choices.length : 0;
-        originalEventsTotal  = Array.isArray(parsedData.events)  ? parsedData.events.length  : 0;
+        originalEventsTotal = Array.isArray(parsedData.events) ? parsedData.events.length : 0;
         debugLog('✅ Уровень 1: SUCCESS');
     } catch (error) {
         const position = error.message.match(/position (\d+)/)?.[1] || '?';
         info.knownFieldErrors.root = `JSON.parse: ${error.message} (~pos ${position})`;
         debugLog(`❌ Уровень 1: FAIL pos=${position}`);
     }
-
+    
     // Уровень 2: balanceBrackets + parse
     if (info.status !== 'OK') {
         info.parsingSteps.push('2: balanceBrackets + JSON.parse');
         try {
             const repaired = balanceBrackets(text);
-            const parsed   = JSON.parse(repaired);
+            const parsed = JSON.parse(repaired);
             parsedData = { ...parsedData, ...parsed };
             info.approach = 'truncated_repair';
-            info.status   = 'WARN';
+            info.status = 'WARN';
             originalChoicesTotal = Array.isArray(parsedData.choices) ? parsedData.choices.length : 0;
-            originalEventsTotal  = Array.isArray(parsedData.events)  ? parsedData.events.length  : 0;
+            originalEventsTotal = Array.isArray(parsedData.events) ? parsedData.events.length : 0;
             debugLog('✅ Уровень 2: SUCCESS');
         } catch (error) {
             debugLog(`❌ Уровень 2: FAIL: ${error.message}`);
         }
     }
-
+    
     // Уровень 3: агрессивное извлечение (bracket-counting)
     if (info.status !== 'OK') {
         info.approach = 'aggressive_bracket_counting';
         info.parsingSteps.push('3: агрессивное извлечение (bracket-counting v8.0)');
-
-        parsedData.scene        = extractRootField(text, 'scene')        || '';
-        parsedData.reflection   = extractRootField(text, 'reflection')   || '';
-        parsedData.typology     = extractRootField(text, 'typology')     || '';
-        parsedData.personality  = extractRootField(text, 'personality')  || '';
-        parsedData.summary      = extractRootField(text, 'summary')      || '';
+        
+        parsedData.scene = extractRootField(text, 'scene') || '';
+        parsedData.reflection = extractRootField(text, 'reflection') || '';
+        parsedData.typology = extractRootField(text, 'typology') || '';
+        parsedData.personality = extractRootField(text, 'personality') || '';
+        parsedData.summary = extractRootField(text, 'summary') || '';
         parsedData.design_notes = extractRootField(text, 'design_notes') || '';
-        parsedData.aiMemory     = extractRootField(text, 'aiMemory')     || {};
-
+        parsedData.aiMemory = extractRootField(text, 'aiMemory') || {};
+        parsedData.meta_context = extractRootField(text, 'meta_context') || null;
+        
         const choicesResult = extractArrayWithStats(text, 'choices');
         parsedData.choices = choicesResult.items;
         originalChoicesTotal = choicesResult.totalFound;
         info.recoveredCount += choicesResult.recovered;
-
+        
         const eventsResult = extractArrayWithStats(text, 'events');
         parsedData.events = eventsResult.items;
         originalEventsTotal = eventsResult.totalFound;
         info.recoveredCount += eventsResult.recovered;
-
+        
         parsedData.thoughts = (extractRootField(text, 'thoughts') || []);
     }
-
+    
     // Нормализация
     parsedData = normalizeParsedObject(parsedData, info);
-
+    
     // Финализация info
     finalizeInfo(info, parsedData, originalChoicesTotal, originalEventsTotal, startTime);
     parsedData.parsing_info = info;
     flushDebugBuffer(info);
-
+    
     debugLog('🏁 processAIResponse DONE', { status: info.status, ms: info.durationMs });
     return parsedData;
 }

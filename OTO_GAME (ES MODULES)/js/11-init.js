@@ -431,6 +431,9 @@ function setupSettingsModalEvents() {
 /**
  * ОБРАБОТЧИК ДЛЯ КНОПКИ "ПРИНЯТЬ" (исправленный)
  */
+/**
+ * ОБРАБОТЧИК ДЛЯ КНОПКИ "ПРИНЯТЬ" (исправленный)
+ */
 function setupAcceptPlotHandler() {
     const btnAccept = document.getElementById('btnAcceptPlot');
     const plotInput = document.getElementById('plotInput');
@@ -472,7 +475,6 @@ function setupAcceptPlotHandler() {
         // Проверяем, что sceneData содержит choices
         if (!sceneData.choices || !Array.isArray(sceneData.choices) || sceneData.choices.length === 0) {
             console.warn('⚠️ sceneData.choices отсутствуют или пусты', sceneData);
-            // Можно показать ошибку пользователю
             Render.showErrorAlert("Ошибка данных", "Сцена не содержит выборов. Проверьте JSON.");
             return;
         }
@@ -491,7 +493,7 @@ function setupAcceptPlotHandler() {
         // 1. Начальное состояние героя (дефолтное)
         let heroState = State.getDefaultHeroState();
         
-        // 2. Добавляем/обновляем все game_items из сцены (если есть)
+        // 2. Добавляем/обновляем все game_items из корня (если есть)
         if (sceneData.game_items && Array.isArray(sceneData.game_items)) {
             sceneData.game_items.forEach(newItem => {
                 const existingIndex = heroState.findIndex(item => item.id === newItem.id);
@@ -528,7 +530,7 @@ function setupAcceptPlotHandler() {
             }
         }
         
-        // ✨ aiMemory уже нормализован Parser
+        // aiMemory уже нормализован Parser
         const aiMemoryCopy = JSON.parse(JSON.stringify(sceneData.aiMemory || {}));
         
         // Создаём новое gameState
@@ -583,7 +585,7 @@ function setupAcceptPlotHandler() {
                 currentScene: newGameState.currentScene,
                 organizationsHierarchy: newGameState.organizationsHierarchy,
                 meta: {
-                    context: '',
+                    metaContext: '',
                     unknownFields: [],
                     unknownArrays: [],
                     unknownObjects: []
@@ -608,9 +610,17 @@ function setupAcceptPlotHandler() {
             settings: { ...preserved.settings },
         };
         
-        // Обновляем мета-контекст, если есть
+        // Обработка meta_context при старте кастомной игры
         if (sceneData.meta_context) {
-            newState.game.meta.context = JSON.stringify(sceneData.meta_context);
+            const metaContext = sceneData.meta_context;
+            if (metaContext && typeof metaContext === 'object') {
+                newState.game.meta.metaContext = JSON.stringify(metaContext);
+            } else if (typeof metaContext === 'string' && metaContext.trim() !== '') {
+                newState.game.meta.metaContext = metaContext.trim();
+            } else {
+                // Число, булево и т.п. – сохраняем как строку
+                newState.game.meta.metaContext = String(metaContext);
+            }
         }
         
         // Устанавливаем основное состояние

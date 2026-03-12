@@ -119,7 +119,7 @@ function calculateChoiceResult(choice, d10) {
         return {
             success: true,
             partial: false,
-            reason: 'Свободный ввод: Автоматический успех',
+            reason: 'СВОБОДНЫЙ ВВОД',
             d10: d10,
             difficulty: 0,
             operations: []
@@ -302,8 +302,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         return;
     }
     
-    const d10 = Math.round(Math.random() * 10) + 1;
-   //const d10 = 11;
+    //const d10 = Math.round(Math.random() * 10) + 1;
+    const d10 = 11;
     log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎲 Общий бросок удачи на ход: d10 = ${d10}`, {
         d10: d10,
         turn: turnNumber
@@ -512,7 +512,13 @@ async function processTurn(data) {
         log.error(LOG_CATEGORIES.ERROR_TRACKING, 'Нет pending данных для обработки хода');
         return;
     }
-    
+
+    // Игнорируем стартовый инициализирующий массив game_items (он применяется только при старте новой кастомной игры)
+    if (data.game_items && Array.isArray(data.game_items)) {
+        log.warn(LOG_CATEGORIES.PARSING, 'Игнорируем повторно переданный стартовый инициализирующий массив game_items');
+        delete data.game_items; // удаляем, чтобы случайно не использовать
+    }
+
     const state = State.getState();
     const completedTurn = state.game.turnCount;
     
@@ -575,14 +581,10 @@ async function processTurn(data) {
     }
     
     // ====================================================================
-    // ШАГ 6: aiMemory — ЕДИНСТВЕННОЕ МЕСТО ЗАПИСИ В СОСТОЯНИЕ
-    // ====================================================================
-    // СТРОГОЕ ПРАВИЛО: aiMemory всегда и только в currentScene.aiMemory
-    // Никаких других вариантов не допускается.
+    // ШАГ 6: aiMemory — память гейм-мастера
     const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && Object.keys(data.aiMemory).length > 0) ?
         data.aiMemory :
         (state.game.currentScene.aiMemory || {});
-    // ====================================================================
     
     // ШАГ 7: Обновление typology и personality (если ИИ их изменил)
     const updatedTypology = (data.typology && typeof data.typology === 'string' && data.typology !== state.game.currentScene.typology) ?
@@ -593,14 +595,14 @@ async function processTurn(data) {
         data.personality :
         state.game.currentScene.personality;
     
-    // ШАГ 8: Формируем обновлённую сцену (aiMemory строго внутри)
+    // ШАГ 8: ФОРМИРУЕМ ОБНОВЛЁННОЕ СОСТОЯНИЕ СЦЕНЫ
     const updatedScene = {
         scene: data.scene || state.game.currentScene.scene,
         reflection: data.reflection || "",
         choices: data.choices || state.game.currentScene.choices,
         typology: updatedTypology,
         design_notes: data.design_notes || "",
-        aiMemory: updatedAiMemory, // ← ТОЛЬКО ЗДЕСЬ
+        aiMemory: updatedAiMemory,
         thoughts: data.thoughts || [],
         summary: data.summary || "",
         personality: updatedPersonality
@@ -624,7 +626,7 @@ async function processTurn(data) {
         updatedHistory.shift();
     }
     
-    // ШАГ 10: Обработка организаций (как было)
+    // ШАГ 10: Обработка организаций
     if (data._organizationsHierarchy && typeof data._organizationsHierarchy === 'object') {
         for (const orgId in data._organizationsHierarchy) {
             const hierarchy = data._organizationsHierarchy[orgId];

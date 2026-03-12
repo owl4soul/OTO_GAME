@@ -1221,12 +1221,29 @@ export const State = {
 
   /** @enum {string} */
   EVENTS: STATE_EVENTS,
-
-  // ========== МЕТА-ДАННЫЕ (ДЛЯ НЕИЗВЕСТНЫХ ПОЛЕЙ) ==========
-  setMetaContext: (metaContext) => {
-    state.game.meta.metaContext = metaContext;
+  
+  // ========== МЕТА-КОНТЕКСТ ОТ ГЕЙМ-МАСТЕРА ==========
+setMetaContext: (metaContext) => {
+    // Игнорируем null/undefined
+    if (metaContext === null || metaContext === undefined) return;
+    
+    let strContext;
+    if (typeof metaContext === 'object') {
+        // Объект или массив преобразуем в строку JSON
+        strContext = JSON.stringify(metaContext);
+    } else {
+        // Примитив – приводим к строке и обрезаем пробелы
+        strContext = String(metaContext).trim();
+    }
+    
+    // Не записываем пустую строку (защита от затирания)
+    if (strContext === '') return;
+    
+    state.game.meta.context = strContext;
     saveStateToLocalStorage();
-  },
+},
+
+  // ========== ДАННЫЕ НЕИЗВЕСТНЫХ ПОЛЕЙ ==========
   addUnknownField: (field) => {
     state.game.meta.unknownFields.push(field);
     saveStateToLocalStorage();

@@ -17,19 +17,23 @@ import { PROMPTS } from './prompts.js';
  * + добавляет metaContext из состояния, если есть
  */
 function constructFullSystemPrompt(state) {
-  let prompt;
-  if (state.game.type === 'standard') {
-    prompt = PROMPTS.standardGameOTO.system.gameMaster;
-  } else {
-    prompt = PROMPTS.system.gameMaster; // worldContext удалён, так как его нет в настройках
-  }
-  
-  // Мета-контекст теперь лежит в state.game.meta.context
-  if (state.game.meta?.context) {
-    prompt += `\n\n### META CONTEXT\n${state.game.meta.context}`;
-  }
-  
-  return prompt;
+    let prompt;
+    if (state.game.type === 'standard') {
+        prompt = PROMPTS.standardGameOTO.system.gameMaster;
+    } else {
+        prompt = PROMPTS.system.gameMaster; // универсальный ГМ
+    }
+    
+    // Мета-контекст от гейм-мастера (если предоставлялся)
+    if (state.game.meta?.metaContext) {
+        // Убеждаемся, что это строка (на случай, если что-то пошло не так)
+        const metaContext = typeof state.game.meta.metaContext === 'string'
+            ? state.game.meta.metaContext
+            : JSON.stringify(state.game.meta.metaContext);
+        prompt += `\n\n### МЕТА-КОНТЕКСТ\n${metaContext}`;
+    }
+    
+    return prompt;
 }
 
 // ============================================================================
@@ -143,6 +147,9 @@ function buildContextBlock(state) {
 function formatSelectedActionsForPrompt(selectedActions) {
   if (!selectedActions?.length) return "Действия не выбраны";
   return selectedActions.map(action => {
+    if (action.difficulty_level === 0) {
+      return `"${action.text}" → ❓ СВОБОДНЫЙ ВВОД (сложность не установлена): успех или провал - на усмотрение гейм-мастера, с учётом d10 и остальных характеристик состояния героя`;
+    }
     const status = action.success ? '✅ УСПЕХ' :
       action.partial_success ? '⚠️ ЧАСТИЧНЫЙ УСПЕХ' :
       '❌ ПРОВАЛ';
