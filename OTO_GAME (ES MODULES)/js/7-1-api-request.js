@@ -73,7 +73,7 @@ function getDynamicSystemInjections(state) {
 // ============================================================================
 
 /**
- * Обрезает HTML-текст сцены до краткого читаемого отрывка.
+ * Обрезает HTML-текст сцены до краткого читаемого отрывка для использования в качестве замены summary.
  */
 function truncateScene(text, maxChars = 400) {
   if (!text) return '(нет текста)';
@@ -339,6 +339,5 @@ export const API_Request = {
   formatSelectedActionsForPrompt,
   formatHeroStateForPrompt,
   prepareRequestPayload,
-  executeFetchRaw,
-  truncateScene
+  executeFetchRaw
 };
