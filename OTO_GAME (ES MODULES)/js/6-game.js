@@ -302,8 +302,8 @@ async function submitTurn(retries = CONFIG.maxRetries) {
         return;
     }
     
-    //const d10 = Math.round(Math.random() * 10) + 1;
-    const d10 = 11;
+    const d10 = Math.round(Math.random() * 10) + 1;
+    //const d10 = 11;
     log.info(LOG_CATEGORIES.TURN_PROCESSING, `🎲 Общий бросок удачи на ход: d10 = ${d10}`, {
         d10: d10,
         turn: turnNumber
@@ -489,15 +489,7 @@ async function submitTurn(retries = CONFIG.maxRetries) {
 }
 
 /**
- * ОБРАБОТКА ОТВЕТА ОТ ИИ ПОСЛЕ ХОДА (processTurn)
- * 
- * Это ЕДИНСТВЕННОЕ место в проекте, где aiMemory приходит от парсера и записывается в состояние.
- * 
- * СТРОГОЕ ПРАВИЛО (согласно твоему требованию):
- * - aiMemory может лежать ТОЛЬКО в game.currentScene.aiMemory
- * - Никаких переносов с корня game.aiMemory
- * - Никаких защитных функций
- * - Никаких проверок "если вдруг на корне"
+ * ОБРАБОТКА ОТВЕТА ОТ ИИ ПОСЛЕ ХОДА
  * 
  * @param {Object} data - сырой ответ от Parser.processAIResponse()
  * @returns {Promise<void>}
@@ -513,10 +505,10 @@ async function processTurn(data) {
         return;
     }
 
-    // Игнорируем стартовый инициализирующий массив game_items (он применяется только при старте новой кастомной игры)
+    // Игнорируем повторный корневой game_items[] (применяется только один раз на старте)
     if (data.game_items && Array.isArray(data.game_items)) {
-        log.warn(LOG_CATEGORIES.PARSING, 'Игнорируем повторно переданный стартовый инициализирующий массив game_items');
-        delete data.game_items; // удаляем, чтобы случайно не использовать
+        log.warn(LOG_CATEGORIES.PARSING, 'Игнорируем повторно переданный корневой game_items[] — применяется только один раз');
+        delete data.game_items;
     }
 
     const state = State.getState();
@@ -582,9 +574,9 @@ async function processTurn(data) {
     
     // ====================================================================
     // ШАГ 6: aiMemory — память гейм-мастера
-    const updatedAiMemory = (data.aiMemory && typeof data.aiMemory === 'object' && Object.keys(data.aiMemory).length > 0) ?
-        data.aiMemory :
-        (state.game.currentScene.aiMemory || {});
+    const updatedAiMemory = (data.aiMemory !== undefined) 
+        ? data.aiMemory 
+        : (state.game.currentScene.aiMemory || {});
     
     // ШАГ 7: Обновление typology и personality (если ИИ их изменил)
     const updatedTypology = (data.typology && typeof data.typology === 'string' && data.typology !== state.game.currentScene.typology) ?
@@ -661,12 +653,15 @@ async function processTurn(data) {
         }
     });
     
-    // ШАГ 14: Очистка pending-данных
+    // ШАГ 14: Обновление aiMemory через защищённый метод
+    if (data.aiMemory !== undefined) State.updateAiMemory(data.aiMemory);
+    
+    // ШАГ 15: Очистка pending-данных
     pendingOriginalHeroState = null;
     pendingActionResults = null;
     pendingD10 = null;
     
-    // ШАГ 15: Эмиты событий
+    // ШАГ 16: Эмиты событий
     State.emit(State.EVENTS.HERO_CHANGED, {
         statChanges: statChanges,
         actionResults: pendingActionResults,
@@ -685,7 +680,7 @@ async function processTurn(data) {
         turnNumber: completedTurn
     });
     
-    // ШАГ 16: Финализация UI
+    // ШАГ 17: Финализация UI
     UI.setFreeModeUI(false);
     dom.freeInputText.disabled = false;
     dom.freeInputText.style.opacity = '1';

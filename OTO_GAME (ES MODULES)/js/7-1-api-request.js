@@ -15,6 +15,7 @@ import { PROMPTS } from './prompts.js';
  * - 'standard'  → универсальный + контекст мира ОТО
  * - другие      → универсальный (без дополнительного контекста)
  * + добавляет metaContext из состояния, если есть
+ * + добавляет сохранённые неизвестные корневые поля
  */
 function constructFullSystemPrompt(state) {
     let prompt;
@@ -31,6 +32,12 @@ function constructFullSystemPrompt(state) {
             ? state.game.meta.metaContext
             : JSON.stringify(state.game.meta.metaContext);
         prompt += `\n\n### МЕТА-КОНТЕКСТ\n${metaContext}`;
+    }
+
+    // Добавляем сохранённые неизвестные корневые поля
+    const extraRoot = State.getExtraRootData();
+    if (Object.keys(extraRoot).length > 0) {
+        prompt += `\n\n=== СОХРАНЁННЫЕ НЕИЗВЕСТНЫЕ КОРНЕВЫЕ ПОЛЯ (ОБЯЗАТЕЛЬНО СОХРАНЯЙ И УЧИТЫВАЙ) ===\n${JSON.stringify(extraRoot, null, 2)}`;
     }
     
     return prompt;
@@ -274,7 +281,7 @@ ${needsThoughts ? '\n### Сгенерируй 10+ мыслей героя (thoug
     ],
     model: state.settings.model,
     temperature: 0.9,
-    max_tokens: 10000
+    max_tokens: 20000
   };
 }
 

@@ -1,13 +1,6 @@
 /**
- * МОДУЛЬ УНИВЕРСАЛЬНЫХ УТИЛИТ (2-utils.js v2.0)
- * ===============================================================
- * ПОСЛЕ ТОТАЛЬНОГО АУДИТА И ПЕРЕМЕЩЕНИЯ:
- * - Оставлены ТОЛЬКО общие, нигде не зависящие от парсинга ответов ИИ утилиты.
- * - Каждый метод имеет гипервербозный JSDoc + подробнейшие inline-комментарии перед каждой строкой и каждой развилкой.
- * - Никаких сокращений, никаких заглушек — полный код.
- * ===============================================================
+ * МОДУЛЬ УНИВЕРСАЛЬНЫХ УТИЛИТ (2-utils.js)
  */
-
 'use strict';
 
 import { CONFIG } from './1-config.js';
@@ -19,7 +12,6 @@ import { CONFIG } from './1-config.js';
 /**
  * Константы категорий game_item.
  * Используются в UI, OperationsService, рендере и логике группировки.
- * НЕ связаны с парсингом — чисто справочные данные.
  */
 export const GAME_ITEM_CATEGORIES = {
     STAT: 'stat',
@@ -256,14 +248,6 @@ export function formatMoscowTime(date) {
     });
 }
 
-/**
- * Нормализация ключа стата (с учётом алиасов из CONFIG).
- */
-export function normalizeStatKey(key) {
-    if (!key) return null;
-    const lower = key.toLowerCase().trim();
-    return CONFIG.statAliases[lower] || (CONFIG.startStats.hasOwnProperty(lower) ? lower : null);
-}
 
 /**
  * Выбор файла через диалог (кросс-платформенный).
@@ -430,9 +414,7 @@ export function isEmpty(value) {
     return false;
 }
 
-// ============================================================================
-// ПУБЛИЧНЫЙ ИНТЕРФЕЙС (только универсальные методы)
-// ============================================================================
+// ПУБЛИЧНЫЙ ИНТЕРФЕЙС (универсальные методы)
 export const Utils = {
     getRussianStatName,
     getGameItemIcon,
@@ -444,7 +426,6 @@ export const Utils = {
     generateUniqueId,
     getMoscowTime,
     formatMoscowTime,
-    normalizeStatKey,
     selectFile,
     selectFolder,
     saveFileWithFolderPicker,

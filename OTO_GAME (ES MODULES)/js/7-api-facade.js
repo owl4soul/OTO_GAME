@@ -144,27 +144,18 @@ async function sendAIRequest(updatedState, selectedActions, abortController = nu
         
         const responseTime = Date.now() - startTime;
         
-        // ========== ОБРАБОТКА МЕТА-ДАННЫХ (v6.3) ==========
-        // 1. Основной мета-контекст из корня (meta_context)
-        if (processedData.meta_context !== undefined && processedData.meta_context !== null) {
-            State.setMetaContext(processedData.meta_context);
+        // ========== ЗАЩИЩЁННАЯ ОБРАБОТКА КОРНЕВЫХ ПОЛЕЙ ==========
+        if (processedData.aiMemory !== undefined) {
+            State.updateAiMemory(processedData.aiMemory);
         }
-        
-        // 2. Неизвестные данные (переименовано из _metaData в _unknownData, логика сохранена)
-        if (processedData._unknownData) {
-            const unknownData = processedData._unknownData;
-            // Обрабатываем только неизвестные поля, но не трогаем metaContext внутри _unknownData
-            if (Array.isArray(unknownData.unknownFields)) {
-                unknownData.unknownFields.forEach(field => State.addUnknownField(field));
-            }
-            if (Array.isArray(unknownData.unknownArrays)) {
-                unknownData.unknownArrays.forEach(arr => State.addUnknownArray(arr));
-            }
-            if (Array.isArray(unknownData.unknownObjects)) {
-                unknownData.unknownObjects.forEach(obj => State.addUnknownObject(obj));
-            }
+        if (processedData.meta_context !== undefined) {
+            State.updateMetaContext(processedData.meta_context);
         }
-        // ===================================================
+        if (processedData._extraRoot) {
+            State.mergeExtraRootData(processedData._extraRoot);
+        }
+        // game_items[] здесь НЕ трогаем — применяется только в init
+        // ===========================================================
         
         // ШАГ 7: обновление аудита и статистики
         Audit.updateEntrySuccess(auditEntry, rawResponseText);
@@ -235,7 +226,7 @@ async function generateCustomScene(promptText) {
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
         ],
-        max_tokens: 10000,
+        max_tokens: 30000,
         temperature: 0.85
     };
 
@@ -492,7 +483,7 @@ async function testSelectedModel() {
 }
 
 // ============================================================================
-// ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ (полные, без сокращений)
+// ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
 // ============================================================================
 
 /**
@@ -664,10 +655,7 @@ function updateUIAfterTest(settings) {
     }
 }
 
-// ============================================================================
 // ЭКСПОРТ ЕДИНОГО ИНТЕРФЕЙСА API
-// ============================================================================
-
 export const API = {
     sendAIRequest,
     generateCustomScene,

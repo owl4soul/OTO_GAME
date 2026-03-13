@@ -8,6 +8,7 @@ import { PROMPTS } from './prompts.js';
 import { GameItemUI } from './gameitem-ui.js';
 import { OperationsServiceInstance, GAME_ITEM_TYPES, OPERATIONS } from './operations-service.js';
 import { Logger, log, LOG_CATEGORIES, LOG_LEVELS } from './logger.js';
+import { Parser } from './parsing.js';
 
 // ========================
 // ПАТТЕРН OBSERVER (НАБЛЮДАТЕЛЬ)
@@ -162,7 +163,9 @@ const DEFAULT_GAME = {
   },
   organizationsHierarchy: {},
   meta: {
-    metaContext: '',
+    metaContext: null,               // null = не задан (никогда не затираем)
+    extraRootData: {},               // все неизвестные корневые поля
+    initialGameItemsApplied: false,   // флаг для game_items[]
     unknownFields: [],
     unknownArrays: [],
     unknownObjects: []
@@ -1067,9 +1070,14 @@ export const State = {
    * @param {Object} updater - частичные данные для game
    */
   updateGame: (updater) => {
+    // Защита от прямой записи aiMemory и meta_context (обновляются только через специальные методы)
     if (updater.aiMemory !== undefined) {
-      log.warn(LOG_CATEGORIES.GAME_STATE, '🚫 ЗАПРЕЩЕНО: aiMemory нельзя записывать на game.aiMemory (Parser v6.1)');
-      delete updater.aiMemory;
+        log.warn(LOG_CATEGORIES.GAME_STATE, '🚫 aiMemory обновляется ТОЛЬКО через State.updateAiMemory()');
+        delete updater.aiMemory;
+    }
+    if (updater.meta_context !== undefined) {
+        log.warn(LOG_CATEGORIES.GAME_STATE, '🚫 meta_context обновляется ТОЛЬКО через State.updateMetaContext()');
+        delete updater.meta_context;
     }
     state.game = deepMerge({}, state.game, updater);
     saveStateToLocalStorage();
@@ -1223,7 +1231,7 @@ export const State = {
   EVENTS: STATE_EVENTS,
   
   // ========== МЕТА-КОНТЕКСТ ОТ ГЕЙМ-МАСТЕРА ==========
-setMetaContext: (metaContext) => {
+  setMetaContext: (metaContext) => {
     // Игнорируем null/undefined
     if (metaContext === null || metaContext === undefined) return;
     
@@ -1239,9 +1247,57 @@ setMetaContext: (metaContext) => {
     // Не записываем пустую строку (защита от затирания)
     if (strContext === '') return;
     
-    state.game.meta.context = strContext;
+    state.game.meta.metaContext = strContext;
     saveStateToLocalStorage();
-},
+  },
+
+  /**
+   * Обновляет aiMemory ТОЛЬКО если значение НЕ пустое (защита от затирания).
+   */
+  updateAiMemory: (newValue) => {
+    const normalized = Parser.normalizeComplexField(newValue, 'aiMemory');
+    if (normalized !== null) {
+        state.game.currentScene.aiMemory = JSON.parse(JSON.stringify(normalized));
+        saveStateToLocalStorage();
+        stateObserver.notify(STATE_EVENTS.GAME_CHANGED, { aiMemoryUpdated: true });
+    }
+  },
+
+  /**
+   * Обновляет meta_context ТОЛЬКО если значение НЕ пустое (защита от затирания).
+   */
+  updateMetaContext: (newValue) => {
+    const normalized = Parser.normalizeComplexField(newValue, 'meta_context');
+    if (normalized !== null) {
+        state.game.meta.metaContext = JSON.parse(JSON.stringify(normalized));
+        saveStateToLocalStorage();
+        stateObserver.notify(STATE_EVENTS.GAME_CHANGED, { metaContextUpdated: true });
+    }
+  },
+
+  /**
+   * Сохраняет неизвестные корневые поля (возвращаются обратно в промпт).
+   */
+  mergeExtraRootData: (extraObj) => {
+    if (extraObj && typeof extraObj === 'object' && Object.keys(extraObj).length > 0) {
+        state.game.meta.extraRootData = {
+            ...state.game.meta.extraRootData,
+            ...JSON.parse(JSON.stringify(extraObj))
+        };
+        saveStateToLocalStorage();
+    }
+  },
+
+  /**
+   * Помечает, что начальные game_items[] уже применены (однократно).
+   */
+  markInitialGameItemsApplied: () => {
+    state.game.meta.initialGameItemsApplied = true;
+    saveStateToLocalStorage();
+  },
+
+  getMetaContext: () => state.game.meta.metaContext ? JSON.parse(JSON.stringify(state.game.meta.metaContext)) : null,
+  getExtraRootData: () => JSON.parse(JSON.stringify(state.game.meta.extraRootData || {})),
 
   // ========== ДАННЫЕ НЕИЗВЕСТНЫХ ПОЛЕЙ ==========
   addUnknownField: (field) => {

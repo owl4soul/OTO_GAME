@@ -1,15 +1,12 @@
 // ====================================================================
 // ФАЙЛ: debug-response.js
-// ВЕРСИЯ: v4.0 — РАСШИРЕННЫЙ ДЕБАГГЕР (named queries, full export, tree JSON)
+// ВЕРСИЯ: v4.1.1 — ИСПРАВЛЕНА ЗАГРУЗКА ИГРЫ
 // ====================================================================
-// ИЗМЕНЕНИЯ v4.0:
-//   - Сохранение именованных запросов (Named Queries) в localStorage
-//   - Экспорт полного лога парсинга: JSON / TXT / HTML
-//   - Кнопка "Копировать дерево как JSON" в табе дерева
-//   - Вкладка "Логи" показывает полный debugLog из Parser.getLastDebugLog()
-//   - Исправлена опечатка closeDebu.gModal → closeDebugModal
-//   - Расширенные примеры с операциями success_rewards/fail_penalties/effects
-//   - Статистика операций по каждому choice в древовидном виде
+// Добавлены:
+//   - Кнопка вызова слева вверху (прозрачность 10%)
+//   - Кнопки "💾 Сохранить игру" и "📂 Загрузить игру" с обработкой ошибок
+//   - Исправлена проверка версии в loadGameFromFile (ожидается 5.1.x)
+// Все остальные функции (именованные запросы, история, экспорт, дерево) работают как в v4.0.
 // ====================================================================
 
 'use strict';
@@ -20,6 +17,7 @@ import { Game } from './6-game.js';
 import { State } from './3-state.js';
 import { Render } from './5-render.js';
 import { log, LOG_CATEGORIES } from './logger.js';
+import { Saveload } from './9-saveload.js';
 
 // ============================================================================
 // СОСТОЯНИЕ
@@ -148,19 +146,18 @@ function initDebugResponse() {
     const btn = document.createElement('button');
     btn.id    = 'debugResponseBtn';
     btn.innerHTML = '🐞';
-    btn.title = 'Дебаггер v4.0 (Ctrl+Shift+D)';
+    btn.title = 'Дебаггер v4.1.1 (Ctrl+Shift+D)';
     btn.style.cssText = `
-        position:fixed; top:25px; left:15px;
-        width:54px; height:54px; border-radius:50%;
-        background:#111; color:#ffd700; opacity:70%;
-        border:3px solid #ffd700; font-size:28px;
+        position:fixed; top:10px; left:10px;
+        width:44px; height:44px; border-radius:50%;
+        background:#111; color:#ffd700;
+        border:2px solid #ffd700; font-size:24px;
         z-index:99999; cursor:pointer;
-        box-shadow:0 0 20px rgba(255,215,0,0.7);
-        transition:opacity 0.3s;
-        opacity: 30%;
+        box-shadow:0 0 15px rgba(255,215,0,0.3);
+        opacity:0.1; transition:opacity 0.3s;
     `;
-    btn.addEventListener('mouseenter', () => btn.style.opacity = '100%');
-    btn.addEventListener('mouseleave', () => btn.style.opacity = '70%');
+    btn.addEventListener('mouseenter', () => btn.style.opacity = '0.7');
+    btn.addEventListener('mouseleave', () => btn.style.opacity = '0.1');
     btn.addEventListener('click', openDebugModal);
     document.body.appendChild(btn);
 
@@ -176,7 +173,7 @@ function initDebugResponse() {
     });
 
     lastSuccessfulJson = localStorage.getItem('debug_last_json') || SAMPLE_RESPONSES.full;
-    console.log('🐞 [DebugResponse v4.0] инициализирован');
+    console.log('🐞 [DebugResponse v4.1.1] инициализирован');
 }
 
 // ============================================================================
@@ -208,7 +205,7 @@ function openDebugModal() {
         <!-- Заголовок -->
         <div style="display:flex; justify-content:space-between; align-items:center;
                     padding:14px 22px; background:#1a1a1a; border-bottom:1px solid #444; flex-shrink:0;">
-            <h2 style="margin:0; color:#d4af37; font-size:1.25rem;">🐞 ДЕБАГГЕР v4.0</h2>
+            <h2 style="margin:0; color:#d4af37; font-size:1.25rem;">🐞 ДЕБАГГЕР v4.1.1</h2>
             <button id="closeDebugBtn" style="background:none; border:none; color:#d4af37; font-size:32px; cursor:pointer; line-height:1;">×</button>
         </div>
 
@@ -237,6 +234,9 @@ function openDebugModal() {
                 <button id="loadFileBtn" class="dbg-btn">📂 Загрузить файл</button>
                 <button id="clearBtn"    class="dbg-btn">🧹 Очистить</button>
                 <button id="historyBtn"  class="dbg-btn">📜 История (${historyList.length})</button>
+                <!-- НОВЫЕ КНОПКИ: сохранение и загрузка игры -->
+                <button id="saveGameBtn" class="dbg-btn">💾 Сохранить игру</button>
+                <button id="loadGameBtn" class="dbg-btn">📂 Загрузить игру</button>
             </div>
 
             <!-- Textarea -->
@@ -297,7 +297,6 @@ function openDebugModal() {
     debugModalOverlay = overlay;
     debugTextarea     = overlay.querySelector('#debugTextarea');
 
-    // Стили кнопок
     injectDebugStyles();
 
     // Вкладки
@@ -325,6 +324,34 @@ function openDebugModal() {
     overlay.querySelector('#exportHtmlBtn').addEventListener('click', () => exportData('html'));
     overlay.querySelector('#exportRawBtn').addEventListener('click', saveJsonToFile);
     overlay.querySelector('#compareBtn')?.addEventListener('click', compareResponses);
+
+    // НОВЫЕ КНОПКИ с обработкой результатов
+    overlay.querySelector('#saveGameBtn').addEventListener('click', async () => {
+        try {
+            const result = await Saveload.saveGameToFile();
+            if (result.success) {
+                showToast(`✅ Игра сохранена: ${result.fileName}`);
+            } else {
+                showToast(`❌ Ошибка сохранения: ${result.error}`);
+            }
+        } catch (e) {
+            showToast(`❌ ${e.message}`);
+        }
+    });
+
+    overlay.querySelector('#loadGameBtn').addEventListener('click', async () => {
+        try {
+            const result = await Saveload.loadGameFromFile();
+            if (result.success) {
+                showToast(`✅ Игра загружена: ${result.fileName}`);
+                // При желании можно перерендерить интерфейс
+            } else {
+                showToast(`❌ Ошибка загрузки: ${result.error}`);
+            }
+        } catch (e) {
+            showToast(`❌ ${e.message}`);
+        }
+    });
 
     overlay.addEventListener('click', e => { if (e.target === overlay) closeDebugModal(true); });
 
@@ -432,7 +459,6 @@ function renderInfo(data) {
     const info = data.parsing_info || {};
     const statusColor = info.status === 'OK' ? '#0f0' : info.status === 'WARN' ? '#ff0' : '#f44';
 
-    // Считаем детальную статистику операций
     let totalOps = 0, opsBreakdown = [];
     (data.choices || []).forEach((c, i) => {
         const sr = c.success_rewards?.length || 0;
@@ -505,7 +531,6 @@ function renderLogs(data) {
     const el = document.getElementById('logsPreview');
     if (!el) return;
 
-    // Берём полный debugLog из parsing_info (экспортируется Parser.getLastDebugLog())
     const lines = data.parsing_info?.debugLog || Parser.getLastDebugLog();
 
     if (!lines.length) {
@@ -539,13 +564,11 @@ function renderTree(data) {
     if (!el) return;
     el.innerHTML = '';
 
-    // Кнопка "Копировать дерево как JSON"
     const copyTreeBtn = document.createElement('button');
     copyTreeBtn.className = 'dbg-btn';
     copyTreeBtn.style.marginBottom = '10px';
     copyTreeBtn.innerHTML = '📋 Копировать дерево как JSON';
     copyTreeBtn.addEventListener('click', () => {
-        // Копируем данные без служебных функций
         const clean = JSON.parse(JSON.stringify(data, (k, v) => typeof v === 'function' ? undefined : v));
         navigator.clipboard.writeText(JSON.stringify(clean, null, 2))
             .then(() => showToast('✅ Дерево скопировано как JSON'));
@@ -595,7 +618,6 @@ function buildTreeNode(value, key) {
         return li;
     }
 
-    // Объект или массив
     const toggle = document.createElement('span');
     toggle.className  = 'tree-toggle';
     toggle.textContent = '▼';
@@ -604,7 +626,6 @@ function buildTreeNode(value, key) {
     const count = document.createElement('span');
     count.className  = 'tree-count';
 
-    // Специальная статистика для choices
     if (key === 'choices' && Array.isArray(value)) {
         const totalOps = value.reduce((a, c) =>
             a + (c.success_rewards?.length||0) + (c.fail_penalties?.length||0), 0);
@@ -648,7 +669,6 @@ function buildTreeNode(value, key) {
 function populateSavedQueriesSelect() {
     const sel = document.getElementById('savedSelect');
     if (!sel) return;
-    // Сохраняем первую опцию
     while (sel.options.length > 1) sel.remove(1);
     Object.keys(savedQueries).sort().forEach(name => {
         const opt = document.createElement('option');
@@ -678,7 +698,6 @@ function saveCurrentQuery() {
     localStorage.setItem('debug_saved_queries', JSON.stringify(savedQueries));
     populateSavedQueriesSelect();
 
-    // Выбрать только что сохранённый
     const sel = document.getElementById('savedSelect');
     if (sel) sel.value = name;
 

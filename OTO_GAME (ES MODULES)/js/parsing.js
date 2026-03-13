@@ -1,6 +1,6 @@
 // ====================================================================
 // ФАЙЛ: parsing.js
-// ВЕРСИЯ: v8.1 — ПОЛНОЕ КОММЕНТИРОВАНИЕ, ПОНЯТНЫЕ ИМЕНА, УЛУЧШЕННАЯ ДОКУМЕНТАЦИЯ
+// ВЕРСИЯ: v8.2 — ПОЛНОЕ КОММЕНТИРОВАНИЕ, ПОНЯТНЫЕ ИМЕНА, УЛУЧШЕННАЯ ДОКУМЕНТАЦИЯ + RECOVERY SCORE
 // ====================================================================
 //
 // @module Parser
@@ -34,8 +34,8 @@
 //      - приведение типов, диапазонов, формата идентификаторов,
 //      - очистка массивов от невалидных элементов,
 //      - преобразование aiMemory в единый объектный формат.
-//   7. Формируется ParsingInfo с деталями процесса (статус, количество восстановленных,
-//      время, ошибки и т.д.) и добавляется в результирующий объект как поле parsing_info.
+//   7. Формируется ParsingInfo с деталями процесса (статус, подход, счётчики, время, ошибки,
+//      recoveryScore и т.д.) и добавляется в результирующий объект как поле parsing_info.
 //   8. В режиме отладки (DEBUG_MODE) в консоль выводится детальный лог.
 //
 // ГЛУБИНА ИЗВЛЕЧЕНИЯ:
@@ -49,7 +49,7 @@
 //   - GameOperation — игровая операция (ADD, REMOVE, MODIFY, SET) с id, value/delta и пр.
 //   - ParsedChoice — вариант выбора с текстом, сложностью, требованиями, наградами/штрафами.
 //   - ParsedEvent — событие с типом, описанием, эффектами и причиной.
-//   - ParsingInfo — мета-информация о парсинге (статус, подход, счётчики, ошибки).
+//   - ParsingInfo — мета-информация о парсинге (статус, подход, счётчики, ошибки, recoveryScore).
 //   - ParsedAIResponse — итоговый объект, содержащий все данные + parsing_info.
 //
 // ИСТОРИЯ ИЗМЕНЕНИЙ:
@@ -57,6 +57,7 @@
 //   v8.0      – bracket-counting вместо lazy regex; исправлен decodeUnicodeEscapes;
 //               переписан extractOperationsFromBrokenObject; добавлен getLastDebugLog().
 //   v8.1      – полное комментирование, понятные имена переменных, улучшенная документация.
+//   v8.2      – добавлен recoveryScore в ParsingInfo, мелкие оптимизации извлечения.
 // ====================================================================
 
 'use strict';
@@ -110,6 +111,8 @@ import { log, LOG_CATEGORIES } from './logger.js';
  * @property {string[]} normalizationNotes            - Заметки о нестандартных преобразованиях во время нормализации
  * @property {number}   durationMs                     - Время выполнения функции в миллисекундах
  * @property {string[]} debugLog                       - Полный отладочный лог (доступен при DEBUG_MODE)
+ * @property {number}   extraRootCount                  - Количество сохранённых неизвестных корневых полей
+ * @property {number}   recoveryScore                   - Оценка качества восстановления от 0 до 100 (процент)
  */
 
 /**
@@ -125,6 +128,9 @@ import { log, LOG_CATEGORIES } from './logger.js';
  * @property {Array<string>} thoughts    - Массив мыслей / внутренних реплик
  * @property {Object} aiMemory           - Память ИИ (произвольная структура, нормализована к объекту)
  * @property {ParsingInfo} parsing_info  - Мета-информация о парсинге
+ * @property {Array<Object>} [game_items] - Начальные game_items (применяются только один раз в init)
+ * @property {Object} [meta_context]     - Мета-контекст от гейм-мастера
+ * @property {Object} [_extraRoot]       - Все неизвестные корневые поля (сохраняются и возвращаются)
  */
 
 /**
@@ -150,7 +156,7 @@ if (typeof window !== 'undefined') {
     window.toggleParserDebug = (enable) => {
         DEBUG_MODE = !!enable;
         localStorage.setItem('parser_debug', enable.toString());
-        console.log(`🛠️ [Parser v8.1] DEBUG_MODE = ${DEBUG_MODE}`);
+        console.log(`🛠️ [Parser v8.2] DEBUG_MODE = ${DEBUG_MODE}`);
     };
 }
 
@@ -187,8 +193,8 @@ function flushDebugBuffer(info) {
 
     if (DEBUG_MODE && debugBuffer.length > 0) {
         console.groupCollapsed(
-            `🧪 [PARSER v8.1] ${info.approach} | ops:${info.extractedOperationsCount} | ` +
-            `${info.durationMs}ms | recovered:${info.recoveredCount || 0}`
+            `🧪 [PARSER v8.2] ${info.approach} | ops:${info.extractedOperationsCount} | ` +
+            `${info.durationMs}ms | recovered:${info.recoveredCount || 0} | recoveryScore:${info.recoveryScore}%`
         );
         debugBuffer.forEach(line => console.log(line));
         console.groupEnd();
@@ -1028,38 +1034,37 @@ function normalizeParsedObject(parsedData, info = null) {
     result.events = Array.isArray(result.events) ? result.events : [];
     result.thoughts = Array.isArray(result.thoughts) ? result.thoughts : [];
     
-    // --- aiMemory: нормализация к объекту ---
-    if (result.aiMemory !== undefined && result.aiMemory !== null) {
-        if (typeof result.aiMemory === 'string') {
-            const trimmed = result.aiMemory.trim();
-            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                try {
-                    const parsed = JSON.parse(trimmed);
-                    result.aiMemory = Array.isArray(parsed) ? { array: parsed } : parsed;
-                    info?.normalizationNotes.push('aiMemory: string→object (JSON.parse)');
-                } catch {
-                    result.aiMemory = { rawValue: trimmed };
-                    info?.normalizationNotes.push('aiMemory: string не удалось распарсить → { rawValue }');
-                }
-            } else {
-                result.aiMemory = { value: trimmed };
-                info?.normalizationNotes.push('aiMemory: простая строка → { value }');
-            }
-        } else if (Array.isArray(result.aiMemory)) {
-            result.aiMemory = { array: result.aiMemory };
-            info?.normalizationNotes.push('aiMemory: массив → { array }');
-        } else if (typeof result.aiMemory !== 'object') {
-            result.aiMemory = { value: result.aiMemory };
-            info?.normalizationNotes.push(`aiMemory: примитив → { value }`);
-        }
+    // === aiMemory + meta_context (защита от затирания пустотой v8.2) ===
+    const normalizedAiMemory = normalizeComplexField(parsedData.aiMemory, 'aiMemory', info);
+    if (normalizedAiMemory !== null) {
+        result.aiMemory = normalizedAiMemory;
+    }
+
+    const normalizedMeta = normalizeComplexField(parsedData.meta_context, 'meta_context', info);
+    if (normalizedMeta !== null) {
+        result.meta_context = normalizedMeta;
+    }
+
+    // === GAME_ITEMS [] — только захватываем, но НЕ применяем здесь (применение только в init) ===
+    if (Array.isArray(parsedData.game_items)) {
+        result.game_items = parsedData.game_items.map(item => ({ ...item })); // shallow clone объектов
     } else {
-        result.aiMemory = {};
+        result.game_items = [];
     }
-    
-    // --- meta_context – оставляем как есть (может быть объектом, строкой и т.д.) ---
-    if (parsedData.meta_context !== undefined) {
-        result.meta_context = parsedData.meta_context;
-    }
+
+    // === НЕИЗВЕСТНЫЕ КОРНЕВЫЕ ПОЛЯ (сохраняем и возвращаем обратно в каждом запросе) ===
+    const knownKeys = [
+        'scene', 'reflection', 'typology', 'personality', 'summary', 'design_notes',
+        'choices', 'events', 'thoughts', 'aiMemory', 'meta_context', 'game_items',
+        'operations', '_organizationsHierarchy', 'parsing_info'
+    ];
+    result._extraRoot = {};
+    Object.keys(parsedData).forEach(key => {
+        if (!knownKeys.includes(key) && !key.startsWith('organization_rank_hierarchy:')) {
+            result._extraRoot[key] = JSON.parse(JSON.stringify(parsedData[key])); // deep copy
+        }
+    });
+    if (info) info.extraRootCount = Object.keys(result._extraRoot).length;
     
     // --- choices & events: фильтрация и нормализация каждого элемента ---
     result.choices = result.choices.map((choice, idx) => normalizeChoice(choice, idx, info)).filter(Boolean);
@@ -1192,7 +1197,7 @@ function processAIResponse(input) {
     parsedData.parsing_info = info;
     flushDebugBuffer(info);
     
-    debugLog('🏁 processAIResponse DONE', { status: info.status, ms: info.durationMs });
+    debugLog('🏁 processAIResponse DONE', { status: info.status, ms: info.durationMs, recoveryScore: info.recoveryScore });
     return parsedData;
 }
 
@@ -1219,6 +1224,8 @@ function createEmptyInfo() {
         normalizationNotes: [],
         durationMs: 0,
         debugLog: [],
+        extraRootCount: 0,
+        recoveryScore: 0,
     };
 }
 
@@ -1238,7 +1245,8 @@ function emptyResult() {
  * Заполняет итоговую информацию о парсинге:
  * - подсчитывает общее количество операций,
  * - устанавливает счётчики,
- * - вычисляет статус.
+ * - вычисляет статус,
+ * - вычисляет recoveryScore.
  *
  * @param {ParsingInfo} info - Объект информации для заполнения
  * @param {ParsedAIResponse} data - Нормализованные данные
@@ -1259,6 +1267,7 @@ function finalizeInfo(info, data, originalChoicesTotal, originalEventsTotal, sta
     info.thoughtsCount = (data.thoughts || []).length;
     info.choicesCount  = `${(data.choices || []).length}/${originalChoicesTotal}`;
     info.eventsCount   = `${(data.events  || []).length}/${originalEventsTotal}`;
+    info.extraRootCount = Object.keys(data._extraRoot || {}).length;
     info.durationMs    = Date.now() - startTime;
 
     // Определяем итоговый статус
@@ -1270,6 +1279,27 @@ function finalizeInfo(info, data, originalChoicesTotal, originalEventsTotal, sta
         info.status = 'ERROR';
     }
     // если статус уже WARN и данные валидны — остаётся WARN (предупреждение о восстановлении)
+
+    // === ВЫЧИСЛЕНИЕ RECOVERY SCORE ===
+    let score = 0;
+    // Сцена (важнейший элемент) — до 40 баллов
+    if (data.scene && data.scene.length > 50) score += 40;
+    else if (data.scene && data.scene.length > 10) score += 20;
+    // Choices — до 35 баллов
+    const choiceCount = data.choices?.length || 0;
+    if (choiceCount >= 5) score += 35;
+    else if (choiceCount >= 3) score += 25;
+    else if (choiceCount >= 1) score += 15;
+    // Events — до 15 баллов
+    if (data.events?.length > 0) score += 15;
+    // Thoughts — до 10 баллов
+    if (data.thoughts?.length >= 10) score += 10;
+    else if (data.thoughts?.length >= 5) score += 5;
+    // Учитываем количество восстановленных объектов
+    if (info.recoveredCount > 0) {
+        score += Math.min(15, info.recoveredCount * 5);
+    }
+    info.recoveryScore = Math.min(100, Math.round(score));
 }
 
 /**
@@ -1287,6 +1317,8 @@ function copyToClipboard(data) {
         thoughtsCount: info.thoughtsCount,
         operationsCount: info.extractedOperationsCount,
         recoveredCount: info.recoveredCount || 0,
+        extraRootCount: info.extraRootCount,
+        recoveryScore: info.recoveryScore,
         normalizationNotes: info.normalizationNotes,
         errors: Object.keys(info.knownFieldErrors || {}).length ? info.knownFieldErrors : null,
         timestamp: new Date().toISOString(),
@@ -1298,8 +1330,66 @@ function copyToClipboard(data) {
 }
 
 // ----------------------------------------------------------------------------
-// ЭКСПОРТ
+// ДОПОЛНИТЕЛЬНЫЕ
 // ----------------------------------------------------------------------------
+/**
+ * УНИВЕРСАЛЬНАЯ ЗАЩИЩЁННАЯ НОРМАЛИЗАЦИЯ (v8.2)
+ * 
+ * Используется для aiMemory и meta_context.
+ * 
+ * ПРАВИЛА:
+ * • Пустое значение (null, undefined, "", {}, [], '') → ИГНОРИРУЕТСЯ
+ * • Непустое → глубокая копия + приведение к объекту
+ * • Поддержка любой вложенности (объекты, массивы, вложенные структуры)
+ * • Защита от мутации (всегда JSON.parse(JSON.stringify()))
+ */
+function normalizeComplexField(value, fieldName = 'aiMemory', info = null) {
+    // 1. Проверка на пустоту
+    const isEmpty = value === null || value === undefined ||
+                    (typeof value === 'string' && value.trim() === '') ||
+                    (Array.isArray(value) && value.length === 0) ||
+                    (typeof value === 'object' && value !== null && Object.keys(value).length === 0);
+
+    if (isEmpty) {
+        info?.normalizationNotes?.push(`${fieldName}: пустое значение → сохранённое НЕ заменяется`);
+        return null; // сигнал State: не обновлять
+    }
+
+    // 2. Глубокое клонирование + приведение
+    let normalized;
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                normalized = Array.isArray(parsed) ? { array: parsed } : parsed;
+            } catch {
+                normalized = { rawValue: trimmed };
+            }
+        } else {
+            normalized = { value: trimmed };
+        }
+    } else if (Array.isArray(value)) {
+        normalized = { array: JSON.parse(JSON.stringify(value)) };
+    } else if (typeof value === 'object' && value !== null) {
+        normalized = JSON.parse(JSON.stringify(value)); // deep clone
+    } else {
+        normalized = { value };
+    }
+
+    info?.normalizationNotes?.push(`${fieldName}: сохранено (тип: ${typeof normalized})`);
+    return normalized;
+}
+
+/**
+ * Нормализация ключа стата (с учётом алиасов из CONFIG).
+ */
+function normalizeStatKey(key) {
+    if (!key) return null;
+    const lower = key.toLowerCase().trim();
+    return CONFIG.statAliases[lower] || (CONFIG.startStats.hasOwnProperty(lower) ? lower : null);
+}
+
 export const Parser = {
     processAIResponse,
     normalizeOperation,
@@ -1310,10 +1400,12 @@ export const Parser = {
     copyToClipboard,
     debugLog,
     getLastDebugLog,
-    // Утилиты (для тестирования и 7-2-api-response.js)
+    // Утилиты
     findArrayContent,
     extractOperationsFromBrokenObject,
     balanceBrackets,
+    normalizeComplexField,
+    normalizeStatKey,
 };
 
-console.log('✅ Parser v8.1 (полное комментирование, понятные имена) загружен');
+console.log('✅ Parser v8.2 загружен (с recoveryScore)');

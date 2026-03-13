@@ -429,10 +429,8 @@ function setupSettingsModalEvents() {
 }
 
 /**
- * ОБРАБОТЧИК ДЛЯ КНОПКИ "ПРИНЯТЬ" (исправленный)
- */
-/**
- * ОБРАБОТЧИК ДЛЯ КНОПКИ "ПРИНЯТЬ" (исправленный)
+ * ОБРАБОТЧИК ДЛЯ КНОПКИ "ПРИНЯТЬ":
+ * ИНИЦИАЛИЗАЦИЯ НОВОЙ КАСТОМНОЙ ИГРЫ
  */
 function setupAcceptPlotHandler() {
     const btnAccept = document.getElementById('btnAcceptPlot');
@@ -493,8 +491,10 @@ function setupAcceptPlotHandler() {
         // 1. Начальное состояние героя (дефолтное)
         let heroState = State.getDefaultHeroState();
         
-        // 2. Добавляем/обновляем все game_items из корня (если есть)
-        if (sceneData.game_items && Array.isArray(sceneData.game_items)) {
+        // === GAME_ITEMS [] — ТОЛЬКО ОДИН РАЗ (строго по задумке) ===
+        if (sceneData.game_items && Array.isArray(sceneData.game_items) &&
+            !State.getState().game.meta.initialGameItemsApplied) {
+            
             sceneData.game_items.forEach(newItem => {
                 const existingIndex = heroState.findIndex(item => item.id === newItem.id);
                 if (existingIndex >= 0) {
@@ -503,6 +503,16 @@ function setupAcceptPlotHandler() {
                     heroState.push({ ...newItem });
                 }
             });
+            
+            State.markInitialGameItemsApplied(); // флаг навсегда
+        }
+        
+        // === META_CONTEXT + aiMemory (защита от пустоты) ===
+        if (sceneData.aiMemory !== undefined) {
+            State.updateAiMemory(sceneData.aiMemory);
+        }
+        if (sceneData.meta_context !== undefined) {
+            State.updateMetaContext(sceneData.meta_context);
         }
         
         // 3. Применяем операции из корня (если есть) — через Parser.normalizeOperation
